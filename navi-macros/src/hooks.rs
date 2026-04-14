@@ -2,57 +2,67 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
 
-/// Hook to access the current route's parameters.
 pub fn use_params(input: TokenStream) -> TokenStream {
     let route_ty = parse_macro_input!(input as syn::Type);
     let expanded = quote! {
         {
             let state = navi_router::RouterState::global(cx);
             let current_match = state.current_match.as_ref()
-                .expect("No route matched");
-            let params = &current_match.0;
-            // Deserialize the params map into the typed struct
+                .expect("use_params called but no route matched");
+            let params_map = &current_match.0;
+            let json_value = serde_json::to_value(params_map)
+                .expect("Failed to convert params to JSON");
             let typed_params: <#route_ty as navi_router::RouteDef>::Params =
-                serde_json::from_value(serde_json::to_value(params).unwrap()).unwrap();
+                serde_json::from_value(json_value)
+                    .expect("Failed to deserialize route params");
             typed_params
         }
     };
     expanded.into()
 }
 
-/// Hook to access the current route's search parameters.
 pub fn use_search(input: TokenStream) -> TokenStream {
     let route_ty = parse_macro_input!(input as syn::Type);
     let expanded = quote! {
-        navi_core::context::consume::<<#route_ty as navi_router::RouteDef>::Search>(
-            gpui::WindowId(0)
-        )
-        .expect("Search not found in context")
+        {
+            let state = navi_router::RouterState::global(cx);
+            let location = state.current_location();
+            let search_value = &location.search;
+            let typed_search: <#route_ty as navi_router::RouteDef>::Search =
+                serde_json::from_value(search_value.clone())
+                    .expect("Failed to deserialize search params");
+            typed_search
+        }
     };
     expanded.into()
 }
 
-/// Hook to access the current route's loader data.
 pub fn use_loader_data(input: TokenStream) -> TokenStream {
     let route_ty = parse_macro_input!(input as syn::Type);
     let expanded = quote! {
-        navi_core::context::consume::<<#route_ty as navi_router::RouteDef>::LoaderData>(
-            gpui::WindowId(0)
-        )
-        .expect("LoaderData not found in context")
+        {
+            let state = navi_router::RouterState::global(cx);
+            let data = state.get_loader_data::<#route_ty>()
+                .expect("Loader data not available")
+                .clone();
+            let typed_data = std::sync::Arc::downcast::<<#route_ty as navi_router::RouteDef>::LoaderData>(data)
+                .expect("Loader data type mismatch");
+            std::sync::Arc::try_unwrap(typed_data).unwrap_or_else(|arc| (*arc).clone())
+        }
     };
     expanded.into()
 }
 
-/// Hook to get a navigator for programmatic navigation.
 pub fn use_navigate(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
-        navi_router::Navigator::new(gpui::WindowId(0))
+        {
+            let window_id = cx.window_handle().window_id();
+            navi_router::Navigator::new(window_id)
+        }
     };
     expanded.into()
 }
 
-/// Hook to create a navigation blocker.
 pub fn use_blocker(input: TokenStream) -> TokenStream {
     let should_block = parse_macro_input!(input as syn::Expr);
     let expanded = quote! {{
@@ -62,10 +72,9 @@ pub fn use_blocker(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
-/// Hook to check if back navigation is possible.
 pub fn use_can_go_back(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
-        false
+        false // Placeholder
     };
     expanded.into()
 }

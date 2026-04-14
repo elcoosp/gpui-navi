@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-#[derive(IntoElement)]
+#[derive(IntoElement, Default)]
 pub struct SuspenseBoundary {
     pending_component: Option<AnyElement>,
     pending_ms: u64,
@@ -43,12 +43,6 @@ impl SuspenseBoundary {
     }
 }
 
-impl Default for SuspenseBoundary {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ParentElement for SuspenseBoundary {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
@@ -80,14 +74,19 @@ impl RenderOnce for SuspenseBoundary {
 
                 let elapsed = loading_state.start.elapsed();
                 let should_show = elapsed >= Duration::from_millis(self.pending_ms);
-
-                if should_show && !*loading_state.shown.borrow() {
-                    *loading_state.shown.borrow_mut() = true;
-                }
-
-                // Keep polling until shown
-                if !*loading_state.shown.borrow() {
-                    window.request_animation_frame();
+                let shown_clone = loading_state.shown.clone();
+                {
+                    let mut shown_borrow = shown_clone.borrow_mut();
+                    if should_show && !*shown_borrow {
+                        *shown_borrow = true;
+                        if self.pending_min_ms > 0 {
+                            let min_end =
+                                loading_state.start + Duration::from_millis(self.pending_min_ms);
+                            if Instant::now() < min_end {
+                                window.request_animation_frame();
+                            }
+                        }
+                    }
                 }
 
                 let element = if *loading_state.shown.borrow() {

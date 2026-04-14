@@ -1,14 +1,15 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
-use syn::{Ident, LitStr, Result as SynResult, Token, Type};
+use syn::{ExprClosure, Ident, LitStr, Result as SynResult, Token, Type};
 
-/// Parsed route definition input.
 struct RouteDefInput {
     name: Ident,
     path: LitStr,
     params_ty: Option<Type>,
     search_ty: Option<Type>,
+    data_ty: Option<Type>,
+    loader_closure: Option<ExprClosure>,
     #[allow(dead_code)]
     component_ty: Option<Type>,
     #[allow(dead_code)]
@@ -31,8 +32,6 @@ struct RouteDefInput {
 impl Parse for RouteDefInput {
     fn parse(input: ParseStream) -> SynResult<Self> {
         let name: Ident = input.parse()?;
-
-        // Consume optional comma after the name
         if input.peek(Token![,]) {
             let _: Token![,] = input.parse()?;
         }
@@ -40,6 +39,8 @@ impl Parse for RouteDefInput {
         let mut path = None;
         let mut params_ty = None;
         let mut search_ty = None;
+        let mut data_ty = None;
+        let mut loader_closure = None;
         let mut component_ty = None;
         let mut error_component_ty = None;
         let mut pending_component_ty = None;
@@ -55,62 +56,38 @@ impl Parse for RouteDefInput {
             let key: Ident = input.parse()?;
             let _: Token![:] = input.parse()?;
             match key.to_string().as_str() {
-                "path" => {
-                    path = Some(input.parse()?);
-                }
-                "params" => {
-                    params_ty = Some(input.parse()?);
-                }
-                "search" => {
-                    search_ty = Some(input.parse()?);
-                }
-                "component" => {
-                    component_ty = Some(input.parse()?);
-                }
-                "error_component" => {
-                    error_component_ty = Some(input.parse()?);
-                }
-                "pending_component" => {
-                    pending_component_ty = Some(input.parse()?);
-                }
-                "not_found_component" => {
-                    not_found_component_ty = Some(input.parse()?);
-                }
-                "stale_time" => {
-                    stale_time = Some(input.parse()?);
-                }
-                "gc_time" => {
-                    gc_time = Some(input.parse()?);
-                }
-                "preload_stale_time" => {
-                    preload_stale_time = Some(input.parse()?);
-                }
-                "pending_ms" => {
-                    pending_ms = Some(input.parse()?);
-                }
-                "pending_min_ms" => {
-                    pending_min_ms = Some(input.parse()?);
-                }
-                "wrap_in_suspense" => {
-                    wrap_in_suspense = Some(input.parse()?);
-                }
-                _ => {
-                    return Err(syn::Error::new(key.span(), format!("Unknown key: {}", key)));
-                }
+                "path" => path = Some(input.parse()?),
+                "params" => params_ty = Some(input.parse()?),
+                "search" => search_ty = Some(input.parse()?),
+                "data" => data_ty = Some(input.parse()?),
+                "loader" => loader_closure = Some(input.parse()?),
+                "component" => component_ty = Some(input.parse()?),
+                "error_component" => error_component_ty = Some(input.parse()?),
+                "pending_component" => pending_component_ty = Some(input.parse()?),
+                "not_found_component" => not_found_component_ty = Some(input.parse()?),
+                "stale_time" => stale_time = Some(input.parse()?),
+                "gc_time" => gc_time = Some(input.parse()?),
+                "preload_stale_time" => preload_stale_time = Some(input.parse()?),
+                "pending_ms" => pending_ms = Some(input.parse()?),
+                "pending_min_ms" => pending_min_ms = Some(input.parse()?),
+                "wrap_in_suspense" => wrap_in_suspense = Some(input.parse()?),
+                _ => return Err(syn::Error::new(key.span(), format!("Unknown key: {}", key))),
             }
-            // Consume optional comma after value
             if input.peek(Token![,]) {
                 let _: Token![,] = input.parse()?;
             }
         }
 
+        let path = path
+            .ok_or_else(|| syn::Error::new(proc_macro2::Span::call_site(), "path is required"))?;
+
         Ok(RouteDefInput {
             name,
-            path: path.ok_or_else(|| {
-                syn::Error::new(proc_macro2::Span::call_site(), "path is required")
-            })?,
+            path,
             params_ty,
             search_ty,
+            data_ty,
+            loader_closure,
             component_ty,
             error_component_ty,
             pending_component_ty,
@@ -136,32 +113,47 @@ pub fn define_route(input: TokenStream) -> TokenStream {
 
     let params_ty = input.params_ty.unwrap_or_else(|| syn::parse_quote!(()));
     let search_ty = input.search_ty.unwrap_or_else(|| syn::parse_quote!(()));
+    let data_ty = input.data_ty.unwrap_or_else(|| syn::parse_quote!(()));
 
-    let loader_data_ty: Type = syn::parse_quote!(());
-    let has_loader = false;
+    let (has_loader, loader_registration) = if let Some(loader_closure) = input.loader_closure {
+        let register = quote! {
+            {
+                use std::sync::Arc;
+                use gpui::Task;
+                use navi_router::LoaderError;
+
+                fn loader_fn(params: #params_ty, cx: &mut gpui::App) -> Task<Result<Arc<dyn std::any::Any + Send + Sync>, LoaderError>> {
+                    cx.spawn(async move {
+                        let result = (#loader_closure)(params, cx).await;
+                        result.map(|data| Arc::new(data) as Arc<dyn std::any::Any + Send + Sync>).map_err(Into::into)
+                    })
+                }
+
+                navi_router::RouterState::update(cx, |state, _| {
+                    state.register_loader::<#name>(loader_fn);
+                });
+            }
+        };
+        (true, register)
+    } else {
+        (false, quote! {})
+    };
+
     let is_layout = false;
     let is_index = false;
 
     let loader_stale_time = input
         .stale_time
-        .map(|expr| {
-            quote! { Some(#expr) }
-        })
-        .unwrap_or_else(|| quote! { None });
-
+        .map(|e| quote! { Some(#e) })
+        .unwrap_or(quote! { None });
     let loader_gc_time = input
         .gc_time
-        .map(|expr| {
-            quote! { Some(#expr) }
-        })
-        .unwrap_or_else(|| quote! { None });
-
+        .map(|e| quote! { Some(#e) })
+        .unwrap_or(quote! { None });
     let preload_stale_time = input
         .preload_stale_time
-        .map(|expr| {
-            quote! { Some(#expr) }
-        })
-        .unwrap_or_else(|| quote! { None });
+        .map(|e| quote! { Some(#e) })
+        .unwrap_or(quote! { None });
 
     let expanded = quote! {
         pub struct #name;
@@ -169,7 +161,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
         impl navi_router::RouteDef for #name {
             type Params = #params_ty;
             type Search = #search_ty;
-            type LoaderData = #loader_data_ty;
+            type LoaderData = #data_ty;
 
             fn path() -> &'static str {
                 #path
@@ -190,6 +182,10 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                     loader_gc_time: #loader_gc_time,
                     preload_stale_time: #preload_stale_time,
                 }
+            }
+
+            pub fn register_loader(cx: &mut gpui::App) {
+                #loader_registration
             }
         }
     };

@@ -31,6 +31,12 @@ struct RouteDefInput {
 impl Parse for RouteDefInput {
     fn parse(input: ParseStream) -> SynResult<Self> {
         let name: Ident = input.parse()?;
+
+        // Consume optional comma after the name
+        if input.peek(Token![,]) {
+            let _: Token![,] = input.parse()?;
+        }
+
         let mut path = None;
         let mut params_ty = None;
         let mut search_ty = None;
@@ -92,7 +98,10 @@ impl Parse for RouteDefInput {
                     return Err(syn::Error::new(key.span(), format!("Unknown key: {}", key)));
                 }
             }
-            let _ = input.parse::<Token![,]>();
+            // Consume optional comma after value
+            if input.peek(Token![,]) {
+                let _: Token![,] = input.parse()?;
+            }
         }
 
         Ok(RouteDefInput {

@@ -6,12 +6,16 @@ use syn::parse_macro_input;
 pub fn use_params(input: TokenStream) -> TokenStream {
     let route_ty = parse_macro_input!(input as syn::Type);
     let expanded = quote! {
-        navi_core::context::consume::<<#route_ty as navi_router::RouteDef>::Params>(
-            navi_core::context::consume::<gpui::WindowId>(
-                gpui::WindowId(0)
-            ).unwrap_or(gpui::WindowId(0))
-        )
-        .expect("Params not found in context")
+        {
+            let state = navi_router::RouterState::global(cx);
+            let current_match = state.current_match.as_ref()
+                .expect("No route matched");
+            let params = &current_match.0;
+            // Deserialize the params map into the typed struct
+            let typed_params: <#route_ty as navi_router::RouteDef>::Params =
+                serde_json::from_value(serde_json::to_value(params).unwrap()).unwrap();
+            typed_params
+        }
     };
     expanded.into()
 }

@@ -5,52 +5,84 @@ use navi_router::{
 };
 use std::time::Duration;
 
-struct AppView {
-    router_provider: RouterProvider,
-}
-
-impl Render for AppView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .size_full()
-            .flex()
-            .flex_col()
-            .child(
-                div()
-                    .flex()
-                    .gap_4()
-                    .p_4()
-                    .bg(rgb(0xf0f0f0))
-                    .child(Link::new("/").child("Home"))
-                    .child(Link::new("/users").child("Users"))
-                    .child(Link::new("/settings").child("Settings")),
-            )
-            .child(div().flex_1().p_4().child(Outlet::new()))
-    }
-}
+// ----------------------------------------------------------------------------
+// Route Components (must be defined before they are used in register_route_component)
+// ----------------------------------------------------------------------------
 
 struct HomePage;
 impl Render for HomePage {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().child("Welcome Home!")
+        div()
+            .size_full()
+            .bg(rgb(0xffcccc))
+            .p_4()
+            .child("Welcome Home!")
+            .child("This is the home page")
     }
 }
 
 struct UsersPage;
 impl Render for UsersPage {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().child("Users list")
+        div()
+            .size_full()
+            .bg(rgb(0xccffcc))
+            .p_4()
+            .child("Users list")
+            .child("User 1, User 2, ...")
     }
 }
 
 struct SettingsPage;
 impl Render for SettingsPage {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().child("Settings")
+        div()
+            .size_full()
+            .bg(rgb(0xccccff))
+            .p_4()
+            .child("Settings")
+            .child("Configure your app here")
     }
 }
 
+// ----------------------------------------------------------------------------
+// Root View
+// ----------------------------------------------------------------------------
+
+struct AppView {
+    router_provider: RouterProvider,
+}
+
+impl Render for AppView {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().bg(rgb(0xffffff)).child(
+            self.router_provider.clone().child(
+                div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .flex()
+                            .gap_4()
+                            .p_4()
+                            .bg(rgb(0xe0e0e0))
+                            .child(Link::new("/").child("Home"))
+                            .child(Link::new("/users").child("Users"))
+                            .child(Link::new("/settings").child("Settings")),
+                    )
+                    .child(div().flex_1().p_4().bg(rgb(0xfafafa)).child(Outlet::new())),
+            ),
+        )
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Main
+// ----------------------------------------------------------------------------
+
 fn main() {
+    // Register route components (now structs are defined above)
     register_route_component("index", |cx: &mut App| cx.new(|_| HomePage));
     register_route_component("users_index", |cx: &mut App| cx.new(|_| UsersPage));
     register_route_component("settings", |cx: &mut App| cx.new(|_| SettingsPage));

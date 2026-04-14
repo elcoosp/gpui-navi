@@ -78,10 +78,7 @@ impl RoutePattern {
 
     /// Match a path against this pattern, extracting parameters.
     pub fn matches(&self, path: &str) -> Option<HashMap<String, String>> {
-        let path_segments: Vec<&str> = path
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .collect();
+        let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         let mut params = HashMap::new();
         let mut path_idx = 0;
 
@@ -96,7 +93,11 @@ impl RoutePattern {
                     }
                     path_idx += 1;
                 }
-                Segment::Dynamic { name, prefix, suffix } => {
+                Segment::Dynamic {
+                    name,
+                    prefix,
+                    suffix,
+                } => {
                     if path_idx >= path_segments.len() {
                         return None;
                     }
@@ -120,7 +121,11 @@ impl RoutePattern {
                     params.insert(name.clone(), part[start..end].to_string());
                     path_idx += 1;
                 }
-                Segment::Optional { name, prefix, suffix } => {
+                Segment::Optional {
+                    name,
+                    prefix,
+                    suffix,
+                } => {
                     if path_idx < path_segments.len() {
                         let part = path_segments[path_idx];
                         let start = prefix.as_ref().map_or(0, |p| p.len());
@@ -135,7 +140,10 @@ impl RoutePattern {
                         params.insert(name.clone(), String::new());
                     }
                 }
-                Segment::Splat { prefix, suffix: _suffix } => {
+                Segment::Splat {
+                    prefix,
+                    suffix: _suffix,
+                } => {
                     // Splat matches all remaining path segments
                     let remaining = path_segments[path_idx..].join("/");
                     if let Some(_pre) = prefix {
@@ -157,24 +165,25 @@ impl RoutePattern {
     }
 
     fn parse_segments(pattern: &str) -> Vec<Segment> {
-        let parts: Vec<&str> = pattern
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .collect();
+        let parts: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
 
         let mut segments = Vec::new();
 
         for part in parts {
             // Handle escaped segments [x]
             if part.starts_with('[') && part.ends_with(']') {
-                segments.push(Segment::Static(part[1..part.len()-1].to_string()));
+                segments.push(Segment::Static(part[1..part.len() - 1].to_string()));
                 continue;
             }
 
             // Handle optional parameters {-$param}
             if part.starts_with("{-$") && part.ends_with('}') {
-                let name = part[3..part.len()-1].to_string();
-                segments.push(Segment::Optional { name, prefix: None, suffix: None });
+                let name = part[3..part.len() - 1].to_string();
+                segments.push(Segment::Optional {
+                    name,
+                    prefix: None,
+                    suffix: None,
+                });
                 continue;
             }
 
@@ -183,24 +192,35 @@ impl RoutePattern {
                 let close_brace = part.find('}').unwrap();
                 let name = part[2..close_brace].to_string();
                 let suffix = if close_brace + 1 < part.len() {
-                    Some(part[close_brace+1..].to_string())
+                    Some(part[close_brace + 1..].to_string())
                 } else {
                     None
                 };
-                segments.push(Segment::Dynamic { name, prefix: None, suffix });
+                segments.push(Segment::Dynamic {
+                    name,
+                    prefix: None,
+                    suffix,
+                });
                 continue;
             }
 
             // Handle splat $
             if part == "$" {
-                segments.push(Segment::Splat { prefix: None, suffix: None });
+                segments.push(Segment::Splat {
+                    prefix: None,
+                    suffix: None,
+                });
                 continue;
             }
 
             // Handle dynamic segments $param
             if part.starts_with('$') {
                 let name = part[1..].to_string();
-                segments.push(Segment::Dynamic { name, prefix: None, suffix: None });
+                segments.push(Segment::Dynamic {
+                    name,
+                    prefix: None,
+                    suffix: None,
+                });
                 continue;
             }
 
@@ -258,6 +278,7 @@ impl std::fmt::Debug for RouteNode {
 use std::collections::BTreeMap;
 
 /// The route tree holding all registered routes.
+#[derive(Clone)]
 pub struct RouteTree {
     nodes: BTreeMap<String, RouteNode>,
     children: HashMap<String, Vec<String>>,
@@ -291,11 +312,7 @@ impl RouteTree {
     pub fn match_path(&self, path: &str) -> Option<(HashMap<String, String>, &RouteNode)> {
         self.matcher
             .match_path(path)
-            .and_then(|(params, id)| {
-                self.nodes
-                    .get(&id)
-                    .map(|node| (params, node))
-            })
+            .and_then(|(params, id)| self.nodes.get(&id).map(|node| (params, node)))
     }
 
     pub fn get_node(&self, id: &str) -> Option<&RouteNode> {

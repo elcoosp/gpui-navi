@@ -5,6 +5,7 @@ use crate::route_tree::{RouteNode, RouteTree};
 use gpui::{App, BorrowAppContext, Global, WindowId};
 use rs_query::QueryClient;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// Events emitted by the router during navigation lifecycle.
 #[derive(Clone, Debug)]
@@ -35,10 +36,11 @@ pub enum RouterEvent {
     },
 }
 
-/// The central router state.
+/// The central router state, holding history, matched route, query client,
+/// and navigation blockers.
 pub struct RouterState {
     pub history: History,
-    pub route_tree: RouteTree,
+    pub route_tree: Rc<RouteTree>,
     pub current_match: Option<(HashMap<String, String>, RouteNode)>,
     pub query_client: QueryClient,
     pub pending_navigation: Option<Location>,
@@ -54,7 +56,7 @@ pub struct RouterState {
 impl Global for RouterState {}
 
 impl RouterState {
-    pub fn new(initial: Location, window_id: WindowId, route_tree: RouteTree) -> Self {
+    pub fn new(initial: Location, window_id: WindowId, route_tree: Rc<RouteTree>) -> Self {
         let current_match = route_tree
             .match_path(&initial.pathname)
             .map(|(params, node)| (params, node.clone()));

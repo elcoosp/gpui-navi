@@ -2,6 +2,7 @@ use crate::route_tree::RoutePattern;
 use std::collections::HashMap;
 
 /// Route matcher that stores patterns sorted by specificity rank.
+#[derive(Clone)]
 pub struct RouteMatcher {
     patterns: Vec<(RoutePattern, String)>,
 }

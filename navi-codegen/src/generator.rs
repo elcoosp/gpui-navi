@@ -1,5 +1,5 @@
 use crate::config::NaviConfig;
-use crate::scanner::{RouteInfo, scan_routes};
+use crate::scanner::scan_routes;
 use anyhow::Result;
 
 /// Generate the route tree Rust module from scanned routes.
@@ -14,10 +14,7 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
         let module_name = &route.module_name;
         let route_pattern = &route.route_pattern;
 
-        use_statements.push_str(&format!(
-            "use crate::routes::{};\n",
-            module_name
-        ));
+        use_statements.push_str(&format!("use crate::routes::{};\n", module_name));
 
         route_definitions.push_str(&format!(
             "define_route!({}, path: \"{}\");\n",

@@ -1,6 +1,9 @@
-use gpui::{AnyElement, App, IntoElement};
+use crate::RouterState;
+use gpui::{AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, Window, div};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
-/// Suspense boundary for handling async loading states.
 pub struct SuspenseBoundary {
     pending_component: Option<AnyElement>,
     pending_ms: u64,
@@ -45,8 +48,60 @@ impl Default for SuspenseBoundary {
     }
 }
 
-impl IntoElement for SuspenseBoundary {
-    fn into_any_element(self) -> AnyElement {
-        gpui::div().into_any_element()
+impl ParentElement for SuspenseBoundary {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+#[derive(Clone)]
+struct LoadingState {
+    start: Instant,
+    shown: Rc<RefCell<bool>>,
+}
+
+impl RenderOnce for SuspenseBoundary {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = RouterState::try_global(cx);
+        let is_loading = state.map(|s| s.is_loading()).unwrap_or(false);
+
+        if !is_loading {
+            return div().children(self.children).into_any_element();
+        }
+
+        let element_id = ElementId::Name("suspense-boundary".into());
+        window.with_global_id(element_id, |global_id, window| {
+            window.with_element_state::<LoadingState, _>(global_id, |loading_state, window| {
+                let loading_state = loading_state.unwrap_or_else(|| LoadingState {
+                    start: Instant::now(),
+                    shown: Rc::new(RefCell::new(false)),
+                });
+
+                let elapsed = loading_state.start.elapsed();
+                let should_show = elapsed >= Duration::from_millis(self.pending_ms);
+                let shown_clone = loading_state.shown.clone();
+                {
+                    let mut shown_borrow = shown_clone.borrow_mut();
+                    if should_show && !*shown_borrow {
+                        *shown_borrow = true;
+                        if self.pending_min_ms > 0 {
+                            let min_end =
+                                loading_state.start + Duration::from_millis(self.pending_min_ms);
+                            if Instant::now() < min_end {
+                                window.request_animation_frame();
+                            }
+                        }
+                    }
+                } // borrow ends here
+
+                let element = if *loading_state.shown.borrow() {
+                    div().child("Loading...").into_any_element()
+                } else {
+                    div().into_any_element()
+                };
+
+                (element, loading_state)
+            })
+        })
     }
 }

@@ -1,24 +1,60 @@
-use gpui::{AnyElement, App, IntoElement};
+use crate::RouterState;
+use gpui::{
+    AnyElement, AnyView, App, Entity, IntoElement, ParentElement, Render, RenderOnce, Window, div,
+};
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
-/// Outlet component that renders the matched child route.
+type ComponentConstructor = Box<dyn Fn(&mut App) -> AnyView + Send + Sync>;
+
+static REGISTRY: Lazy<Mutex<HashMap<String, ComponentConstructor>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+pub fn register_route_component<F, V>(route_id: &str, constructor: F)
+where
+    F: Fn(&mut App) -> Entity<V> + Send + Sync + 'static,
+    V: 'static + Render,
+{
+    REGISTRY.lock().unwrap().insert(
+        route_id.to_string(),
+        Box::new(move |cx| AnyView::from(constructor(cx))),
+    );
+}
+
+#[derive(IntoElement, Default)]
 pub struct Outlet {
     children: Vec<AnyElement>,
 }
 
 impl Outlet {
     pub fn new() -> Self {
-        Self { children: Vec::new() }
+        Self::default()
     }
 }
 
-impl Default for Outlet {
-    fn default() -> Self {
-        Self::new()
+impl ParentElement for Outlet {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
-impl IntoElement for Outlet {
-    fn into_any_element(self) -> AnyElement {
-        gpui::div().into_any_element()
+impl RenderOnce for Outlet {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = RouterState::try_global(cx);
+        let current_match = state.and_then(|s| s.current_match.as_ref());
+
+        if let Some((_params, node)) = current_match {
+            if let Some(constructor) = REGISTRY.lock().unwrap().get(&node.id) {
+                let view = constructor(cx);
+                return div().child(view).children(self.children).into_any_element();
+            }
+            div()
+                .child(format!("Route: {}", node.id))
+                .children(self.children)
+                .into_any_element()
+        } else {
+            div().child("404 Not Found").into_any_element()
+        }
     }
 }

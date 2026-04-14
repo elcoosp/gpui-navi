@@ -2,23 +2,40 @@ use crate::blocker::{Blocker, BlockerId};
 use crate::history::History;
 use crate::location::{Location, NavigateOptions, ViewTransitionOptions};
 use crate::route_tree::{RouteNode, RouteTree};
-use gpui::WindowId;
+use gpui::{App, BorrowAppContext, Global, WindowId};
 use rs_query::QueryClient;
 use std::collections::HashMap;
 
 /// Events emitted by the router during navigation lifecycle.
 #[derive(Clone, Debug)]
 pub enum RouterEvent {
-    BeforeNavigate { from: Option<Location>, to: Location },
-    BeforeLoad { from: Option<Location>, to: Location },
-    Load { from: Option<Location>, to: Location },
-    BeforeRouteMount { from: Option<Location>, to: Location },
-    Resolved { from: Option<Location>, to: Location },
-    Rendered { from: Option<Location>, to: Location },
+    BeforeNavigate {
+        from: Option<Location>,
+        to: Location,
+    },
+    BeforeLoad {
+        from: Option<Location>,
+        to: Location,
+    },
+    Load {
+        from: Option<Location>,
+        to: Location,
+    },
+    BeforeRouteMount {
+        from: Option<Location>,
+        to: Location,
+    },
+    Resolved {
+        from: Option<Location>,
+        to: Location,
+    },
+    Rendered {
+        from: Option<Location>,
+        to: Location,
+    },
 }
 
-/// The central router state, holding history, matched route, query client,
-/// and navigation blockers.
+/// The central router state.
 pub struct RouterState {
     pub history: History,
     pub route_tree: RouteTree,
@@ -31,11 +48,16 @@ pub struct RouterState {
     pub current_base: Option<String>,
     events: Vec<Box<dyn Fn(RouterEvent) + Send + Sync>>,
     next_blocker_id: BlockerId,
+    loading: bool,
 }
+
+impl Global for RouterState {}
 
 impl RouterState {
     pub fn new(initial: Location, window_id: WindowId, route_tree: RouteTree) -> Self {
-        let current_match = route_tree.match_path(&initial.pathname).map(|(params, node)| (params, node.clone()));
+        let current_match = route_tree
+            .match_path(&initial.pathname)
+            .map(|(params, node)| (params, node.clone()));
         Self {
             history: History::new(initial, window_id),
             route_tree,
@@ -48,6 +70,7 @@ impl RouterState {
             events: Vec::new(),
             current_base: None,
             next_blocker_id: 0,
+            loading: false,
         }
     }
 
@@ -68,6 +91,8 @@ impl RouterState {
             to: loc.clone(),
         });
 
+        self.loading = true;
+
         self.current_match = self
             .route_tree
             .match_path(&loc.pathname)
@@ -78,6 +103,8 @@ impl RouterState {
         } else {
             self.history.push(loc);
         }
+
+        self.loading = false;
     }
 
     /// Get the current location from history.
@@ -131,5 +158,27 @@ impl RouterState {
     /// Check if there's a pending blocked navigation.
     pub fn is_blocked(&self) -> bool {
         self.pending_navigation.is_some()
+    }
+
+    /// Check if any route loader is currently in progress.
+    pub fn is_loading(&self) -> bool {
+        self.loading
+    }
+
+    // --- Global access helpers ---
+
+    pub fn global(cx: &App) -> &Self {
+        cx.global::<Self>()
+    }
+
+    pub fn try_global(cx: &App) -> Option<&Self> {
+        cx.try_global::<Self>()
+    }
+
+    pub fn update<F, R>(cx: &mut App, f: F) -> R
+    where
+        F: FnOnce(&mut Self, &mut App) -> R,
+    {
+        cx.update_global(|state, cx| f(state, cx))
     }
 }

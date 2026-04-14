@@ -1,17 +1,25 @@
-use gpui::{AnyElement, App, IntoElement, WindowId};
+use crate::{Location, RouteTree, RouterState};
+use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Window, WindowId, div};
 use navi_core::context;
 
-/// Router provider component that initializes the routing context for a window.
+#[derive(IntoElement)]
 pub struct RouterProvider {
-    window_id: WindowId,
     children: Vec<AnyElement>,
 }
 
 impl RouterProvider {
-    pub fn new(window_id: WindowId) -> Self {
+    pub fn new(
+        window_id: WindowId,
+        initial_location: Location,
+        route_tree: RouteTree,
+        cx: &mut App,
+    ) -> Self {
         context::init_window(window_id);
+
+        let state = RouterState::new(initial_location, window_id, route_tree);
+        cx.set_global(state);
+
         Self {
-            window_id,
             children: Vec::new(),
         }
     }
@@ -22,9 +30,14 @@ impl RouterProvider {
     }
 }
 
-impl IntoElement for RouterProvider {
-    fn into_any_element(self) -> AnyElement {
-        // In a real implementation, this would render children within a routing context
-        gpui::div().into_any_element()
+impl ParentElement for RouterProvider {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl RenderOnce for RouterProvider {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        div().children(self.children)
     }
 }

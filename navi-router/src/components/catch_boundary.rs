@@ -1,6 +1,7 @@
-use gpui::{AnyElement, App, IntoElement};
+use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Window, div};
+use std::panic::{self, AssertUnwindSafe};
 
-/// Error boundary component that catches errors in child components.
+#[derive(Default)]
 pub struct CatchBoundary {
     error_component: Option<AnyElement>,
     children: Vec<AnyElement>,
@@ -8,10 +9,7 @@ pub struct CatchBoundary {
 
 impl CatchBoundary {
     pub fn new() -> Self {
-        Self {
-            error_component: None,
-            children: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn error_component(mut self, component: impl IntoElement) -> Self {
@@ -25,14 +23,37 @@ impl CatchBoundary {
     }
 }
 
-impl Default for CatchBoundary {
-    fn default() -> Self {
-        Self::new()
+impl ParentElement for CatchBoundary {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
     }
 }
 
-impl IntoElement for CatchBoundary {
-    fn into_any_element(self) -> AnyElement {
-        gpui::div().into_any_element()
+impl RenderOnce for CatchBoundary {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let result = panic::catch_unwind(AssertUnwindSafe(|| {
+            div().children(self.children).into_any_element()
+        }));
+
+        match result {
+            Ok(element) => element,
+            Err(panic_info) => {
+                let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                log::error!("Route component panicked: {}", msg);
+
+                self.error_component.unwrap_or_else(|| {
+                    div()
+                        .child("Something went wrong")
+                        .child(msg)
+                        .into_any_element()
+                })
+            }
+        }
     }
 }

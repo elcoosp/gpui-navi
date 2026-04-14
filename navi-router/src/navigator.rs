@@ -1,65 +1,76 @@
-use gpui::{App, Global, WindowId};
-use navi_core::context;
-
 use crate::location::{Location, NavigateOptions};
 use crate::state::RouterState;
+use gpui::{AnyWindowHandle, App};
 
-/// Navigator API for programmatic navigation.
 #[derive(Clone)]
 pub struct Navigator {
-    window_id: WindowId,
+    window: AnyWindowHandle,
     base: Option<String>,
 }
 
-impl Global for Navigator {}
-
 impl Navigator {
-    pub fn new(window_id: WindowId) -> Self {
-        Self {
-            window_id,
-            base: None,
-        }
+    pub fn new(window: AnyWindowHandle) -> Self {
+        Self { window, base: None }
     }
 
-    pub fn from_route(window_id: WindowId, base: impl Into<String>) -> Self {
+    pub fn from_route(window: AnyWindowHandle, base: impl Into<String>) -> Self {
         Self {
-            window_id,
+            window,
             base: Some(base.into()),
         }
     }
 
-    /// Navigate to a new path by pushing onto the history stack.
-    pub fn push(&self, path: impl Into<String>, _cx: &mut App) {
-        let _loc = Location::new(&self.resolve_path(path));
-        // In a real implementation, this would access RouterState and call navigate
+    pub fn push(&self, path: impl Into<String>, cx: &mut App) {
+        let loc = Location::new(&self.resolve_path(path));
+        RouterState::update(cx, |state, cx| {
+            state.navigate(loc, NavigateOptions::default());
+            cx.refresh_windows();
+        });
     }
 
-    /// Navigate to a new path by replacing the current history entry.
-    pub fn replace(&self, path: impl Into<String>, _cx: &mut App) {
-        let _loc = Location::new(&self.resolve_path(path));
+    pub fn replace(&self, path: impl Into<String>, cx: &mut App) {
+        let loc = Location::new(&self.resolve_path(path));
+        RouterState::update(cx, |state, cx| {
+            state.navigate(
+                loc,
+                NavigateOptions {
+                    replace: true,
+                    ..Default::default()
+                },
+            );
+            cx.refresh_windows();
+        });
     }
 
-    /// Go back in history.
-    pub fn back(&self, _cx: &mut App) {
-        // Access RouterState and call history.back()
+    pub fn back(&self, cx: &mut App) {
+        RouterState::update(cx, |state, cx| {
+            if state.history.back() {
+                cx.refresh_windows();
+            }
+        });
     }
 
-    /// Go forward in history.
-    pub fn forward(&self, _cx: &mut App) {
-        // Access RouterState and call history.forward()
+    pub fn forward(&self, cx: &mut App) {
+        RouterState::update(cx, |state, cx| {
+            if state.history.forward() {
+                cx.refresh_windows();
+            }
+        });
     }
 
-    /// Go to a specific position in history.
-    pub fn go(&self, _delta: isize, _cx: &mut App) {
-        // Access RouterState and call history.go()
+    pub fn go(&self, delta: isize, cx: &mut App) {
+        RouterState::update(cx, |state, cx| {
+            state.history.go(delta);
+            cx.refresh_windows();
+        });
     }
 
-    /// Check if we can go back in history.
-    pub fn can_go_back(_cx: &App) -> bool {
-        false
+    pub fn can_go_back(cx: &App) -> bool {
+        RouterState::try_global(cx)
+            .map(|state| state.history.can_go_back())
+            .unwrap_or(false)
     }
 
-    /// Resolve a possibly relative path against the base.
     fn resolve_path(&self, path: impl Into<String>) -> String {
         let path = path.into();
         if path.starts_with('/') {
@@ -71,7 +82,7 @@ impl Navigator {
         }
     }
 
-    pub fn window_id(&self) -> WindowId {
-        self.window_id
+    pub fn window(&self) -> AnyWindowHandle {
+        self.window
     }
 }

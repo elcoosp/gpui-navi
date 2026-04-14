@@ -1,35 +1,53 @@
-use gpui::{AnyElement, App, IntoElement};
+use crate::RouterState;
+use gpui::{App, IntoElement, RenderOnce, ScrollHandle, Window, div};
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::sync::Mutex;
 
-/// Scroll restoration component that saves and restores scroll positions.
+static SCROLL_POSITIONS: Lazy<Mutex<HashMap<String, f32>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+#[derive(Default)]
 pub struct ScrollRestoration {
-    scroll_positions: HashMap<String, f32>,
+    scroll_handle: Option<ScrollHandle>,
 }
 
 impl ScrollRestoration {
     pub fn new() -> Self {
-        Self {
-            scroll_positions: HashMap::new(),
+        Self::default()
+    }
+
+    pub fn track_scroll(mut self, handle: ScrollHandle) -> Self {
+        self.scroll_handle = Some(handle);
+        self
+    }
+
+    fn save_position(&self, path: &str) {
+        if let Some(handle) = &self.scroll_handle {
+            let offset = handle.offset();
+            let y: f32 = offset.y.into();
+            SCROLL_POSITIONS.lock().unwrap().insert(path.to_string(), y);
         }
     }
 
-    pub fn save_position(&mut self, path: String, position: f32) {
-        self.scroll_positions.insert(path, position);
-    }
-
-    pub fn get_position(&self, path: &str) -> Option<f32> {
-        self.scroll_positions.get(path).copied()
-    }
-}
-
-impl Default for ScrollRestoration {
-    fn default() -> Self {
-        Self::new()
+    fn restore_position(&self, path: &str) {
+        if let Some(handle) = &self.scroll_handle {
+            if let Some(&y) = SCROLL_POSITIONS.lock().unwrap().get(path) {
+                let mut offset = handle.offset();
+                offset.y = gpui::px(y);
+                handle.set_offset(offset);
+            }
+        }
     }
 }
 
-impl IntoElement for ScrollRestoration {
-    fn into_any_element(self) -> AnyElement {
-        gpui::div().into_any_element()
+impl RenderOnce for ScrollRestoration {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        if let Some(state) = RouterState::try_global(cx) {
+            let path = state.current_location().pathname.clone();
+            self.restore_position(&path);
+            self.save_position(&path);
+        }
+        div()
     }
 }

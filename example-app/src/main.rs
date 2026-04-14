@@ -1,104 +1,143 @@
-use gpui::WindowId;
+use gpui::*;
 use navi_router::{
-    Location, RouterState,
-    RouteNode, RoutePattern,
+    Location, RouteNode, RoutePattern, RouteTree,
+    components::{Link, Outlet, RouterProvider, register_route_component},
 };
-use navi_router::components::{RouterProvider, Outlet, Link};
+use std::time::Duration;
 
-mod routes;
+struct AppView {
+    router_provider: RouterProvider,
+}
+
+impl Render for AppView {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex()
+                    .gap_4()
+                    .p_4()
+                    .bg(rgb(0xf0f0f0))
+                    .child(Link::new("/").child("Home"))
+                    .child(Link::new("/users").child("Users"))
+                    .child(Link::new("/settings").child("Settings")),
+            )
+            .child(div().flex_1().p_4().child(Outlet::new()))
+    }
+}
+
+struct HomePage;
+impl Render for HomePage {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().child("Welcome Home!")
+    }
+}
+
+struct UsersPage;
+impl Render for UsersPage {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().child("Users list")
+    }
+}
+
+struct SettingsPage;
+impl Render for SettingsPage {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().child("Settings")
+    }
+}
 
 fn main() {
-    // Build the router with initial location
-    let window_id = WindowId(0);
-    let initial = Location::new("/");
-    let mut tree = navi_router::RouteTree::new();
+    register_route_component("index", |cx: &mut App| cx.new(|_| HomePage));
+    register_route_component("users_index", |cx: &mut App| cx.new(|_| UsersPage));
+    register_route_component("settings", |cx: &mut App| cx.new(|_| SettingsPage));
 
-    // Register routes
-    tree.add_route(RouteNode {
-        id: "__root__".to_string(),
-        pattern: RoutePattern::parse("/"),
-        parent: None,
-        is_layout: true,
-        is_index: false,
-        has_loader: false,
-        loader_stale_time: None,
-        loader_gc_time: None,
-        preload_stale_time: None,
+    Application::new().run(|cx: &mut App| {
+        let mut tree = RouteTree::new();
+
+        tree.add_route(RouteNode {
+            id: "__root__".to_string(),
+            pattern: RoutePattern::parse("/"),
+            parent: None,
+            is_layout: true,
+            is_index: false,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
+
+        tree.add_route(RouteNode {
+            id: "index".to_string(),
+            pattern: RoutePattern::parse("/"),
+            parent: Some("__root__".to_string()),
+            is_layout: false,
+            is_index: true,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
+
+        tree.add_route(RouteNode {
+            id: "users_index".to_string(),
+            pattern: RoutePattern::parse("/users"),
+            parent: Some("__root__".to_string()),
+            is_layout: false,
+            is_index: false,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
+
+        tree.add_route(RouteNode {
+            id: "user_detail".to_string(),
+            pattern: RoutePattern::parse("/users/$id"),
+            parent: Some("__root__".to_string()),
+            is_layout: false,
+            is_index: false,
+            has_loader: true,
+            loader_stale_time: Some(Duration::from_secs(30)),
+            loader_gc_time: Some(Duration::from_secs(300)),
+            preload_stale_time: Some(Duration::from_secs(30)),
+        });
+
+        tree.add_route(RouteNode {
+            id: "settings".to_string(),
+            pattern: RoutePattern::parse("/settings"),
+            parent: Some("__root__".to_string()),
+            is_layout: false,
+            is_index: false,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
+
+        cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                    None,
+                    size(px(800.0), px(600.0)),
+                    cx,
+                ))),
+                ..Default::default()
+            },
+            |window, cx| {
+                let window_id = window.window_handle().window_id();
+                let initial = Location::new("/");
+
+                let router_provider = RouterProvider::new(window_id, initial, tree, cx);
+
+                cx.new(|_cx| AppView { router_provider })
+            },
+        )
+        .unwrap();
+
+        cx.activate(true);
     });
-
-    tree.add_route(RouteNode {
-        id: "index".to_string(),
-        pattern: RoutePattern::parse("/"),
-        parent: Some("__root__".to_string()),
-        is_layout: false,
-        is_index: true,
-        has_loader: false,
-        loader_stale_time: None,
-        loader_gc_time: None,
-        preload_stale_time: None,
-    });
-
-    tree.add_route(RouteNode {
-        id: "users_index".to_string(),
-        pattern: RoutePattern::parse("/users"),
-        parent: Some("__root__".to_string()),
-        is_layout: false,
-        is_index: false,
-        has_loader: false,
-        loader_stale_time: None,
-        loader_gc_time: None,
-        preload_stale_time: None,
-    });
-
-    tree.add_route(RouteNode {
-        id: "user_detail".to_string(),
-        pattern: RoutePattern::parse("/users/$id"),
-        parent: Some("__root__".to_string()),
-        is_layout: false,
-        is_index: false,
-        has_loader: true,
-        loader_stale_time: Some(std::time::Duration::from_secs(30)),
-        loader_gc_time: Some(std::time::Duration::from_secs(300)),
-        preload_stale_time: Some(std::time::Duration::from_secs(30)),
-    });
-
-    tree.add_route(RouteNode {
-        id: "settings".to_string(),
-        pattern: RoutePattern::parse("/settings"),
-        parent: Some("__root__".to_string()),
-        is_layout: false,
-        is_index: false,
-        has_loader: false,
-        loader_stale_time: None,
-        loader_gc_time: None,
-        preload_stale_time: None,
-    });
-
-    // Display registered routes
-    println!("Navi Example App - Router initialized successfully!");
-    println!("Registered routes:");
-    for node in tree.all_nodes() {
-        println!("  {} -> {}", node.id, node.pattern.raw);
-    }
-
-    // Test route matching before moving tree
-    let test_paths = ["/", "/users", "/users/42", "/settings", "/unknown"];
-    for path in test_paths {
-        match tree.match_path(path) {
-            Some((params, node)) => {
-                println!("Matched {} -> {} ({:?})", path, node.id, params);
-            }
-            None => {
-                println!("No match for {}", path);
-            }
-        }
-    }
-
-    let _router_state = RouterState::new(initial, window_id, tree);
-
-    // Create the app with devtools
-    let _devtools = navi_devtools::NaviDevtools::new()
-        .selected_tab(navi_devtools::devtools::DevtoolsTab::Routes);
-
-    println!("\nRouter state created successfully. Navigation system ready.");
 }

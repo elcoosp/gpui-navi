@@ -147,9 +147,7 @@ impl RenderOnce for UserDetailPage {
         let element_id = ElementId::Name("user-detail-loader".into());
 
         window.with_global_id(element_id, |global_id, window| {
-            // FIX 1: Add `mut` to existing_state
             window.with_element_state::<LoaderState, _>(global_id, |mut existing_state, _window| {
-                // FIX 2: Add `ref` to `s` so we only borrow, not move
                 let needs_new = match existing_state {
                     None => true,
                     Some(ref s) => s.user_id != user_id,
@@ -170,6 +168,7 @@ impl RenderOnce for UserDetailPage {
         })
     }
 }
+
 // ----------------------------------------------------------------------------
 // Root View
 // ----------------------------------------------------------------------------

@@ -3,9 +3,10 @@ use navi_core::suspense::SuspenseState;
 use navi_devtools::NaviDevtools;
 use navi_router::{
     Location, RouteNode, RoutePattern, RouteTree, RouterState,
-    components::{Link, Outlet, RouterProvider, SuspenseBoundary, register_route_component},
+    components::{Link, Outlet, RouterProvider, register_route_component},
 };
 use std::sync::Arc;
+use std::time::Duration;
 
 // ----------------------------------------------------------------------------
 // Route Components
@@ -78,25 +79,27 @@ impl UserLoader {
         if !matches!(self.state, SuspenseState::Idle) {
             return;
         }
+
         self.state = SuspenseState::Pending;
-        cx.spawn(|this: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp| {
-            let mut cx = cx.clone();
-            async move {
-                cx.background_executor()
-                    .timer(std::time::Duration::from_millis(500))
-                    .await;
+        cx.notify();
 
-                let data = Arc::new(UserData {
-                    id: user_id.clone(),
-                    name: format!("User {}", user_id),
-                    email: format!("user{}@example.com", user_id),
-                });
+        cx.spawn(async move |this, async_app| {
+            async_app
+                .background_executor()
+                .timer(Duration::from_millis(1000))
+                .await;
 
-                this.update(&mut cx, |this, cx| {
-                    this.state = SuspenseState::Ready(data);
-                    cx.notify();
-                })
-                .ok();
+            let data = Arc::new(UserData {
+                id: user_id.clone(),
+                name: format!("User {}", user_id),
+                email: format!("user{}@example.com", user_id),
+            });
+
+            if let Err(e) = this.update(async_app, |this, cx| {
+                this.state = SuspenseState::Ready(data);
+                cx.notify();
+            }) {
+                eprintln!("ERROR updating UserLoader: {:?}", e);
             }
         })
         .detach();
@@ -104,8 +107,10 @@ impl UserLoader {
 }
 
 impl Render for UserLoader {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        SuspenseBoundary::new().child(match &self.state {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        match &self.state {
+            SuspenseState::Idle => div().child("IDLE").into_any_element(),
+            SuspenseState::Pending => div().child("LOADING...").into_any_element(),
             SuspenseState::Ready(data) => div()
                 .flex()
                 .flex_col()
@@ -114,30 +119,57 @@ impl Render for UserLoader {
                 .child(format!("Name: {}", data.name))
                 .child(format!("Email: {}", data.email))
                 .into_any_element(),
-            SuspenseState::Pending => div().child("Loading user...").into_any_element(),
             SuspenseState::Error(e) => div().child(format!("Error: {}", e)).into_any_element(),
-            SuspenseState::Idle => div().into_any_element(),
-        })
+        }
     }
+}
+
+// ----------------------------------------------------------------------------
+// Cached Loader State
+// ----------------------------------------------------------------------------
+
+#[derive(Clone)]
+struct LoaderState {
+    user_id: String,
+    loader: Entity<UserLoader>,
 }
 
 #[derive(Clone, IntoElement)]
 struct UserDetailPage;
 
 impl RenderOnce for UserDetailPage {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let user_id = RouterState::try_global(cx)
             .and_then(|state| state.current_match.as_ref())
             .and_then(|(params, _)| params.get("id").cloned())
             .unwrap_or_else(|| "unknown".to_string());
 
-        let loader = UserLoader::new(user_id.clone(), cx);
-        loader.update(cx, |loader, cx| loader.load(user_id, cx));
+        let element_id = ElementId::Name("user-detail-loader".into());
 
-        div().child(loader)
+        window.with_global_id(element_id, |global_id, window| {
+            // FIX 1: Add `mut` to existing_state
+            window.with_element_state::<LoaderState, _>(global_id, |mut existing_state, _window| {
+                // FIX 2: Add `ref` to `s` so we only borrow, not move
+                let needs_new = match existing_state {
+                    None => true,
+                    Some(ref s) => s.user_id != user_id,
+                };
+
+                let state = if needs_new {
+                    let loader = UserLoader::new(user_id.clone(), cx);
+                    loader.update(cx, |loader, cx| loader.load(user_id.clone(), cx));
+                    LoaderState { user_id, loader }
+                } else {
+                    existing_state.take().unwrap()
+                };
+
+                let loader = state.loader.clone();
+
+                (div().child(loader), state)
+            })
+        })
     }
 }
-
 // ----------------------------------------------------------------------------
 // Root View
 // ----------------------------------------------------------------------------
@@ -212,9 +244,9 @@ fn main() {
             is_layout: false,
             is_index: false,
             has_loader: true,
-            loader_stale_time: Some(std::time::Duration::from_secs(30)),
-            loader_gc_time: Some(std::time::Duration::from_secs(300)),
-            preload_stale_time: Some(std::time::Duration::from_secs(30)),
+            loader_stale_time: Some(Duration::from_secs(30)),
+            loader_gc_time: Some(Duration::from_secs(300)),
+            preload_stale_time: Some(Duration::from_secs(30)),
         });
 
         cx.open_window(

@@ -3,6 +3,7 @@ use gpui::{AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, W
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+
 #[derive(IntoElement)]
 pub struct SuspenseBoundary {
     pending_component: Option<AnyElement>,
@@ -79,23 +80,19 @@ impl RenderOnce for SuspenseBoundary {
 
                 let elapsed = loading_state.start.elapsed();
                 let should_show = elapsed >= Duration::from_millis(self.pending_ms);
-                let shown_clone = loading_state.shown.clone();
-                {
-                    let mut shown_borrow = shown_clone.borrow_mut();
-                    if should_show && !*shown_borrow {
-                        *shown_borrow = true;
-                        if self.pending_min_ms > 0 {
-                            let min_end =
-                                loading_state.start + Duration::from_millis(self.pending_min_ms);
-                            if Instant::now() < min_end {
-                                window.request_animation_frame();
-                            }
-                        }
-                    }
-                } // borrow ends here
+
+                if should_show && !*loading_state.shown.borrow() {
+                    *loading_state.shown.borrow_mut() = true;
+                }
+
+                // Keep polling until shown
+                if !*loading_state.shown.borrow() {
+                    window.request_animation_frame();
+                }
 
                 let element = if *loading_state.shown.borrow() {
-                    div().child("Loading...").into_any_element()
+                    self.pending_component
+                        .unwrap_or_else(|| div().child("Loading...").into_any_element())
                 } else {
                     div().into_any_element()
                 };

@@ -1591,14 +1591,17 @@ name = "example-app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
  "gpui",
  "gpui-component",
  "gpux",
+ "navi-codegen",
  "navi-core",
  "navi-devtools",
  "navi-macros",
  "navi-router",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

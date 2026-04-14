@@ -3,7 +3,7 @@ use gpui::{AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, W
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
-
+#[derive(IntoElement)]
 pub struct SuspenseBoundary {
     pending_component: Option<AnyElement>,
     pending_ms: u64,

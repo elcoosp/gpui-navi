@@ -1,25 +1,22 @@
 use crate::RouterState;
-use gpui::{
-    AnyElement, AnyView, App, Entity, IntoElement, ParentElement, Render, RenderOnce, Window, div,
-};
+use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Window, div};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-type ComponentConstructor = Box<dyn Fn(&mut App) -> AnyView + Send + Sync>;
+type ComponentConstructor = Box<dyn Fn(&mut App) -> AnyElement + Send + Sync>;
 
 static REGISTRY: Lazy<Mutex<HashMap<String, ComponentConstructor>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-pub fn register_route_component<F, V>(route_id: &str, constructor: F)
+pub fn register_route_component<F>(route_id: &str, constructor: F)
 where
-    F: Fn(&mut App) -> Entity<V> + Send + Sync + 'static,
-    V: 'static + Render,
+    F: Fn(&mut App) -> AnyElement + Send + Sync + 'static,
 {
-    REGISTRY.lock().unwrap().insert(
-        route_id.to_string(),
-        Box::new(move |cx| AnyView::from(constructor(cx))),
-    );
+    REGISTRY
+        .lock()
+        .unwrap()
+        .insert(route_id.to_string(), Box::new(constructor));
 }
 
 #[derive(IntoElement, Default)]
@@ -46,8 +43,11 @@ impl RenderOnce for Outlet {
 
         if let Some((_params, node)) = current_match {
             if let Some(constructor) = REGISTRY.lock().unwrap().get(&node.id) {
-                let view = constructor(cx);
-                return div().child(view).children(self.children).into_any_element();
+                let element = constructor(cx);
+                return div()
+                    .child(element)
+                    .children(self.children)
+                    .into_any_element();
             }
             div()
                 .child(format!("Route: {}", node.id))

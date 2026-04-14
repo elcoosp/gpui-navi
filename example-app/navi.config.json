@@ -1,0 +1,7 @@
+{
+  "routes_directory": "./src/routes",
+  "generated_route_tree": "./src/route_tree.gen.rs",
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}

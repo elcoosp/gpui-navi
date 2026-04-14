@@ -1,4 +1,4 @@
-use gpui::{App, Div, IntoElement, ParentElement, RenderOnce, Styled, Window, div, px, rgb};
+use gpui::*;
 use navi_router::{RouterEvent, RouterState};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,7 +42,7 @@ impl NaviDevtools {
         }
     }
 
-    fn render_tab_button(&self, tab: DevtoolsTab, label: &str) -> Div {
+    fn render_tab_button(&self, tab: DevtoolsTab, label: &str) -> impl IntoElement {
         let selected = self.selected_tab == tab;
         div()
             .px_2()
@@ -61,7 +61,7 @@ impl NaviDevtools {
             .child(label.to_string())
     }
 
-    fn render_routes_tab(&self, cx: &mut App) -> Div {
+    fn render_routes_tab(&self, cx: &mut App) -> impl IntoElement {
         let state = RouterState::try_global(cx);
         let mut container = div().p_2().gap_1().flex().flex_col();
 
@@ -98,7 +98,7 @@ impl NaviDevtools {
         container
     }
 
-    fn render_timeline_tab(&self) -> Div {
+    fn render_timeline_tab(&self) -> impl IntoElement {
         let mut container = div().p_2().gap_1().flex().flex_col().text_sm();
         for event in self.event_log.iter().rev() {
             container = container.child(format!(
@@ -113,11 +113,11 @@ impl NaviDevtools {
         container
     }
 
-    fn render_cache_tab(&self, _cx: &mut App) -> Div {
+    fn render_cache_tab(&self) -> impl IntoElement {
         div().p_2().child("Cache inspection (rs-query integration)")
     }
 
-    fn render_state_tab(&self, cx: &mut App) -> Div {
+    fn render_state_tab(&self, cx: &mut App) -> impl IntoElement {
         let state = RouterState::try_global(cx);
         let mut container = div().p_2().gap_2().flex().flex_col();
         if let Some(state) = state {
@@ -139,17 +139,14 @@ impl NaviDevtools {
     }
 }
 
-impl Default for NaviDevtools {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl RenderOnce for NaviDevtools {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         if !self.expanded {
             return div();
         }
+
+        let mut content = div().flex_1();
+        content.style().overflow.y = Some(Overflow::Scroll);
 
         div()
             .absolute()
@@ -174,11 +171,19 @@ impl RenderOnce for NaviDevtools {
                     .child(self.render_tab_button(DevtoolsTab::Timeline, "Timeline"))
                     .child(self.render_tab_button(DevtoolsTab::State, "State")),
             )
-            .child(div().flex_1().child(match self.selected_tab {
+            .child(content.child(match self.selected_tab {
                 DevtoolsTab::Routes => self.render_routes_tab(cx).into_any_element(),
-                DevtoolsTab::Cache => self.render_cache_tab(cx).into_any_element(),
+                DevtoolsTab::Cache => self.render_cache_tab().into_any_element(),
                 DevtoolsTab::Timeline => self.render_timeline_tab().into_any_element(),
                 DevtoolsTab::State => self.render_state_tab(cx).into_any_element(),
             }))
+    }
+}
+
+impl IntoElement for NaviDevtools {
+    type Element = gpui::Component<NaviDevtools>;
+
+    fn into_element(self) -> Self::Element {
+        gpui::Component::new(self)
     }
 }

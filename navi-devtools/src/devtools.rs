@@ -16,8 +16,10 @@ pub struct DevtoolsState {
     event_log: Vec<crate::timeline::LoggedEvent>,
 }
 
+impl EventEmitter<()> for DevtoolsState {}
+
 impl DevtoolsState {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             expanded: true,
             selected_tab: DevtoolsTab::Routes,
@@ -25,7 +27,7 @@ impl DevtoolsState {
         }
     }
 
-    fn add_event(&mut self, event: RouterEvent, cx: &mut Context<Self>) {
+    pub fn add_event(&mut self, event: RouterEvent, cx: &mut Context<Self>) {
         self.event_log
             .push(crate::timeline::LoggedEvent::new(event));
         if self.event_log.len() > 100 {
@@ -39,6 +41,7 @@ impl DevtoolsState {
         cx.notify();
     }
 
+    #[allow(dead_code)]
     fn toggle_expanded(&mut self, cx: &mut Context<Self>) {
         self.expanded = !self.expanded;
         cx.notify();
@@ -46,10 +49,13 @@ impl DevtoolsState {
 }
 
 impl Render for DevtoolsState {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.expanded {
             return div();
         }
+
+        let mut content = div().flex_1();
+        content.style().overflow.y = Some(Overflow::Scroll);
 
         div()
             .absolute()
@@ -69,27 +75,22 @@ impl Render for DevtoolsState {
                     .flex_row()
                     .border_b_1()
                     .border_color(rgb(0x3a3a3a))
-                    .child(self.render_tab_button(DevtoolsTab::Routes, "Routes"))
-                    .child(self.render_tab_button(DevtoolsTab::Cache, "Cache"))
-                    .child(self.render_tab_button(DevtoolsTab::Timeline, "Timeline"))
-                    .child(self.render_tab_button(DevtoolsTab::State, "State")),
+                    .child(self.render_tab_button(DevtoolsTab::Routes, "Routes", cx))
+                    .child(self.render_tab_button(DevtoolsTab::Cache, "Cache", cx))
+                    .child(self.render_tab_button(DevtoolsTab::Timeline, "Timeline", cx))
+                    .child(self.render_tab_button(DevtoolsTab::State, "State", cx)),
             )
-            .child(
-                div()
-                    .flex_1()
-                    .overflow_scroll()
-                    .child(match self.selected_tab {
-                        DevtoolsTab::Routes => self.render_routes_tab().into_any_element(),
-                        DevtoolsTab::Cache => self.render_cache_tab().into_any_element(),
-                        DevtoolsTab::Timeline => self.render_timeline_tab().into_any_element(),
-                        DevtoolsTab::State => self.render_state_tab().into_any_element(),
-                    }),
-            )
+            .child(content.child(match self.selected_tab {
+                DevtoolsTab::Routes => self.render_routes_tab(cx).into_any_element(),
+                DevtoolsTab::Cache => self.render_cache_tab().into_any_element(),
+                DevtoolsTab::Timeline => self.render_timeline_tab().into_any_element(),
+                DevtoolsTab::State => self.render_state_tab(cx).into_any_element(),
+            }))
     }
 }
 
 impl DevtoolsState {
-    fn render_tab_button(&self, tab: DevtoolsTab, label: &str) -> impl IntoElement {
+    fn render_tab_button(&self, tab: DevtoolsTab, label: &str, cx: &mut Context<Self>) -> Div {
         let selected = self.selected_tab == tab;
         div()
             .px_2()
@@ -106,14 +107,15 @@ impl DevtoolsState {
                 rgb(0xaaaaaa)
             })
             .child(label.to_string())
-            .on_click(
-                cx.listener(move |this: &mut Self, _event: &ClickEvent, _window, cx| {
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(move |this: &mut Self, _event: &MouseUpEvent, _window, cx| {
                     this.set_selected_tab(tab, cx);
                 }),
             )
     }
 
-    fn render_routes_tab(&self) -> impl IntoElement {
+    fn render_routes_tab(&self, cx: &mut Context<Self>) -> Div {
         let state = RouterState::try_global(cx);
         let mut container = div().p_2().gap_1().flex().flex_col();
 
@@ -150,7 +152,7 @@ impl DevtoolsState {
         container
     }
 
-    fn render_timeline_tab(&self) -> impl IntoElement {
+    fn render_timeline_tab(&self) -> Div {
         let mut container = div().p_2().gap_1().flex().flex_col().text_sm();
         for event in self.event_log.iter().rev() {
             container = container.child(format!(
@@ -165,11 +167,11 @@ impl DevtoolsState {
         container
     }
 
-    fn render_cache_tab(&self) -> impl IntoElement {
+    fn render_cache_tab(&self) -> Div {
         div().p_2().child("Cache inspection (rs-query integration)")
     }
 
-    fn render_state_tab(&self) -> impl IntoElement {
+    fn render_state_tab(&self, cx: &mut Context<Self>) -> Div {
         let state = RouterState::try_global(cx);
         let mut container = div().p_2().gap_2().flex().flex_col();
         if let Some(state) = state {
@@ -191,7 +193,8 @@ impl DevtoolsState {
     }
 }
 
-/// Public component that creates the devtools entity.
+/// Public component that creates and renders the devtools entity.
+#[derive(Clone)]
 pub struct NaviDevtools {
     state: Entity<DevtoolsState>,
 }

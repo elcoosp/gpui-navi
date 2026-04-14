@@ -1,6 +1,6 @@
 use gpui::*;
 use navi_core::suspense::SuspenseState;
-use navi_devtools::NaviDevtools;
+use navi_devtools::devtools::DevtoolsState;
 use navi_router::{
     Location, RouteNode, RoutePattern, RouteTree, RouterState,
     components::{Link, Outlet, RouterProvider, register_route_component},
@@ -175,14 +175,16 @@ impl RenderOnce for UserDetailPage {
 
 struct AppView {
     router_provider: RouterProvider,
+    devtools: Entity<DevtoolsState>,
 }
 
 impl Render for AppView {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
             .size_full()
+            .relative() // Ensure absolute positioning context for devtools
             .child(self.router_provider.clone().child(RootLayout))
-            .child(NaviDevtools::new())
+            .child(self.devtools.clone())
     }
 }
 
@@ -248,6 +250,8 @@ fn main() {
             preload_stale_time: Some(Duration::from_secs(30)),
         });
 
+        let devtools = cx.new(|_cx| DevtoolsState::new());
+
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
@@ -261,7 +265,10 @@ fn main() {
                 let window_id = window.window_handle().window_id();
                 let initial = Location::new("/");
                 let router_provider = RouterProvider::new(window_id, initial, tree, cx);
-                cx.new(|_cx| AppView { router_provider })
+                cx.new(|_cx| AppView {
+                    router_provider,
+                    devtools,
+                })
             },
         )
         .unwrap();

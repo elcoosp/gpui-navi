@@ -1,0 +1,11 @@
+[package]
+name = "navi-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gpui = "0.2.2"
+gpux = { git = "https://github.com/fukayatti/gpux" }
+gpui-component = "0.5.1"
+anyhow = "1.0"
+thiserror = "1.0"

@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+    "stubs/history-navigation",
+    "navi-core",
+    "navi-router",
+    "navi-macros",
+    "navi-codegen",
+    "navi-devtools",
+    "example-app",
+]
+
+[workspace.package]
+edition = "2021"

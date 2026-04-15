@@ -41,13 +41,19 @@ pub fn use_loader_data(input: TokenStream) -> TokenStream {
     let route_ty = parse_macro_input!(input as syn::Type);
     let expanded = quote! {
         {
-            let state = navi_router::RouterState::global(cx);
-            let data = state.get_loader_data::<#route_ty>()
-                .expect("Loader data not available")
-                .clone();
-            let typed_data = std::sync::Arc::downcast::<<#route_ty as navi_router::RouteDef>::LoaderData>(data)
-                .expect("Loader data type mismatch");
-            std::sync::Arc::try_unwrap(typed_data).unwrap_or_else(|arc| (*arc).clone())
+            // Check if data is already available without holding borrow across update
+            let data_exists = navi_router::RouterState::try_global(cx)
+                .and_then(|s| s.get_loader_data::<#route_ty>())
+                .is_some();
+
+            if !data_exists {
+                navi_router::RouterState::update(cx, |state, cx| state.trigger_loader(cx));
+            }
+
+            navi_router::RouterState::global(cx)
+                .get_loader_data::<#route_ty>()
+                .expect("loader data not ready")
+                .clone()
         }
     };
     expanded.into()
@@ -74,7 +80,7 @@ pub fn use_blocker(input: TokenStream) -> TokenStream {
 
 pub fn use_can_go_back(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
-        false // Placeholder
+        false
     };
     expanded.into()
 }

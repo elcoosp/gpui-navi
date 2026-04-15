@@ -1,20 +1,15 @@
-use gpui::{App, Task};
+use gpui::{App, BackgroundExecutor, Task};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 pub type LoaderError = Box<dyn std::error::Error + Send + Sync>;
 
-pub enum LoaderResult {
-    Pending(Task<Result<Arc<dyn std::any::Any + Send + Sync>, LoaderError>>),
-    Ready(Arc<dyn std::any::Any + Send + Sync>),
-}
+pub type LoaderTask = Task<Result<Arc<dyn std::any::Any + Send + Sync>, LoaderError>>;
 
-pub type LoaderFn = Box<
-    dyn Fn(&mut App) -> Task<Result<Arc<dyn std::any::Any + Send + Sync>, LoaderError>>
-        + Send
-        + Sync,
->;
+pub type LoaderFn =
+    Box<dyn Fn(&HashMap<String, String>, BackgroundExecutor, &mut App) -> LoaderTask + Send + Sync>;
 
+#[derive(Default)]
 pub struct LoaderRegistry {
     loaders: HashMap<String, LoaderFn>,
 }

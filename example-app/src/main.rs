@@ -1,18 +1,16 @@
 use gpui::*;
-use navi_core::suspense::SuspenseState;
 use navi_devtools::DevtoolsState;
-use navi_macros::{define_route, use_params};
+use navi_macros::{define_route, use_loader_data};
 use navi_router::{
     Location, RouteNode, RoutePattern, RouteTree,
     components::{Link, Outlet, RouterProvider, SuspenseBoundary, register_route_component},
 };
-use std::sync::Arc;
+use serde::Deserialize;
 use std::time::Duration;
 
 // ----------------------------------------------------------------------------
-// Route Components
+// Root Layout
 // ----------------------------------------------------------------------------
-
 #[derive(Clone, IntoElement)]
 struct RootLayout;
 impl RenderOnce for RootLayout {
@@ -29,174 +27,188 @@ impl RenderOnce for RootLayout {
                     .gap_4()
                     .p_4()
                     .bg(rgb(0x313244))
-                    .child(Link::new("/").child("Home"))
-                    .child(Link::new("/about").child("About"))
+                    .child(Link::new("/").child("🏠 Home"))
+                    .child(Link::new("/about").child("ℹ️ About"))
+                    .child(Link::new("/users").child("👥 Users"))
                     .child(Link::new("/users/1").child("User 1"))
-                    .child(Link::new("/users/2").child("User 2")),
+                    .child(Link::new("/users/2").child("User 2"))
+                    .child(Link::new("/settings").child("⚙️ Settings"))
+                    .child(Link::new("/docs/getting-started").child("📄 Docs (splat)")),
             )
             .child(
                 SuspenseBoundary::new()
-                    .pending_component(div().child("Loading route..."))
+                    .pending_component(div().child("Loading..."))
                     .child(div().flex_1().p_4().child(Outlet::new())),
             )
     }
 }
 
+// ----------------------------------------------------------------------------
+// Home Page
+// ----------------------------------------------------------------------------
 #[derive(Clone, IntoElement)]
 struct HomePage;
 impl RenderOnce for HomePage {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div().child("Welcome Home!")
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap_4()
+            .child("🏠 Welcome to Navi Router!")
+            .child("This demo showcases nested layouts, dynamic routes, loaders, and more.")
     }
 }
 
+// ----------------------------------------------------------------------------
+// About Page
+// ----------------------------------------------------------------------------
 #[derive(Clone, IntoElement)]
 struct AboutPage;
 impl RenderOnce for AboutPage {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div().child("About this app")
+        div()
+            .child("ℹ️ About Navi Router")
+            .child("A powerful file‑based router for GPUI with loaders, suspense, and devtools.")
     }
 }
 
 // ----------------------------------------------------------------------------
-// Type‑safe Route Definition (params only)
+// Users Layout
 // ----------------------------------------------------------------------------
+#[derive(Clone, IntoElement)]
+struct UsersLayout;
+impl RenderOnce for UsersLayout {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child("👥 Users Section")
+            .child(div().flex_1().child(Outlet::new()))
+    }
+}
 
-#[derive(Clone, Debug, serde::Deserialize)]
+// ----------------------------------------------------------------------------
+// Users Index
+// ----------------------------------------------------------------------------
+#[derive(Clone, IntoElement)]
+struct UsersIndexPage;
+impl RenderOnce for UsersIndexPage {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child("Select a user:")
+            .child(Link::new("/users/1").child("User 1"))
+            .child(Link::new("/users/2").child("User 2"))
+            .child(Link::new("/users/42").child("User 42"))
+    }
+}
+
+// ----------------------------------------------------------------------------
+// User Detail Route – Declarative Loader
+// ----------------------------------------------------------------------------
+#[derive(Clone, Debug, Deserialize)]
 pub struct UserParams {
     pub id: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct UserData {
+    pub id: String,
+    pub name: String,
+    pub email: String,
 }
 
 define_route!(
     UserDetailRoute,
     path: "/users/$id",
     params: UserParams,
+    data: UserData,
+    loader: |params: UserParams, executor: gpui::BackgroundExecutor| async move {
+        let id = params.id;
+        executor.timer(Duration::from_millis(800)).await;
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(UserData {
+            id: id.clone(),
+            name: format!("User {}", id),
+            email: format!("user{}@example.com", id),
+        }))
+    },
     component: UserDetailPage,
 );
 
-// ----------------------------------------------------------------------------
-// User Detail with Manual Async Loader
-// ----------------------------------------------------------------------------
-
-#[derive(Clone)]
-struct UserData {
-    id: String,
-    name: String,
-    email: String,
-}
-
-struct UserLoader {
-    state: SuspenseState<Arc<UserData>>,
-}
-
-impl UserLoader {
-    fn new(_user_id: String, cx: &mut App) -> Entity<Self> {
-        cx.new(|_cx| Self {
-            state: SuspenseState::Idle,
-        })
-    }
-
-    fn load(&mut self, user_id: String, cx: &mut Context<Self>) {
-        if !matches!(self.state, SuspenseState::Idle) {
-            return;
-        }
-
-        self.state = SuspenseState::Pending;
-        cx.notify();
-
-        cx.spawn(async move |this, async_app| {
-            async_app
-                .background_executor()
-                .timer(Duration::from_millis(1000))
-                .await;
-
-            let data = Arc::new(UserData {
-                id: user_id.clone(),
-                name: format!("User {}", user_id),
-                email: format!("user{}@example.com", user_id),
-            });
-
-            if let Err(e) = this.update(async_app, |this, cx| {
-                this.state = SuspenseState::Ready(data);
-                cx.notify();
-            }) {
-                eprintln!("ERROR updating UserLoader: {:?}", e);
-            }
-        })
-        .detach();
-    }
-}
-
-impl Render for UserLoader {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        match &self.state {
-            SuspenseState::Idle => div().child("IDLE").into_any_element(),
-            SuspenseState::Pending => div().child("LOADING...").into_any_element(),
-            SuspenseState::Ready(data) => div()
-                .flex()
-                .flex_col()
-                .gap_2()
-                .child(format!("User ID: {}", data.id))
-                .child(format!("Name: {}", data.name))
-                .child(format!("Email: {}", data.email))
-                .into_any_element(),
-            SuspenseState::Error(e) => div().child(format!("Error: {}", e)).into_any_element(),
-        }
-    }
-}
-
-// ----------------------------------------------------------------------------
-// Cached Loader State
-// ----------------------------------------------------------------------------
-
-#[derive(Clone)]
-struct LoaderState {
-    user_id: String,
-    loader: Entity<UserLoader>,
-}
-
 #[derive(Clone, IntoElement)]
 struct UserDetailPage;
-
 impl RenderOnce for UserDetailPage {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let params = use_params!(UserDetailRoute);
-        let user_id = params.id;
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let data = use_loader_data!(UserDetailRoute);
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(format!("User ID: {}", data.id))
+            .child(format!("Name: {}", data.name))
+            .child(format!("Email: {}", data.email))
+            .into_any_element()
+    }
+}
 
-        let element_id = ElementId::Name("user-detail-loader".into());
+// ----------------------------------------------------------------------------
+// Settings Page
+// ----------------------------------------------------------------------------
+#[derive(Clone, IntoElement)]
+struct SettingsPage;
+impl RenderOnce for SettingsPage {
+    fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
+        div()
+            .child("⚙️ Settings Page")
+            .child("Configure your application here.")
+    }
+}
 
-        window.with_global_id(element_id, |global_id, window| {
-            window.with_element_state::<LoaderState, _>(global_id, |mut existing_state, _window| {
-                let needs_new = match existing_state {
-                    None => true,
-                    Some(ref s) => s.user_id != user_id,
-                };
+// ----------------------------------------------------------------------------
+// Docs Splat Route
+// ----------------------------------------------------------------------------
+#[derive(Clone, IntoElement)]
+struct DocsSplatPage;
+impl RenderOnce for DocsSplatPage {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = navi_router::RouterState::global(cx);
+        let path = state.current_location().pathname;
+        let slug = path.strip_prefix("/docs/").unwrap_or("unknown");
+        div()
+            .child(format!("📄 Documentation: {}", slug))
+            .child("This is a catch‑all splat route.")
+    }
+}
 
-                let state = if needs_new {
-                    let loader = UserLoader::new(user_id.clone(), cx);
-                    loader.update(cx, |loader, cx| loader.load(user_id.clone(), cx));
-                    LoaderState { user_id, loader }
-                } else {
-                    existing_state.take().unwrap()
-                };
-
-                let loader = state.loader.clone();
-
-                (div().child(loader), state)
-            })
-        })
+// ----------------------------------------------------------------------------
+// Not Found Page
+// ----------------------------------------------------------------------------
+#[derive(Clone, IntoElement)]
+struct NotFoundPage;
+impl RenderOnce for NotFoundPage {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child("404 – Page Not Found")
     }
 }
 
 // ----------------------------------------------------------------------------
 // Root View
 // ----------------------------------------------------------------------------
-
 struct AppView {
     router_provider: RouterProvider,
     devtools: Entity<DevtoolsState>,
 }
-
 impl Render for AppView {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
@@ -210,12 +222,27 @@ impl Render for AppView {
 // ----------------------------------------------------------------------------
 // Main
 // ----------------------------------------------------------------------------
-
 fn main() {
+    register_route_component("__root__", |_| {
+        Component::new(RootLayout).into_any_element()
+    });
     register_route_component("index", |_| Component::new(HomePage).into_any_element());
     register_route_component("about", |_| Component::new(AboutPage).into_any_element());
+    register_route_component("users", |_| Component::new(UsersLayout).into_any_element());
+    register_route_component("users_index", |_| {
+        Component::new(UsersIndexPage).into_any_element()
+    });
     register_route_component("UserDetailRoute", |_| {
         Component::new(UserDetailPage).into_any_element()
+    });
+    register_route_component("settings", |_| {
+        Component::new(SettingsPage).into_any_element()
+    });
+    register_route_component("docs_splat", |_| {
+        Component::new(DocsSplatPage).into_any_element()
+    });
+    register_route_component("not_found", |_| {
+        Component::new(NotFoundPage).into_any_element()
     });
 
     Application::new().run(|cx: &mut App| {
@@ -257,7 +284,67 @@ fn main() {
             preload_stale_time: None,
         });
 
+        tree.add_route(RouteNode {
+            id: "users".to_string(),
+            pattern: RoutePattern::parse("/users"),
+            parent: Some("__root__".into()),
+            is_layout: true,
+            is_index: false,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
+
+        tree.add_route(RouteNode {
+            id: "users_index".to_string(),
+            pattern: RoutePattern::parse("/users"),
+            parent: Some("users".into()),
+            is_layout: false,
+            is_index: true,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
+
         tree.add_route(UserDetailRoute::build_node());
+
+        tree.add_route(RouteNode {
+            id: "settings".to_string(),
+            pattern: RoutePattern::parse("/settings"),
+            parent: Some("__root__".into()),
+            is_layout: false,
+            is_index: false,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
+
+        tree.add_route(RouteNode {
+            id: "docs_splat".to_string(),
+            pattern: RoutePattern::parse("/docs/$"),
+            parent: Some("__root__".into()),
+            is_layout: false,
+            is_index: false,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
+
+        tree.add_route(RouteNode {
+            id: "not_found".to_string(),
+            pattern: RoutePattern::parse("/*"),
+            parent: Some("__root__".into()),
+            is_layout: false,
+            is_index: false,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
 
         let devtools = cx.new(|_cx| DevtoolsState::new());
 
@@ -265,7 +352,7 @@ fn main() {
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
-                    size(px(800.0), px(600.0)),
+                    size(px(900.0), px(700.0)),
                     cx,
                 ))),
                 ..Default::default()
@@ -274,6 +361,10 @@ fn main() {
                 let window_id = window.window_handle().window_id();
                 let initial = Location::new("/");
                 let router_provider = RouterProvider::new(window_id, initial, tree, cx);
+
+                // Register loader AFTER the global RouterState has been initialized by RouterProvider
+                UserDetailRoute::register_loader(cx);
+
                 cx.new(|_cx| AppView {
                     router_provider,
                     devtools,

@@ -41,19 +41,27 @@ pub fn use_loader_data(input: TokenStream) -> TokenStream {
     let route_ty = parse_macro_input!(input as syn::Type);
     let expanded = quote! {
         {
-            // Check if data is already available without holding borrow across update
-            let data_exists = navi_router::RouterState::try_global(cx)
+            log::debug!("use_loader_data called for {}", stringify!(#route_ty));
+
+            // Trigger loader if not already started or cached
+            let data_ready = navi_router::RouterState::try_global(cx)
                 .and_then(|s| s.get_loader_data::<#route_ty>())
                 .is_some();
 
-            if !data_exists {
+            if !data_ready {
+                log::debug!("Loader data not ready, triggering loader");
                 navi_router::RouterState::update(cx, |state, cx| state.trigger_loader(cx));
             }
 
-            navi_router::RouterState::global(cx)
-                .get_loader_data::<#route_ty>()
-                .expect("loader data not ready")
-                .clone()
+            let result = navi_router::RouterState::try_global(cx)
+                .and_then(|s| s.get_loader_data::<#route_ty>());
+
+            if result.is_some() {
+                log::debug!("use_loader_data returning Some");
+            } else {
+                log::debug!("use_loader_data returning None");
+            }
+            result
         }
     };
     expanded.into()

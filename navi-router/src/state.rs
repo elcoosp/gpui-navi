@@ -3,12 +3,13 @@ use crate::history::History;
 use crate::loader::{LoaderRegistry, LoaderTask};
 use crate::location::{Location, NavigateOptions, ViewTransitionOptions};
 use crate::route_tree::{RouteNode, RouteTree};
-use gpui::{App, BorrowAppContext, Global, WindowId};
+use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId};
 use rs_query::QueryClient;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Events emitted by the router during navigation lifecycle.
 #[derive(Clone, Debug)]
@@ -46,6 +47,7 @@ pub trait RouteDef: 'static {
     type LoaderData: Clone + std::fmt::Debug + Send + Sync + 'static;
 
     fn path() -> &'static str;
+    fn name() -> &'static str;
 }
 
 /// The central router state.
@@ -63,14 +65,24 @@ pub struct RouterState {
     next_blocker_id: BlockerId,
     loading: bool,
     loader_registry: LoaderRegistry,
+
     loader_cache: HashMap<String, Arc<dyn std::any::Any + Send + Sync>>,
     pending_loaders: HashMap<String, LoaderTask>,
+    /// The window handle, used to refresh the UI after loader updates.
+    window_handle: AnyWindowHandle,
+    /// The EntityId of the root view, used to notify it after loader data changes.
+    root_view: Option<EntityId>,
 }
 
 impl Global for RouterState {}
 
 impl RouterState {
-    pub fn new(initial: Location, window_id: WindowId, route_tree: Rc<RouteTree>) -> Self {
+    pub fn new(
+        initial: Location,
+        window_id: WindowId,
+        window_handle: AnyWindowHandle,
+        route_tree: Rc<RouteTree>,
+    ) -> Self {
         let current_match = route_tree
             .match_path(&initial.pathname)
             .map(|(params, node)| (params, node.clone()));
@@ -90,7 +102,14 @@ impl RouterState {
             loader_registry: LoaderRegistry::new(),
             loader_cache: HashMap::new(),
             pending_loaders: HashMap::new(),
+            window_handle,
+            root_view: None,
         }
+    }
+
+    /// Set the root view entity ID. Called by the window after creating the root view.
+    pub fn set_root_view(&mut self, view_id: EntityId) {
+        self.root_view = Some(view_id);
     }
 
     /// Navigate to a new location.
@@ -182,6 +201,7 @@ impl RouterState {
 
     /// Register a loader function for a route.
     pub fn register_loader(&mut self, route_id: &str, loader: crate::loader::LoaderFn) {
+        log::debug!("Registering loader for route: {}", route_id);
         self.loader_registry.insert(route_id, loader);
     }
 
@@ -189,21 +209,35 @@ impl RouterState {
     pub fn trigger_loader(&mut self, cx: &mut App) {
         if let Some((params, node)) = &self.current_match {
             if node.has_loader {
-                let key = format!(
-                    "{}:{}",
-                    node.id,
-                    serde_json::to_string(params).unwrap_or_default()
-                );
-                if self.loader_cache.contains_key(&key) || self.pending_loaders.contains_key(&key) {
+                log::debug!("Loader trigger for route: {}", node.id);
+                let params_json = match serde_json::to_string(params) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        log::error!("Failed to serialize params for loader key: {}", e);
+                        return;
+                    }
+                };
+                let key = format!("{}:{}", node.id, params_json);
+                log::debug!("Loader cache key: {}", key);
+
+                if self.loader_cache.contains_key(&key) {
+                    log::debug!("Loader cache hit for key: {}", key);
                     return;
                 }
+                if self.pending_loaders.contains_key(&key) {
+                    log::debug!("Loader already pending for key: {}", key);
+                    return;
+                }
+
                 if let Some(loader_fn) = self.loader_registry.get(&node.id) {
+                    log::debug!("Executing loader for route: {}", node.id);
                     let executor = cx.background_executor().clone();
                     let task = loader_fn(params, executor, cx);
                     self.pending_loaders.insert(key.clone(), task);
                     self.loading = true;
 
                     let key_clone = key.clone();
+                    let window_handle = self.window_handle;
                     cx.spawn(async move |cx| {
                         let task = cx.update_global::<RouterState, _>(|state, _| {
                             state.pending_loaders.remove(&key_clone)
@@ -212,23 +246,41 @@ impl RouterState {
                         if let Ok(Some(task)) = task {
                             match task.await {
                                 Ok(data) => {
+                                    log::debug!("Loader succeeded for key: {}", key_clone);
                                     let _ = cx.update_global::<RouterState, _>(|state, cx| {
-                                        state.loader_cache.insert(key_clone, data);
+                                        state.loader_cache.insert(
+                                            key_clone,
+                                            data.clone() as Arc<dyn std::any::Any + Send + Sync>,
+                                        );
                                         state.loading = state.pending_loaders.is_empty();
+                                        // Notify the root view to re-render
+                                        if let Some(view_id) = state.root_view {
+                                            cx.notify(view_id);
+                                        }
                                         cx.refresh_windows();
                                     });
+                                    // Force the specific window to refresh
+                                    _ = window_handle.update(cx, |_, window, _| window.refresh());
+                                    // Delayed refresh as fallback
+                                    cx.background_executor()
+                                        .timer(Duration::from_millis(16))
+                                        .await;
+                                    _ = window_handle.update(cx, |_, window, _| window.refresh());
                                 }
                                 Err(e) => {
-                                    eprintln!("Loader error: {}", e);
+                                    log::error!("Loader error for key {}: {}", key_clone, e);
                                     let _ = cx.update_global::<RouterState, _>(|state, cx| {
                                         state.loading = state.pending_loaders.is_empty();
                                         cx.refresh_windows();
                                     });
+                                    _ = window_handle.update(cx, |_, window, _| window.refresh());
                                 }
                             }
                         }
                     })
                     .detach();
+                } else {
+                    log::warn!("No loader registered for route: {}", node.id);
                 }
             }
         }
@@ -237,18 +289,25 @@ impl RouterState {
     /// Get loader data for a specific route type.
     pub fn get_loader_data<R: crate::RouteDef>(&self) -> Option<R::LoaderData> {
         let (params, node) = self.current_match.as_ref()?;
-        if node.id != R::path() {
+        if node.id != R::name() {
+            log::debug!(
+                "Loader data request for {} but current route is {}",
+                R::name(),
+                node.id
+            );
             return None;
         }
-        let key = format!(
-            "{}:{}",
-            node.id,
-            serde_json::to_string(params).unwrap_or_default()
-        );
-        self.loader_cache
+        let params_json = serde_json::to_string(params).ok()?;
+        let key = format!("{}:{}", node.id, params_json);
+        log::debug!("Looking up loader data with key: {}", key);
+        let arc_data = self
+            .loader_cache
             .get(&key)?
-            .downcast_ref::<R::LoaderData>()
-            .cloned()
+            .downcast_ref::<Arc<R::LoaderData>>()?
+            .clone();
+        let data = (*arc_data).clone();
+        log::debug!("Loader data found for key: {}", key);
+        Some(data)
     }
     // --- Global access helpers ---
 

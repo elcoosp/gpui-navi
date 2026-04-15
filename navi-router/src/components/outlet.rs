@@ -38,22 +38,32 @@ impl ParentElement for Outlet {
 
 impl RenderOnce for Outlet {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        log::debug!("Outlet rendering");
         let state = RouterState::try_global(cx);
-        let current_match = state.and_then(|s| s.current_match.as_ref());
+        if state.is_none() {
+            log::error!("Outlet: RouterState not found in global context");
+            return div().child("Router not initialized").into_any_element();
+        }
+        let state = state.unwrap();
+        let current_match = state.current_match.as_ref();
 
         if let Some((_params, node)) = current_match {
+            log::debug!("Outlet rendering route: {}", node.id);
             if let Some(constructor) = REGISTRY.lock().unwrap().get(&node.id) {
                 let element = constructor(cx);
                 return div()
                     .child(element)
                     .children(self.children)
                     .into_any_element();
+            } else {
+                log::warn!("No component registered for route: {}", node.id);
+                return div()
+                    .child(format!("No component for route: {}", node.id))
+                    .children(self.children)
+                    .into_any_element();
             }
-            div()
-                .child(format!("Route: {}", node.id))
-                .children(self.children)
-                .into_any_element()
         } else {
+            log::warn!("Outlet: no matching route");
             div().child("404 Not Found").into_any_element()
         }
     }

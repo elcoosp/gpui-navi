@@ -2,8 +2,8 @@ use gpui::*;
 use navi_devtools::DevtoolsState;
 use navi_macros::{define_route, use_loader_data};
 use navi_router::{
-    Location, RouteNode, RoutePattern, RouteTree,
-    components::{Link, Outlet, RouterProvider, SuspenseBoundary, register_route_component},
+    Location, RouteNode, RoutePattern, RouteTree, RouterState,
+    components::{Link, Outlet, RouterProvider, register_route_component},
 };
 use serde::Deserialize;
 use std::time::Duration;
@@ -35,14 +35,9 @@ impl RenderOnce for RootLayout {
                     .child(Link::new("/settings").child("⚙️ Settings"))
                     .child(Link::new("/docs/getting-started").child("📄 Docs (splat)")),
             )
-            .child(
-                SuspenseBoundary::new()
-                    .pending_component(div().child("Loading..."))
-                    .child(div().flex_1().p_4().child(Outlet::new())),
-            )
+            .child(div().flex_1().p_4().child(Outlet::new())) // No SuspenseBoundary
     }
 }
-
 // ----------------------------------------------------------------------------
 // Home Page
 // ----------------------------------------------------------------------------
@@ -130,9 +125,11 @@ define_route!(
     params: UserParams,
     data: UserData,
     loader: |params: UserParams, executor: gpui::BackgroundExecutor| async move {
+        log::debug!("UserDetailRoute loader started for id: {}", params.id);
         let id = params.id;
         executor.timer(Duration::from_millis(800)).await;
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(UserData {
+        log::debug!("UserDetailRoute loader completed for id: {}", id);
+        Ok(std::sync::Arc::new(UserData {
             id: id.clone(),
             name: format!("User {}", id),
             email: format!("user{}@example.com", id),
@@ -146,14 +143,17 @@ struct UserDetailPage;
 impl RenderOnce for UserDetailPage {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let data = use_loader_data!(UserDetailRoute);
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(format!("User ID: {}", data.id))
-            .child(format!("Name: {}", data.name))
-            .child(format!("Email: {}", data.email))
-            .into_any_element()
+        match data {
+            Some(data) => div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(format!("User ID: {}", data.id))
+                .child(format!("Name: {}", data.name))
+                .child(format!("Email: {}", data.email))
+                .into_any_element(),
+            None => div().child("Loading user data...").into_any_element(),
+        }
     }
 }
 
@@ -177,8 +177,9 @@ impl RenderOnce for SettingsPage {
 struct DocsSplatPage;
 impl RenderOnce for DocsSplatPage {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = navi_router::RouterState::global(cx);
-        let path = state.current_location().pathname;
+        let path = navi_router::RouterState::try_global(cx)
+            .map(|s| s.current_location().pathname)
+            .unwrap_or_default();
         let slug = path.strip_prefix("/docs/").unwrap_or("unknown");
         div()
             .child(format!("📄 Documentation: {}", slug))
@@ -211,6 +212,7 @@ struct AppView {
 }
 impl Render for AppView {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        log::debug!("AppView rendered");
         div()
             .size_full()
             .relative()
@@ -223,29 +225,48 @@ impl Render for AppView {
 // Main
 // ----------------------------------------------------------------------------
 fn main() {
+    env_logger::init();
+    log::info!("Starting Navi example app");
+
     register_route_component("__root__", |_| {
+        log::debug!("Creating RootLayout component");
         Component::new(RootLayout).into_any_element()
     });
-    register_route_component("index", |_| Component::new(HomePage).into_any_element());
-    register_route_component("about", |_| Component::new(AboutPage).into_any_element());
-    register_route_component("users", |_| Component::new(UsersLayout).into_any_element());
+    register_route_component("index", |_| {
+        log::debug!("Creating HomePage component");
+        Component::new(HomePage).into_any_element()
+    });
+    register_route_component("about", |_| {
+        log::debug!("Creating AboutPage component");
+        Component::new(AboutPage).into_any_element()
+    });
+    register_route_component("users", |_| {
+        log::debug!("Creating UsersLayout component");
+        Component::new(UsersLayout).into_any_element()
+    });
     register_route_component("users_index", |_| {
+        log::debug!("Creating UsersIndexPage component");
         Component::new(UsersIndexPage).into_any_element()
     });
     register_route_component("UserDetailRoute", |_| {
+        log::debug!("Creating UserDetailPage component");
         Component::new(UserDetailPage).into_any_element()
     });
     register_route_component("settings", |_| {
+        log::debug!("Creating SettingsPage component");
         Component::new(SettingsPage).into_any_element()
     });
     register_route_component("docs_splat", |_| {
+        log::debug!("Creating DocsSplatPage component");
         Component::new(DocsSplatPage).into_any_element()
     });
     register_route_component("not_found", |_| {
+        log::debug!("Creating NotFoundPage component");
         Component::new(NotFoundPage).into_any_element()
     });
 
     Application::new().run(|cx: &mut App| {
+        log::info!("Building route tree");
         let mut tree = RouteTree::new();
 
         tree.add_route(RouteNode {
@@ -348,6 +369,7 @@ fn main() {
 
         let devtools = cx.new(|_cx| DevtoolsState::new());
 
+        log::info!("Opening window");
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
@@ -359,20 +381,29 @@ fn main() {
             },
             |window, cx| {
                 let window_id = window.window_handle().window_id();
+                let window_handle = window.window_handle();
                 let initial = Location::new("/");
-                let router_provider = RouterProvider::new(window_id, initial, tree, cx);
+                log::info!("Creating RouterProvider with initial location: /");
+                let router_provider =
+                    RouterProvider::new(window_id, window_handle, initial, tree, cx);
 
                 // Register loader AFTER the global RouterState has been initialized by RouterProvider
                 UserDetailRoute::register_loader(cx);
 
-                cx.new(|_cx| AppView {
+                let root_view = cx.new(|_cx| AppView {
                     router_provider,
                     devtools,
-                })
+                });
+
+                // Store the root view's entity ID in RouterState so loader completions can notify it
+                RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
+
+                root_view
             },
         )
         .unwrap();
 
         cx.activate(true);
+        log::info!("Application running");
     });
 }

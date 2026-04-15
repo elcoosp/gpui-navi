@@ -1,11 +1,14 @@
 use crate::{Location, RouteTree, RouterState};
-use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Window, WindowId, div};
+use gpui::{
+    AnyElement, AnyWindowHandle, App, IntoElement, ParentElement, RenderOnce, Window, WindowId, div,
+};
 use navi_core::context;
 use std::rc::Rc;
 
 #[derive(IntoElement, Clone)]
 pub struct RouterProvider {
     window_id: WindowId,
+    window_handle: AnyWindowHandle,
     initial_location: Location,
     route_tree: Rc<RouteTree>,
 }
@@ -13,16 +16,28 @@ pub struct RouterProvider {
 impl RouterProvider {
     pub fn new(
         window_id: WindowId,
+        window_handle: AnyWindowHandle,
         initial_location: Location,
         route_tree: RouteTree,
         cx: &mut App,
     ) -> Self {
+        log::info!(
+            "RouterProvider::new: initializing context for window {:?}",
+            window_id
+        );
         context::init_window(window_id);
         let route_tree = Rc::new(route_tree);
-        let state = RouterState::new(initial_location.clone(), window_id, route_tree.clone());
+        let state = RouterState::new(
+            initial_location.clone(),
+            window_id,
+            window_handle,
+            route_tree.clone(),
+        );
         cx.set_global(state);
+        log::info!("RouterProvider created successfully");
         Self {
             window_id,
+            window_handle,
             initial_location,
             route_tree,
         }
@@ -56,17 +71,16 @@ impl ParentElement for RouterProviderWithChildren {
 
 impl RenderOnce for RouterProviderWithChildren {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        // Clone values before moving self.provider to avoid partial move
-        let initial_location = self.provider.initial_location.clone();
-        let window_id = self.provider.window_id;
-        let route_tree = self.provider.route_tree.clone();
-
-        // Re-initialize global state if missing
         if RouterState::try_global(cx).is_none() {
-            let state = RouterState::new(initial_location, window_id, route_tree);
+            log::warn!("RouterProviderWithChildren: global state missing, re-initializing");
+            let state = RouterState::new(
+                self.provider.initial_location.clone(),
+                self.provider.window_id,
+                self.provider.window_handle,
+                self.provider.route_tree.clone(),
+            );
             cx.set_global(state);
         }
-
         div().child(self.provider).children(self.children)
     }
 }

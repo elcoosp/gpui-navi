@@ -299,6 +299,7 @@ impl RouteTree {
     pub fn add_route(&mut self, node: RouteNode) {
         let id = node.id.clone();
         let pattern = node.pattern.clone();
+        let is_index = node.is_index;
         if let Some(parent) = &node.parent {
             self.children
                 .entry(parent.clone())
@@ -306,7 +307,7 @@ impl RouteTree {
                 .push(id.clone());
         }
         self.nodes.insert(id.clone(), node);
-        self.matcher.insert(pattern, id);
+        self.matcher.insert(pattern, id, is_index);
     }
 
     pub fn match_path(&self, path: &str) -> Option<(HashMap<String, String>, &RouteNode)> {

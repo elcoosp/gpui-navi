@@ -20,6 +20,7 @@ pub use redirect::{NotFound, Redirect, not_found, redirect};
 pub use route_tree::{RouteNode, RoutePattern, RouteTree, Segment};
 pub use state::{RouterEvent, RouterState};
 pub use validation::{ValidateSearch, ValidationError, ValidationResult};
+
 /// Trait for route definitions. Each route type must implement this.
 pub trait RouteDef: 'static {
     type Params: Clone + std::fmt::Debug + 'static;
@@ -27,4 +28,6 @@ pub trait RouteDef: 'static {
     type LoaderData: Clone + std::fmt::Debug + 'static;
 
     fn path() -> &'static str;
+    /// Returns the name of the route struct (e.g., "UserDetailRoute").
+    fn name() -> &'static str;
 }

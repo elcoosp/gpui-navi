@@ -94,10 +94,12 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                 use std::sync::Arc;
                 use navi_router::LoaderError;
 
+                log::debug!("Registering loader for route: {}", stringify!(#name));
                 navi_router::RouterState::update(cx, |state, _cx| {
                     state.register_loader(
-                        <#name as navi_router::RouteDef>::path(),
+                        <#name as navi_router::RouteDef>::name(),
                         Box::new(|params_map: &std::collections::HashMap<String, String>, executor: gpui::BackgroundExecutor, _cx: &mut gpui::App| {
+                            log::debug!("Loader function invoked for {}", stringify!(#name));
                             let params: #params_ty = serde_json::from_value(
                                 serde_json::to_value(params_map).unwrap()
                             ).unwrap();
@@ -131,6 +133,10 @@ pub fn define_route(input: TokenStream) -> TokenStream {
 
             fn path() -> &'static str {
                 #path
+            }
+
+            fn name() -> &'static str {
+                stringify!(#name)
             }
         }
 

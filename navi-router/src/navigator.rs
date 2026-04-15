@@ -21,7 +21,7 @@ impl Navigator {
     }
 
     pub fn push(&self, path: impl Into<String>, cx: &mut App) {
-        let loc = Location::new(&self.resolve_path(path));
+        let loc = self.to_location(path);
         RouterState::update(cx, |state, cx| {
             state.navigate(loc, NavigateOptions::default());
             cx.refresh_windows();
@@ -29,7 +29,7 @@ impl Navigator {
     }
 
     pub fn replace(&self, path: impl Into<String>, cx: &mut App) {
-        let loc = Location::new(&self.resolve_path(path));
+        let loc = self.to_location(path);
         RouterState::update(cx, |state, cx| {
             state.navigate(
                 loc,
@@ -71,15 +71,24 @@ impl Navigator {
             .unwrap_or(false)
     }
 
-    fn resolve_path(&self, path: impl Into<String>) -> String {
+    fn to_location(&self, path: impl Into<String>) -> Location {
         let path = path.into();
-        if path.starts_with('/') {
+        let resolved = if path.starts_with('/') {
             path
         } else if let Some(base) = &self.base {
             format!("{}/{}", base.trim_end_matches('/'), path)
         } else {
             path
-        }
+        };
+
+        // Use a dummy base URL to parse absolute paths
+        let url_str = if resolved.starts_with('/') {
+            format!("http://localhost{}", resolved)
+        } else {
+            resolved.clone()
+        };
+
+        Location::from_url(&url_str).unwrap_or_else(|_| Location::new(&resolved))
     }
 
     pub fn window(&self) -> AnyWindowHandle {

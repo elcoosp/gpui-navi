@@ -28,10 +28,13 @@ pub fn use_search(input: TokenStream) -> TokenStream {
             let state = navi_router::RouterState::global(cx);
             let location = state.current_location();
             let search_value = &location.search;
-            let typed_search: <#route_ty as navi_router::RouteDef>::Search =
-                serde_json::from_value(search_value.clone())
-                    .expect("Failed to deserialize search params");
-            typed_search
+            match serde_json::from_value::<<#route_ty as navi_router::RouteDef>::Search>(search_value.clone()) {
+                Ok(typed) => typed,
+                Err(e) => {
+                    log::warn!("Failed to deserialize search params for {}: {}, using default", stringify!(#route_ty), e);
+                    Default::default()
+                }
+            }
         }
     };
     expanded.into()

@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
-use syn::{ExprClosure, Ident, LitStr, Result as SynResult, Token, Type};
+use syn::{ExprClosure, Ident, LitBool, LitStr, Result as SynResult, Token, Type};
 
 struct RouteDefInput {
     name: Ident,
@@ -18,6 +18,8 @@ struct RouteDefInput {
     gc_time: Option<syn::Expr>,
     #[allow(dead_code)]
     preload_stale_time: Option<syn::Expr>,
+    is_layout: Option<LitBool>,
+    is_index: Option<LitBool>,
 }
 
 impl Parse for RouteDefInput {
@@ -36,6 +38,8 @@ impl Parse for RouteDefInput {
         let mut stale_time = None;
         let mut gc_time = None;
         let mut preload_stale_time = None;
+        let mut is_layout = None;
+        let mut is_index = None;
 
         while !input.is_empty() {
             let key: Ident = input.parse()?;
@@ -50,6 +54,8 @@ impl Parse for RouteDefInput {
                 "stale_time" => stale_time = Some(input.parse()?),
                 "gc_time" => gc_time = Some(input.parse()?),
                 "preload_stale_time" => preload_stale_time = Some(input.parse()?),
+                "is_layout" => is_layout = Some(input.parse()?),
+                "is_index" => is_index = Some(input.parse()?),
                 _ => return Err(syn::Error::new(key.span(), format!("Unknown key: {}", key))),
             }
             if input.peek(Token![,]) {
@@ -71,6 +77,8 @@ impl Parse for RouteDefInput {
             stale_time,
             gc_time,
             preload_stale_time,
+            is_layout,
+            is_index,
         })
     }
 }
@@ -120,8 +128,8 @@ pub fn define_route(input: TokenStream) -> TokenStream {
         (false, quote! {})
     };
 
-    let is_layout = false;
-    let is_index = false;
+    let is_layout = input.is_layout.map(|b| b.value).unwrap_or(false);
+    let is_index = input.is_index.map(|b| b.value).unwrap_or(false);
 
     let expanded = quote! {
         pub struct #name;

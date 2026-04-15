@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::fmt;
 
-/// A validation error with optional field information.
 #[derive(Debug, Clone)]
 pub struct ValidationError {
     pub field: Option<String>,
@@ -22,36 +21,171 @@ impl fmt::Display for ValidationError {
 
 impl std::error::Error for ValidationError {}
 
-/// Result type for validation operations.
 pub type ValidationResult<T> = Result<T, Vec<ValidationError>>;
 
-/// Core validation trait for search parameters.
-/// Implement this trait for types that represent validated search parameters.
 pub trait ValidateSearch: Sized {
-    /// Validate raw query parameters and produce a typed value.
     fn validate(raw: &HashMap<String, String>) -> ValidationResult<Self>;
-
-    /// Convert the validated value back to query parameters.
     fn to_query(&self) -> HashMap<String, String>;
 }
 
-/// A default implementation that accepts any parameters without validation.
-impl ValidateSearch for () {
-    fn validate(_raw: &HashMap<String, String>) -> ValidationResult<Self> {
-        Ok(())
+// ----------------------------------------------------------------------------
+// Integration with validator crate
+// ----------------------------------------------------------------------------
+#[cfg(feature = "validator")]
+impl<T> ValidateSearch for T
+where
+    T: serde::de::DeserializeOwned + serde::Serialize + validator::Validate + Default,
+{
+    fn validate(raw: &HashMap<String, String>) -> ValidationResult<Self> {
+        let value = serde_json::to_value(raw).map_err(|e| {
+            vec![ValidationError {
+                field: None,
+                message: format!("Failed to serialize raw params: {}", e),
+            }]
+        })?;
+        let instance: T = serde_json::from_value(value).map_err(|e| {
+            vec![ValidationError {
+                field: None,
+                message: format!("Deserialization error: {}", e),
+            }]
+        })?;
+        instance.validate().map_err(|errs| {
+            errs.field_errors()
+                .into_iter()
+                .flat_map(|(field, errors)| {
+                    errors.iter().map(move |err| ValidationError {
+                        field: Some(field.to_string()),
+                        message: err.to_string(),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })?;
+        Ok(instance)
     }
 
     fn to_query(&self) -> HashMap<String, String> {
-        HashMap::new()
+        serde_json::to_value(self)
+            .ok()
+            .and_then(|v| v.as_object().map(obj_to_query))
+            .unwrap_or_default()
     }
 }
 
-/// Trait for search parameter middleware that can transform search params.
+// ----------------------------------------------------------------------------
+// Integration with validify crate
+// ----------------------------------------------------------------------------
+#[cfg(feature = "validify")]
+impl<T> ValidateSearch for T
+where
+    T: serde::de::DeserializeOwned + serde::Serialize + validify::Validate + Default,
+{
+    fn validate(raw: &HashMap<String, String>) -> ValidationResult<Self> {
+        let value = serde_json::to_value(raw).map_err(|e| {
+            vec![ValidationError {
+                field: None,
+                message: format!("Failed to serialize raw params: {}", e),
+            }]
+        })?;
+        let instance: T = serde_json::from_value(value).map_err(|e| {
+            vec![ValidationError {
+                field: None,
+                message: format!("Deserialization error: {}", e),
+            }]
+        })?;
+        instance.validate().map_err(|errs| {
+            errs.errors()
+                .into_iter()
+                .map(|err| ValidationError {
+                    field: err.field_name().map(|s| s.to_string()),
+                    message: err.to_string(),
+                })
+                .collect::<Vec<_>>()
+        })?;
+        Ok(instance)
+    }
+
+    fn to_query(&self) -> HashMap<String, String> {
+        serde_json::to_value(self)
+            .ok()
+            .and_then(|v| v.as_object().map(obj_to_query))
+            .unwrap_or_default()
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Integration with valico crate (JSON Schema validation)
+// ----------------------------------------------------------------------------
+#[cfg(feature = "valico")]
+impl<T> ValidateSearch for T
+where
+    T: serde::de::DeserializeOwned + serde::Serialize + Default + schemars::JsonSchema,
+{
+    fn validate(raw: &HashMap<String, String>) -> ValidationResult<Self> {
+        let value = serde_json::to_value(raw).map_err(|e| {
+            vec![ValidationError {
+                field: None,
+                message: format!("Failed to serialize raw params: {}", e),
+            }]
+        })?;
+
+        let mut generator = schemars::SchemaGenerator::default();
+        let schema = T::json_schema(&mut generator);
+        let schema_json = serde_json::to_value(&schema).unwrap();
+
+        let mut scope = valico::json_schema::Scope::new();
+        let compiled_schema = scope.compile_and_return(schema_json, false).map_err(|e| {
+            vec![ValidationError {
+                field: None,
+                message: format!("Schema compilation error: {}", e),
+            }]
+        })?;
+
+        let state = compiled_schema.validate(&value);
+        if !state.is_valid() {
+            let errors = state
+                .errors
+                .into_iter()
+                .map(|e| ValidationError {
+                    field: Some(e.get_path().into()),
+                    message: e.get_title().to_string(),
+                })
+                .collect();
+            return Err(errors);
+        }
+
+        let instance: T = serde_json::from_value(value).map_err(|e| {
+            vec![ValidationError {
+                field: None,
+                message: format!("Deserialization error: {}", e),
+            }]
+        })?;
+        Ok(instance)
+    }
+
+    fn to_query(&self) -> HashMap<String, String> {
+        serde_json::to_value(self)
+            .ok()
+            .and_then(|v| v.as_object().map(obj_to_query))
+            .unwrap_or_default()
+    }
+}
+
+fn obj_to_query(obj: &serde_json::Map<String, serde_json::Value>) -> HashMap<String, String> {
+    obj.iter()
+        .filter_map(|(k, v)| {
+            if v.is_string() {
+                Some((k.clone(), v.as_str().unwrap().to_string()))
+            } else {
+                Some((k.clone(), v.to_string()))
+            }
+        })
+        .collect()
+}
+
 pub trait SearchMiddleware: Send + Sync {
     fn transform(&self, search: serde_json::Value) -> serde_json::Value;
 }
 
-/// Middleware that retains only specified search parameter keys.
 pub struct RetainSearchParams {
     pub keys: Vec<String>,
 }
@@ -65,7 +199,6 @@ impl SearchMiddleware for RetainSearchParams {
     }
 }
 
-/// Middleware that strips search parameters that match default values.
 pub struct StripSearchParams {
     pub defaults: serde_json::Value,
 }
@@ -81,12 +214,8 @@ impl SearchMiddleware for StripSearchParams {
     }
 }
 
-/// Helper to convert a HashMap<String, String> to a query string.
 pub fn to_query_string(params: &HashMap<String, String>) -> String {
-    let mut parts: Vec<String> = params
-        .iter()
-        .map(|(k, v)| format!("{}={}", k, v))
-        .collect();
+    let mut parts: Vec<String> = params.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
     parts.sort();
     parts.join("&")
 }

@@ -113,7 +113,7 @@ impl RouterState {
     }
 
     /// Navigate to a new location.
-    pub fn navigate(&mut self, loc: Location, options: NavigateOptions) {
+    pub fn navigate(&mut self, loc: Location, options: NavigateOptions, cx: &mut App) {
         if !options.ignore_blocker {
             let current = self.current_location();
             for blocker in self.blockers.values() {
@@ -139,8 +139,12 @@ impl RouterState {
         } else {
             self.history.push(loc);
         }
-    }
 
+        // Notify the root view to re-render (important for search param updates)
+        if let Some(view_id) = self.root_view {
+            cx.notify(view_id);
+        }
+    }
     /// Get the current location from history.
     pub fn current_location(&self) -> Location {
         self.history.current()
@@ -172,7 +176,7 @@ impl RouterState {
     }
 
     /// Proceed with a blocked navigation.
-    pub fn proceed(&mut self) {
+    pub fn proceed(&mut self, cx: &mut App) {
         if let Some(loc) = self.pending_navigation.take() {
             self.navigate(
                 loc,
@@ -180,10 +184,10 @@ impl RouterState {
                     ignore_blocker: true,
                     ..Default::default()
                 },
+                cx,
             );
         }
     }
-
     /// Reset/cancel a blocked navigation.
     pub fn reset_block(&mut self) {
         self.pending_navigation = None;

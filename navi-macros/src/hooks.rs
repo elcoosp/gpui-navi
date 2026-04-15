@@ -46,7 +46,6 @@ pub fn use_loader_data(input: TokenStream) -> TokenStream {
         {
             log::debug!("use_loader_data called for {}", stringify!(#route_ty));
 
-            // Trigger loader if not already started or cached
             let data_ready = navi_router::RouterState::try_global(cx)
                 .and_then(|s| s.get_loader_data::<#route_ty>())
                 .is_some();
@@ -73,8 +72,8 @@ pub fn use_loader_data(input: TokenStream) -> TokenStream {
 pub fn use_navigate(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
         {
-            let window_id = cx.window_handle().window_id();
-            navi_router::Navigator::new(window_id)
+            let window_handle = cx.window_handle();
+            navi_router::Navigator::new(window_handle)
         }
     };
     expanded.into()

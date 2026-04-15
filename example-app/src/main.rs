@@ -2,9 +2,8 @@ use gpui::prelude::*;
 use gpui::*;
 use navi_devtools::DevtoolsState;
 use navi_macros::{define_route, use_loader_data, use_search};
-use navi_router::RouteDef;
 use navi_router::{
-    Location, Navigator, RouteNode, RoutePattern, RouteTree, RouterState, ValidateSearch,
+    Blocker, Location, Navigator, RouteNode, RoutePattern, RouteTree, RouterState, ValidateSearch,
     ValidationError, ValidationResult,
     components::{Link, Outlet, RouterProvider, register_route_component},
 };
@@ -37,7 +36,8 @@ impl RenderOnce for RootLayout {
                     .child(Link::new("/users/1").child("User 1"))
                     .child(Link::new("/users/2").child("User 2"))
                     .child(Link::new("/settings").child("⚙️ Settings"))
-                    .child(Link::new("/docs/getting-started").child("📄 Docs (splat)")),
+                    .child(Link::new("/docs/getting-started").child("📄 Docs (splat)"))
+                    .child(Link::new("/validation-test").child("🧪 Validation Tests")),
             )
             .child(div().flex_1().p_4().child(Outlet::new()))
     }
@@ -198,18 +198,16 @@ impl ValidateSearch for UsersSearch {
 }
 
 // ----------------------------------------------------------------------------
-// Users Index Route (manually defined as index route)
+// Users Index (with search params)
 // ----------------------------------------------------------------------------
 define_route!(
     UsersIndexRoute,
     path: "/users",
     search: UsersSearch,
-    is_index: true,          // Mark as index route
+    is_index: true,
     component: UsersIndexPage,
 );
-// ----------------------------------------------------------------------------
-// Users Index Page Component
-// ----------------------------------------------------------------------------
+
 #[derive(Clone, IntoElement)]
 struct UsersIndexPage;
 impl RenderOnce for UsersIndexPage {
@@ -218,8 +216,6 @@ impl RenderOnce for UsersIndexPage {
         let navigator = Navigator::new(window.window_handle());
 
         let current_sort = search.sort.unwrap_or_default();
-
-        // Generate and sort user IDs
         let mut user_ids = vec![1, 2, 42];
         match current_sort {
             SortDirection::Asc => user_ids.sort(),
@@ -315,16 +311,63 @@ impl RenderOnce for UsersIndexPage {
             )
     }
 }
+
 // ----------------------------------------------------------------------------
-// Settings Page
+// Settings Page (with Navigation Blocker Demo)
 // ----------------------------------------------------------------------------
 #[derive(Clone, IntoElement)]
 struct SettingsPage;
 impl RenderOnce for SettingsPage {
-    fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let block_navigation = cx.new(|cx| {
+            let focus_handle = cx.focus_handle();
+            focus_handle.focus(window);
+            BlockerState {
+                block: false,
+                focus_handle,
+            }
+        });
+
         div()
             .child("⚙️ Settings Page")
             .child("Configure your application here.")
+            .child(
+                div().flex().gap_2().child("Block navigation:").child(
+                    div()
+                        .cursor_pointer()
+                        .child(if block_navigation.read(cx).block {
+                            "✅"
+                        } else {
+                            "⬜"
+                        })
+                        .on_mouse_up(MouseButton::Left, {
+                            let block_navigation = block_navigation.clone();
+                            move |_event, _window, cx| {
+                                block_navigation.update(cx, |state, cx| {
+                                    state.block = !state.block;
+                                    cx.notify();
+                                });
+                            }
+                        }),
+                ),
+            )
+            .child("When checked, navigating away will be blocked.")
+    }
+}
+
+struct BlockerState {
+    block: bool,
+    focus_handle: FocusHandle,
+}
+
+impl Render for BlockerState {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.block {
+            RouterState::update(cx, |state, _| {
+                state.add_blocker(Blocker::new(move |_from, _to| true));
+            });
+        }
+        div()
     }
 }
 
@@ -362,6 +405,235 @@ impl RenderOnce for NotFoundPage {
 }
 
 // ----------------------------------------------------------------------------
+// Validation Test Pages (conditionally compiled)
+// ----------------------------------------------------------------------------
+
+// Validator integration test
+#[cfg(feature = "validator")]
+mod validator_test {
+    use super::*;
+    use validator::Validate;
+
+    #[derive(Debug, Deserialize, Validate, Clone, Default)]
+    pub struct ValidatorSearch {
+        #[validate(range(min = 1, max = 100))]
+        pub page: Option<u32>,
+        #[validate(length(min = 1, max = 10))]
+        pub sort: Option<String>,
+    }
+
+    define_route!(
+        ValidatorTestRoute,
+        path: "/validation-test/validator",
+        search: ValidatorSearch,
+        component: ValidatorTestPage,
+    );
+
+    #[derive(Clone, IntoElement)]
+    pub struct ValidatorTestPage;
+
+    impl RenderOnce for ValidatorTestPage {
+        fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+            let raw = use_search!(ValidatorTestRoute);
+            let validated = raw.validate().ok().map(|_| raw).unwrap_or_default();
+            div()
+                .p_4()
+                .child("Validator Test Page")
+                .child(format!(
+                    "Page: {:?}, Sort: {:?}",
+                    validated.page, validated.sort
+                ))
+                .child(
+                    Link::new("/validation-test/validator?page=50&sort=desc")
+                        .child("Valid params (page=50, sort=desc)"),
+                )
+                .child(
+                    Link::new("/validation-test/validator?page=999&sort=invalid")
+                        .child("Invalid params (should fallback to default)"),
+                )
+                .child(Link::new("/validation-test").child("Back to validation index"))
+        }
+    }
+}
+
+// Garde integration test
+#[cfg(feature = "garde")]
+mod garde_test {
+    use super::*;
+    use garde::Validate as GardeValidate;
+
+    #[derive(Debug, Deserialize, Clone, GardeValidate, Default)]
+    #[garde(allow_unvalidated)]
+    pub struct GardeSearch {
+        #[garde(range(min = 1, max = 100))]
+        pub page: Option<u32>, // 数字类型，匹配 range 验证
+        #[garde(length(min = 1, max = 10))]
+        pub sort: Option<String>, // 字符串类型，匹配 length 验证
+    }
+
+    define_route!(
+        GardeTestRoute,
+        path: "/validation-test/garde",
+        search: GardeSearch,
+        component: GardeTestPage,
+    );
+
+    #[derive(Clone, IntoElement)]
+    pub struct GardeTestPage;
+
+    impl RenderOnce for GardeTestPage {
+        fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+            let raw = use_search!(GardeTestRoute);
+            let validated = raw.validate().ok().map(|_| raw).unwrap_or_default();
+            div()
+                .p_4()
+                .child("Garde Test Page")
+                .child(format!(
+                    "Page: {:?}, Sort: {:?}",
+                    validated.page, validated.sort
+                ))
+                .child(
+                    Link::new("/validation-test/garde?page=50&sort=desc") // 修正 sort 值
+                        .child("Valid params (page=50, sort=desc)"),
+                )
+                .child(
+                    Link::new("/validation-test/garde?page=999&sort=invalid")
+                        .child("Invalid params (should fallback to default)"),
+                )
+                .child(Link::new("/validation-test").child("Back to validation index"))
+        }
+    }
+}
+
+// Validify integration test
+#[cfg(feature = "validify")]
+mod validify_test {
+    use super::*;
+    use validify::Validate;
+
+    #[derive(Debug, Deserialize, Validate, Clone, Default)]
+    pub struct ValidifySearch {
+        #[validate(range(min = 1, max = 100))]
+        pub page: Option<u32>,
+        #[validate(length(min = 1, max = 10))]
+        pub sort: Option<String>,
+    }
+
+    define_route!(
+        ValidifyTestRoute,
+        path: "/validation-test/validify",
+        search: ValidifySearch,
+        component: ValidifyTestPage,
+    );
+
+    #[derive(Clone, IntoElement)]
+    pub struct ValidifyTestPage;
+
+    impl RenderOnce for ValidifyTestPage {
+        fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+            let raw = use_search!(ValidifyTestRoute);
+            let validated = raw.validate().ok().map(|_| raw).unwrap_or_default();
+            div()
+                .p_4()
+                .child("Validify Test Page")
+                .child(format!(
+                    "Page: {:?}, Sort: {:?}",
+                    validated.page, validated.sort
+                ))
+                .child(
+                    Link::new("/validation-test/validify?page=50&sort=desc")
+                        .child("Valid params (page=50, sort=desc)"),
+                )
+                .child(
+                    Link::new("/validation-test/validify?page=999&sort=invalid")
+                        .child("Invalid params (should fallback to default)"),
+                )
+                .child(Link::new("/validation-test").child("Back to validation index"))
+        }
+    }
+}
+
+// Valico integration test
+#[cfg(feature = "valico")]
+mod valico_test {
+    use super::*;
+    use schemars::JsonSchema;
+
+    #[derive(Debug, Deserialize, Default, Clone, JsonSchema)]
+    pub struct ValicoSearch {
+        pub page: Option<u32>,
+        pub sort: Option<String>,
+    }
+
+    impl ValicoSearch {
+        fn validate(&self) -> Result<(), String> {
+            if let Some(p) = self.page {
+                if !(1..=100).contains(&p) {
+                    return Err("page out of range".into());
+                }
+            }
+            if let Some(s) = &self.sort {
+                if s.len() > 10 {
+                    return Err("sort too long".into());
+                }
+            }
+            Ok(())
+        }
+    }
+
+    define_route!(
+        ValicoTestRoute,
+        path: "/validation-test/valico",
+        search: ValicoSearch,
+        component: ValicoTestPage,
+    );
+
+    #[derive(Clone, IntoElement)]
+    pub struct ValicoTestPage;
+
+    impl RenderOnce for ValicoTestPage {
+        fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+            let raw = use_search!(ValicoTestRoute);
+            let validated = raw.validate().ok().map(|_| raw).unwrap_or_default();
+            div()
+                .p_4()
+                .child("Valico Test Page")
+                .child(format!(
+                    "Page: {:?}, Sort: {:?}",
+                    validated.page, validated.sort
+                ))
+                .child(
+                    Link::new("/validation-test/valico?page=50&sort=desc")
+                        .child("Valid params (page=50, sort=desc)"),
+                )
+                .child(
+                    Link::new("/validation-test/valico?page=999&sort=invalid")
+                        .child("Invalid params (should fallback to default)"),
+                )
+                .child(Link::new("/validation-test").child("Back to validation index"))
+        }
+    }
+}
+
+// Validation Test Index Page
+#[derive(Clone, IntoElement)]
+struct ValidationTestIndex;
+
+impl RenderOnce for ValidationTestIndex {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        div()
+            .p_4()
+            .child("Validation Test Index")
+            .child("Select a validation crate to test:")
+            .child(Link::new("/validation-test/validator").child("validator"))
+            .child(Link::new("/validation-test/garde").child("garde"))
+            .child(Link::new("/validation-test/validify").child("validify"))
+            .child(Link::new("/validation-test/valico").child("valico"))
+            .child(Link::new("/").child("Home"))
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Root View
 // ----------------------------------------------------------------------------
 struct AppView {
@@ -386,47 +658,55 @@ fn main() {
     env_logger::init();
     log::info!("Starting Navi example app");
 
+    // Register core route components
     register_route_component("__root__", |_| {
-        log::debug!("Creating RootLayout component");
         Component::new(RootLayout).into_any_element()
     });
-    register_route_component("index", |_| {
-        log::debug!("Creating HomePage component");
-        Component::new(HomePage).into_any_element()
-    });
-    register_route_component("about", |_| {
-        log::debug!("Creating AboutPage component");
-        Component::new(AboutPage).into_any_element()
-    });
-    register_route_component("users", |_| {
-        log::debug!("Creating UsersLayout component");
-        Component::new(UsersLayout).into_any_element()
-    });
+    register_route_component("index", |_| Component::new(HomePage).into_any_element());
+    register_route_component("about", |_| Component::new(AboutPage).into_any_element());
+    register_route_component("users", |_| Component::new(UsersLayout).into_any_element());
     register_route_component("UsersIndexRoute", |_| {
-        log::debug!("Creating UsersIndexPage component");
         Component::new(UsersIndexPage).into_any_element()
     });
     register_route_component("UserDetailRoute", |_| {
-        log::debug!("Creating UserDetailPage component");
         Component::new(UserDetailPage).into_any_element()
     });
     register_route_component("settings", |_| {
-        log::debug!("Creating SettingsPage component");
         Component::new(SettingsPage).into_any_element()
     });
     register_route_component("docs_splat", |_| {
-        log::debug!("Creating DocsSplatPage component");
         Component::new(DocsSplatPage).into_any_element()
     });
     register_route_component("not_found", |_| {
-        log::debug!("Creating NotFoundPage component");
         Component::new(NotFoundPage).into_any_element()
+    });
+    register_route_component("validation_index", |_| {
+        Component::new(ValidationTestIndex).into_any_element()
+    });
+
+    // Conditionally register validation test components
+    #[cfg(feature = "validator")]
+    register_route_component("ValidatorTestRoute", |_| {
+        Component::new(validator_test::ValidatorTestPage).into_any_element()
+    });
+    #[cfg(feature = "garde")]
+    register_route_component("GardeTestRoute", |_| {
+        Component::new(garde_test::GardeTestPage).into_any_element()
+    });
+    #[cfg(feature = "validify")]
+    register_route_component("ValidifyTestRoute", |_| {
+        Component::new(validify_test::ValidifyTestPage).into_any_element()
+    });
+    #[cfg(feature = "valico")]
+    register_route_component("ValicoTestRoute", |_| {
+        Component::new(valico_test::ValicoTestPage).into_any_element()
     });
 
     Application::new().run(|cx: &mut App| {
         log::info!("Building route tree");
         let mut tree = RouteTree::new();
 
+        // Core routes
         tree.add_route(RouteNode {
             id: "__root__".to_string(),
             pattern: RoutePattern::parse("/"),
@@ -475,9 +755,7 @@ fn main() {
             preload_stale_time: None,
         });
 
-        // Add the index route with is_index: true
         tree.add_route(UsersIndexRoute::build_node());
-
         tree.add_route(UserDetailRoute::build_node());
 
         tree.add_route(RouteNode {
@@ -516,6 +794,44 @@ fn main() {
             preload_stale_time: None,
         });
 
+        // Validation test routes
+        tree.add_route(RouteNode {
+            id: "validation_index".to_string(),
+            pattern: RoutePattern::parse("/validation-test"),
+            parent: Some("__root__".into()),
+            is_layout: false,
+            is_index: true,
+            has_loader: false,
+            loader_stale_time: None,
+            loader_gc_time: None,
+            preload_stale_time: None,
+        });
+
+        #[cfg(feature = "validator")]
+        {
+            let mut node = validator_test::ValidatorTestRoute::build_node();
+            node.parent = Some("__root__".to_string());
+            tree.add_route(node);
+        }
+        #[cfg(feature = "garde")]
+        {
+            let mut node = garde_test::GardeTestRoute::build_node();
+            node.parent = Some("__root__".to_string());
+            tree.add_route(node);
+        }
+        #[cfg(feature = "validify")]
+        {
+            let mut node = validify_test::ValidifyTestRoute::build_node();
+            node.parent = Some("__root__".to_string());
+            tree.add_route(node);
+        }
+        #[cfg(feature = "valico")]
+        {
+            let mut node = valico_test::ValicoTestRoute::build_node();
+            node.parent = Some("__root__".to_string());
+            tree.add_route(node);
+        }
+
         let devtools = cx.new(|_cx| DevtoolsState::new());
 
         log::info!("Opening window");
@@ -536,7 +852,6 @@ fn main() {
                 let router_provider =
                     RouterProvider::new(window_id, window_handle, initial, tree, cx);
 
-                // Register loader AFTER the global RouterState has been initialized by RouterProvider
                 UserDetailRoute::register_loader(cx);
 
                 let root_view = cx.new(|_cx| AppView {

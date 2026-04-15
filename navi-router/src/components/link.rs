@@ -96,21 +96,6 @@ impl Link {
     pub fn is_disabled(&self) -> bool {
         self.disabled
     }
-
-    #[allow(dead_code)]
-    fn build_location(&self) -> crate::Location {
-        let mut loc = crate::Location::new(&self.to);
-        if let Some(search) = &self.search {
-            loc.search = search.clone();
-        }
-        if let Some(hash) = &self.hash {
-            loc.hash = hash.clone();
-        }
-        if let Some(state) = &self.state {
-            loc.state = state.clone();
-        }
-        loc
-    }
 }
 
 impl ParentElement for Link {
@@ -140,10 +125,8 @@ impl RenderOnce for Link {
             if let Some(class) = &self.active_class {
                 element = element.child(class.clone());
             }
-        } else {
-            if let Some(class) = &self.inactive_class {
-                element = element.child(class.clone());
-            }
+        } else if let Some(class) = &self.inactive_class {
+            element = element.child(class.clone());
         }
 
         element.on_mouse_up(
@@ -161,9 +144,9 @@ impl RenderOnce for Link {
                         loc.state = st.clone();
                     }
                     if replace {
-                        navigator.replace(loc.pathname, cx);
+                        navigator.replace_location(loc, cx);
                     } else {
-                        navigator.push(loc.pathname, cx);
+                        navigator.push_location(loc, cx);
                     }
                 }
             },

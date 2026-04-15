@@ -1,5 +1,8 @@
 use crate::RouterState;
-use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Window, div};
+use gpui::{
+    AnyElement, App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, Window,
+    div,
+};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -38,7 +41,6 @@ impl ParentElement for Outlet {
 
 impl RenderOnce for Outlet {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        log::debug!("Outlet rendering");
         let state = RouterState::try_global(cx);
         if state.is_none() {
             log::error!("Outlet: RouterState not found in global context");
@@ -49,9 +51,16 @@ impl RenderOnce for Outlet {
 
         if let Some((_params, node)) = current_match {
             log::debug!("Outlet rendering route: {}", node.id);
+
+            // 🔑 创建基于当前 location（包含 search）的唯一 ID
+            let location = state.current_location();
+            let search_hash = seahash::hash(location.search.to_string().as_bytes());
+            let key = ElementId::Name(format!("outlet-{}-{}", node.id, search_hash).into());
+
             if let Some(constructor) = REGISTRY.lock().unwrap().get(&node.id) {
                 let element = constructor(cx);
                 return div()
+                    .id(key) // 动态 ID 破坏缓存
                     .child(element)
                     .children(self.children)
                     .into_any_element();

@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use url::Url;
 
 /// Represents the current location in the application, including pathname,
 /// search parameters, hash fragment, and navigation state.
@@ -13,17 +12,30 @@ pub struct Location {
 }
 
 impl Location {
-    pub fn new(pathname: &str) -> Self {
+    /// Creates a new Location from a path string, parsing any query parameters.
+    pub fn new(path: &str) -> Self {
+        let (pathname, query) = match path.split_once('?') {
+            Some((p, q)) => (p.to_string(), Some(q.to_string())),
+            None => (path.to_string(), None),
+        };
+
+        let search = if let Some(q) = query {
+            parse_query_string(&q)
+        } else {
+            serde_json::Value::Null
+        };
+
         Self {
-            pathname: pathname.to_string(),
-            search: serde_json::Value::Null,
+            pathname,
+            search,
             hash: String::new(),
             state: serde_json::Value::Null,
         }
     }
 
+    /// Creates a Location from a full URL string (for compatibility).
     pub fn from_url(url: &str) -> Result<Self, url::ParseError> {
-        let parsed = Url::parse(url)?;
+        let parsed = url::Url::parse(url)?;
         let query_pairs: HashMap<String, String> = parsed.query_pairs().into_owned().collect();
         let search = serde_json::to_value(query_pairs).unwrap_or(serde_json::Value::Null);
         Ok(Self {
@@ -37,8 +49,9 @@ impl Location {
         })
     }
 
+    /// Converts this location to a URL string using the given base.
     pub fn to_url(&self, base: &str) -> String {
-        if let Ok(mut url) = Url::parse(base) {
+        if let Ok(mut url) = url::Url::parse(base) {
             url.set_path(&self.pathname);
             if let serde_json::Value::Object(map) = &self.search {
                 let mut query = url.query_pairs_mut();
@@ -58,6 +71,34 @@ impl Location {
     }
 }
 
+/// Helper to parse a query string like "page=50&sort=desc" into a JSON object.
+fn parse_query_string(query: &str) -> serde_json::Value {
+    let map: serde_json::Map<String, serde_json::Value> = query
+        .split('&')
+        .filter_map(|pair| {
+            let mut parts = pair.split('=');
+            let key = parts.next()?.to_string();
+            let value = parts.next().unwrap_or("");
+
+            let parsed = if value.is_empty() {
+                serde_json::Value::Null
+            } else if let Ok(i) = value.parse::<i64>() {
+                serde_json::json!(i)
+            } else if let Ok(f) = value.parse::<f64>() {
+                serde_json::json!(f)
+            } else if value.eq_ignore_ascii_case("true") {
+                serde_json::Value::Bool(true)
+            } else if value.eq_ignore_ascii_case("false") {
+                serde_json::Value::Bool(false)
+            } else {
+                serde_json::Value::String(value.to_string())
+            };
+
+            Some((key, parsed))
+        })
+        .collect();
+    serde_json::Value::Object(map)
+}
 /// Options for navigation, matching TanStack Router's NavigateOptions.
 #[derive(Clone, Default)]
 pub struct NavigateOptions {

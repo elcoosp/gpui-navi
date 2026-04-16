@@ -1,7 +1,7 @@
 use gpui::{
-    App, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight, Hsla, KeyBinding,
-    MouseButton, Render, Size, StyledText, Subscription, TextStyle, Window, actions, div,
-    prelude::*, px,
+    AnyWindowHandle, App, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight, Hsla,
+    KeyBinding, MouseButton, Render, Size, StyledText, Subscription, TextStyle, Window, actions,
+    div, prelude::*, px,
 };
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, VirtualListScrollHandle,
@@ -84,8 +84,10 @@ pub enum DevtoolsTab {
 struct EventDetail {
     from_pathname: Option<String>,
     from_search: Option<String>,
+    from_state: Option<String>,
     to_pathname: String,
     to_search: Option<String>,
+    to_state: Option<String>,
 }
 
 fn format_search(search: &serde_json::Value) -> String {
@@ -127,6 +129,19 @@ fn extract_event_detail(event: &RouterEvent) -> EventDetail {
                 .unwrap_or_default();
             let to_search_str = format_search(&to.search);
 
+            let from_state_str = from.as_ref().and_then(|l| {
+                if l.state.is_null() {
+                    None
+                } else {
+                    Some(l.state.to_string())
+                }
+            });
+            let to_state_str = if to.state.is_null() {
+                None
+            } else {
+                Some(to.state.to_string())
+            };
+
             EventDetail {
                 from_pathname: from.as_ref().map(|l| l.pathname.clone()),
                 from_search: if from_search_str.is_empty() {
@@ -134,12 +149,14 @@ fn extract_event_detail(event: &RouterEvent) -> EventDetail {
                 } else {
                     Some(from_search_str)
                 },
+                from_state: from_state_str,
                 to_pathname: to.pathname.clone(),
                 to_search: if to_search_str.is_empty() {
                     None
                 } else {
                     Some(to_search_str)
                 },
+                to_state: to_state_str,
             }
         }
     }
@@ -432,6 +449,9 @@ impl DevtoolsState {
         let theme = cx.theme();
         let state = RouterState::try_global(cx);
         let mut container = div().gap_3().flex().flex_col();
+
+        // Extract window handle early for closures
+        let window_handle_for_tree: AnyWindowHandle = window.window_handle().into();
 
         if let Some(state) = state {
             let loc = state.current_location();
@@ -810,6 +830,9 @@ impl DevtoolsState {
                             tags.push("loader");
                         }
 
+                        let pattern_clone = pattern.clone();
+                        let window_handle = window_handle_for_tree.clone();
+
                         div()
                             .flex()
                             .items_center()
@@ -818,6 +841,7 @@ impl DevtoolsState {
                             .pr_2()
                             .py(px(3.0))
                             .rounded(px(4.0))
+                            .cursor_pointer()
                             .when(is_in_chain, |d| {
                                 d.bg(if is_leaf_match {
                                     theme.primary.opacity(0.2)
@@ -826,6 +850,10 @@ impl DevtoolsState {
                                 })
                             })
                             .hover(|style| style.bg(theme.secondary.opacity(0.5)))
+                            .on_mouse_down(MouseButton::Left, move |_ev, _window, cx| {
+                                let nav = Navigator::new(window_handle);
+                                nav.push(&pattern_clone, cx);
+                            })
                             .child(
                                 div()
                                     .min_w(px(110.0))
@@ -876,6 +904,10 @@ impl DevtoolsState {
 
         container
     }
+
+    // -----------------------------------------------------------------------
+    // Timeline tab
+    // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
     // Timeline tab
@@ -957,8 +989,10 @@ impl DevtoolsState {
             .join("\n");
 
         let weak_self = cx.entity().downgrade();
-
         let has_detail = selected_detail.is_some();
+
+        // Extract window handle for Time-Travel closures
+        let window_handle_for_jump: AnyWindowHandle = window.window_handle().into();
 
         div()
             .flex()
@@ -1169,6 +1203,18 @@ impl DevtoolsState {
                                                     format!("+{:.0}ms", delta)
                                                 };
 
+                                                // Time Travel Logic
+                                                let is_rendered = display.badge == "REN";
+                                                let jump_path = if is_rendered {
+                                                    let mut p = display.detail.to_pathname.clone();
+                                                    if let Some(s) = &display.detail.to_search {
+                                                        p.push_str(s);
+                                                    }
+                                                    Some(p)
+                                                } else {
+                                                    None
+                                                };
+
                                                 div()
                                                     .w(row_width)
                                                     .h(row_height)
@@ -1232,7 +1278,30 @@ impl DevtoolsState {
                                                             .text_size(px(10.0))
                                                             .child(delta_text),
                                                     )
-                                                    .child(div().flex_1().child(styled_text))
+                                                    .child(
+                                                        div()
+                                                            // REMOVED .flex_1() HERE
+                                                            .overflow_hidden()
+                                                            .child(styled_text),
+                                                    )
+                                                    .when(is_rendered, |d| {
+                                                        let path = jump_path.clone().unwrap();
+                                                        let window_handle =
+                                                            window_handle_for_jump.clone();
+                                                        d.child(
+                                                            Button::new(("jump-btn", ix))
+                                                                .icon(IconName::Play)
+                                                                .ghost()
+                                                                .xsmall()
+                                                                .tooltip("Jump to this state")
+                                                                .on_click(move |_, _window, cx| {
+                                                                    let nav = Navigator::new(
+                                                                        window_handle,
+                                                                    );
+                                                                    nav.push(&path, cx);
+                                                                }),
+                                                        )
+                                                    })
                                             })
                                             .collect()
                                     },
@@ -1244,7 +1313,6 @@ impl DevtoolsState {
             )
             .when(has_detail, |d| d.child(self.render_event_detail_panel(cx)))
     }
-
     fn render_event_detail_panel(&self, cx: &Context<Self>) -> Div {
         let theme = cx.theme();
         let detail = self
@@ -1254,8 +1322,10 @@ impl DevtoolsState {
             .unwrap_or_else(|| EventDetail {
                 from_pathname: None,
                 from_search: None,
+                from_state: None,
                 to_pathname: "?".to_string(),
                 to_search: None,
+                to_state: None,
             });
 
         let label_row = |label: &str, value: String| -> Div {
@@ -1273,6 +1343,32 @@ impl DevtoolsState {
                     div()
                         .text_color(theme.foreground)
                         .text_size(px(11.0))
+                        .child(value),
+                )
+        };
+
+        // Replaced parameter with direct closure capture
+        let state_block = |label: &str, value: String| -> Div {
+            div()
+                .pl(px(70.0))
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(
+                    div()
+                        .text_color(theme.muted_foreground)
+                        .text_size(px(10.0))
+                        .child(label.to_string()),
+                )
+                .child(
+                    div()
+                        .p_2()
+                        .bg(theme.background)
+                        .rounded(px(4.0))
+                        .text_color(theme.foreground)
+                        .font_family("monospace")
+                        .text_size(px(10.0))
+                        .overflow_x_scrollbar()
                         .child(value),
                 )
         };
@@ -1322,6 +1418,9 @@ impl DevtoolsState {
             if let Some(search) = &detail.from_search {
                 panel = panel.child(label_row("  Search:", search.clone()));
             }
+            if let Some(state) = &detail.from_state {
+                panel = panel.child(state_block("  State:", state.clone()));
+            }
         } else {
             panel = panel.child(label_row("From:", "(initial navigation)".to_string()));
         }
@@ -1329,6 +1428,9 @@ impl DevtoolsState {
         panel = panel.child(label_row("To:", detail.to_pathname.clone()));
         if let Some(search) = &detail.to_search {
             panel = panel.child(label_row("  Search:", search.clone()));
+        }
+        if let Some(state) = &detail.to_state {
+            panel = panel.child(state_block("  State:", state.clone()));
         }
 
         panel
@@ -1385,9 +1487,7 @@ impl DevtoolsState {
                                         .text_color(theme.muted_foreground)
                                         .opacity(0.7)
                                         .text_size(px(11.0))
-                                        .child(
-                                            "Use define_route! with a loader: to enable cache tracking.",
-                                        ),
+                                        .child("Use define_route! with a loader: to enable cache tracking."),
                                 ),
                         ),
                 );

@@ -65,10 +65,6 @@ impl DevtoolsState {
                 s.set_placeholder("Search events...", window, cx);
                 s
             });
-            cx.subscribe::<InputState, InputEvent>(&state, |_, _, _event, cx| {
-                cx.notify();
-            })
-            .detach();
             self.timeline_search = Some(state);
         }
     }

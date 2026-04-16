@@ -1,5 +1,7 @@
 use gpui::prelude::*;
+
 use gpui::*;
+use gpui_component_assets::Assets;
 use navi_devtools::DevtoolsState;
 use navi_macros::{define_route, use_loader_data, use_search};
 use navi_router::{
@@ -321,7 +323,7 @@ impl RenderOnce for SettingsPage {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let block_navigation = cx.new(|cx| {
             let focus_handle = cx.focus_handle();
-            focus_handle.focus(window);
+            focus_handle.focus(window, cx);
             BlockerState {
                 block: false,
                 focus_handle,
@@ -702,171 +704,175 @@ fn main() {
         Component::new(valico_test::ValicoTestPage).into_any_element()
     });
 
-    Application::new().run(|cx: &mut App| {
-        log::info!("Building route tree");
-        let mut tree = RouteTree::new();
+    gpui_platform::application()
+        .with_assets(Assets)
+        .run(|cx: &mut App| {
+            cx.init_colors();
+            gpui_component::init(cx);
+            log::info!("Building route tree");
+            let mut tree = RouteTree::new();
 
-        // Core routes
-        tree.add_route(RouteNode {
-            id: "__root__".to_string(),
-            pattern: RoutePattern::parse("/"),
-            parent: None,
-            is_layout: true,
-            is_index: false,
-            has_loader: false,
-            loader_stale_time: None,
-            loader_gc_time: None,
-            preload_stale_time: None,
+            // Core routes
+            tree.add_route(RouteNode {
+                id: "__root__".to_string(),
+                pattern: RoutePattern::parse("/"),
+                parent: None,
+                is_layout: true,
+                is_index: false,
+                has_loader: false,
+                loader_stale_time: None,
+                loader_gc_time: None,
+                preload_stale_time: None,
+            });
+
+            tree.add_route(RouteNode {
+                id: "index".to_string(),
+                pattern: RoutePattern::parse("/"),
+                parent: Some("__root__".into()),
+                is_layout: false,
+                is_index: true,
+                has_loader: false,
+                loader_stale_time: None,
+                loader_gc_time: None,
+                preload_stale_time: None,
+            });
+
+            tree.add_route(RouteNode {
+                id: "about".to_string(),
+                pattern: RoutePattern::parse("/about"),
+                parent: Some("__root__".into()),
+                is_layout: false,
+                is_index: false,
+                has_loader: false,
+                loader_stale_time: None,
+                loader_gc_time: None,
+                preload_stale_time: None,
+            });
+
+            tree.add_route(RouteNode {
+                id: "users".to_string(),
+                pattern: RoutePattern::parse("/users"),
+                parent: Some("__root__".into()),
+                is_layout: true,
+                is_index: false,
+                has_loader: false,
+                loader_stale_time: None,
+                loader_gc_time: None,
+                preload_stale_time: None,
+            });
+
+            tree.add_route(UsersIndexRoute::build_node());
+            tree.add_route(UserDetailRoute::build_node());
+
+            tree.add_route(RouteNode {
+                id: "settings".to_string(),
+                pattern: RoutePattern::parse("/settings"),
+                parent: Some("__root__".into()),
+                is_layout: false,
+                is_index: false,
+                has_loader: false,
+                loader_stale_time: None,
+                loader_gc_time: None,
+                preload_stale_time: None,
+            });
+
+            tree.add_route(RouteNode {
+                id: "docs_splat".to_string(),
+                pattern: RoutePattern::parse("/docs/$"),
+                parent: Some("__root__".into()),
+                is_layout: false,
+                is_index: false,
+                has_loader: false,
+                loader_stale_time: None,
+                loader_gc_time: None,
+                preload_stale_time: None,
+            });
+
+            tree.add_route(RouteNode {
+                id: "not_found".to_string(),
+                pattern: RoutePattern::parse("/*"),
+                parent: Some("__root__".into()),
+                is_layout: false,
+                is_index: false,
+                has_loader: false,
+                loader_stale_time: None,
+                loader_gc_time: None,
+                preload_stale_time: None,
+            });
+
+            // Validation test routes
+            tree.add_route(RouteNode {
+                id: "validation_index".to_string(),
+                pattern: RoutePattern::parse("/validation-test"),
+                parent: Some("__root__".into()),
+                is_layout: false,
+                is_index: true,
+                has_loader: false,
+                loader_stale_time: None,
+                loader_gc_time: None,
+                preload_stale_time: None,
+            });
+
+            #[cfg(feature = "validator")]
+            {
+                let mut node = validator_test::ValidatorTestRoute::build_node();
+                node.parent = Some("__root__".to_string());
+                tree.add_route(node);
+            }
+            #[cfg(feature = "garde")]
+            {
+                let mut node = garde_test::GardeTestRoute::build_node();
+                node.parent = Some("__root__".to_string());
+                tree.add_route(node);
+            }
+            #[cfg(feature = "validify")]
+            {
+                let mut node = validify_test::ValidifyTestRoute::build_node();
+                node.parent = Some("__root__".to_string());
+                tree.add_route(node);
+            }
+            #[cfg(feature = "valico")]
+            {
+                let mut node = valico_test::ValicoTestRoute::build_node();
+                node.parent = Some("__root__".to_string());
+                tree.add_route(node);
+            }
+
+            let devtools = cx.new(|_cx| DevtoolsState::new());
+
+            log::info!("Opening window");
+            cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                        None,
+                        size(px(900.0), px(700.0)),
+                        cx,
+                    ))),
+                    ..Default::default()
+                },
+                |window, cx| {
+                    let window_id = window.window_handle().window_id();
+                    let window_handle = window.window_handle();
+                    let initial = Location::new("/");
+                    log::info!("Creating RouterProvider with initial location: /");
+                    let router_provider =
+                        RouterProvider::new(window_id, window_handle, initial, tree, cx);
+
+                    UserDetailRoute::register_loader(cx);
+
+                    let root_view = cx.new(|_cx| AppView {
+                        router_provider,
+                        devtools,
+                    });
+
+                    RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
+
+                    root_view
+                },
+            )
+            .unwrap();
+
+            cx.activate(true);
+            log::info!("Application running");
         });
-
-        tree.add_route(RouteNode {
-            id: "index".to_string(),
-            pattern: RoutePattern::parse("/"),
-            parent: Some("__root__".into()),
-            is_layout: false,
-            is_index: true,
-            has_loader: false,
-            loader_stale_time: None,
-            loader_gc_time: None,
-            preload_stale_time: None,
-        });
-
-        tree.add_route(RouteNode {
-            id: "about".to_string(),
-            pattern: RoutePattern::parse("/about"),
-            parent: Some("__root__".into()),
-            is_layout: false,
-            is_index: false,
-            has_loader: false,
-            loader_stale_time: None,
-            loader_gc_time: None,
-            preload_stale_time: None,
-        });
-
-        tree.add_route(RouteNode {
-            id: "users".to_string(),
-            pattern: RoutePattern::parse("/users"),
-            parent: Some("__root__".into()),
-            is_layout: true,
-            is_index: false,
-            has_loader: false,
-            loader_stale_time: None,
-            loader_gc_time: None,
-            preload_stale_time: None,
-        });
-
-        tree.add_route(UsersIndexRoute::build_node());
-        tree.add_route(UserDetailRoute::build_node());
-
-        tree.add_route(RouteNode {
-            id: "settings".to_string(),
-            pattern: RoutePattern::parse("/settings"),
-            parent: Some("__root__".into()),
-            is_layout: false,
-            is_index: false,
-            has_loader: false,
-            loader_stale_time: None,
-            loader_gc_time: None,
-            preload_stale_time: None,
-        });
-
-        tree.add_route(RouteNode {
-            id: "docs_splat".to_string(),
-            pattern: RoutePattern::parse("/docs/$"),
-            parent: Some("__root__".into()),
-            is_layout: false,
-            is_index: false,
-            has_loader: false,
-            loader_stale_time: None,
-            loader_gc_time: None,
-            preload_stale_time: None,
-        });
-
-        tree.add_route(RouteNode {
-            id: "not_found".to_string(),
-            pattern: RoutePattern::parse("/*"),
-            parent: Some("__root__".into()),
-            is_layout: false,
-            is_index: false,
-            has_loader: false,
-            loader_stale_time: None,
-            loader_gc_time: None,
-            preload_stale_time: None,
-        });
-
-        // Validation test routes
-        tree.add_route(RouteNode {
-            id: "validation_index".to_string(),
-            pattern: RoutePattern::parse("/validation-test"),
-            parent: Some("__root__".into()),
-            is_layout: false,
-            is_index: true,
-            has_loader: false,
-            loader_stale_time: None,
-            loader_gc_time: None,
-            preload_stale_time: None,
-        });
-
-        #[cfg(feature = "validator")]
-        {
-            let mut node = validator_test::ValidatorTestRoute::build_node();
-            node.parent = Some("__root__".to_string());
-            tree.add_route(node);
-        }
-        #[cfg(feature = "garde")]
-        {
-            let mut node = garde_test::GardeTestRoute::build_node();
-            node.parent = Some("__root__".to_string());
-            tree.add_route(node);
-        }
-        #[cfg(feature = "validify")]
-        {
-            let mut node = validify_test::ValidifyTestRoute::build_node();
-            node.parent = Some("__root__".to_string());
-            tree.add_route(node);
-        }
-        #[cfg(feature = "valico")]
-        {
-            let mut node = valico_test::ValicoTestRoute::build_node();
-            node.parent = Some("__root__".to_string());
-            tree.add_route(node);
-        }
-
-        let devtools = cx.new(|_cx| DevtoolsState::new());
-
-        log::info!("Opening window");
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-                    None,
-                    size(px(900.0), px(700.0)),
-                    cx,
-                ))),
-                ..Default::default()
-            },
-            |window, cx| {
-                let window_id = window.window_handle().window_id();
-                let window_handle = window.window_handle();
-                let initial = Location::new("/");
-                log::info!("Creating RouterProvider with initial location: /");
-                let router_provider =
-                    RouterProvider::new(window_id, window_handle, initial, tree, cx);
-
-                UserDetailRoute::register_loader(cx);
-
-                let root_view = cx.new(|_cx| AppView {
-                    router_provider,
-                    devtools,
-                });
-
-                RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
-
-                root_view
-            },
-        )
-        .unwrap();
-
-        cx.activate(true);
-        log::info!("Application running");
-    });
 }

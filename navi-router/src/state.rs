@@ -4,7 +4,6 @@ use crate::loader::{LoaderRegistry, LoaderTask};
 use crate::location::{Location, NavigateOptions, ViewTransitionOptions};
 use crate::route_tree::{RouteNode, RouteTree};
 use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId};
-use rs_query::QueryClient;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -55,7 +54,6 @@ pub struct RouterState {
     pub history: History,
     pub route_tree: Rc<RouteTree>,
     pub current_match: Option<(HashMap<String, String>, RouteNode)>,
-    pub query_client: QueryClient,
     pub pending_navigation: Option<Location>,
     pub blockers: HashMap<BlockerId, Blocker>,
     pub scroll_restoration: bool,
@@ -90,7 +88,6 @@ impl RouterState {
             history: History::new(initial, window_id),
             route_tree,
             current_match,
-            query_client: QueryClient::new(),
             pending_navigation: None,
             blockers: HashMap::new(),
             scroll_restoration: true,
@@ -247,7 +244,7 @@ impl RouterState {
                             state.pending_loaders.remove(&key_clone)
                         });
 
-                        if let Ok(Some(task)) = task {
+                        if let Some(task) = task {
                             match task.await {
                                 Ok(data) => {
                                     log::debug!("Loader succeeded for key: {}", key_clone);

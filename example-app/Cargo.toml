@@ -5,9 +5,11 @@ edition = "2024"
 build = "build.rs"
 
 [dependencies]
-gpui = "0.2.2"
-gpux = { git = "https://github.com/fukayatti/gpux" }
-gpui-component = "0.5.1"
+gpui = { workspace = true }
+gpui_platform = { git = "https://github.com/zed-industries/zed" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
 navi-core = { path = "../navi-core" }
 navi-router = { path = "../navi-router" }
 navi-devtools = { path = "../navi-devtools" }

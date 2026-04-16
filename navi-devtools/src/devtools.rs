@@ -16,9 +16,20 @@ use navi_router::{
     RouterEvent, RouterState,
     event_bus::{self, TimedEvent},
 };
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-actions!(devtools, [ToggleDevtools]);
+actions!(
+    devtools,
+    [
+        ToggleDevtools,
+        SwitchToTab1,
+        SwitchToTab2,
+        SwitchToTab3,
+        SwitchToTab4,
+        FocusTimelineSearch
+    ]
+);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RouterEventType {
@@ -54,6 +65,18 @@ impl RouterEventType {
             Self::Rendered => "Rendered",
         }
     }
+
+    fn badge(&self) -> &'static str {
+        match self {
+            Self::All => "ALL",
+            Self::BeforeNavigate => "NAV",
+            Self::BeforeLoad => "BLD",
+            Self::Load => "LOAD",
+            Self::BeforeRouteMount => "MNT",
+            Self::Resolved => "OK",
+            Self::Rendered => "REN",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,7 +104,6 @@ impl EventEmitter<()> for DevtoolsState {}
 
 impl DevtoolsState {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        // Bind keyboard shortcuts globally
         cx.bind_keys([KeyBinding::new(
             "cmd-shift-d",
             ToggleDevtools,
@@ -92,6 +114,25 @@ impl DevtoolsState {
             ToggleDevtools,
             Some("Devtools"),
         )]);
+        cx.bind_keys([KeyBinding::new(
+            "cmd-shift-tab",
+            ToggleDevtools,
+            Some("Devtools"),
+        )]);
+        cx.bind_keys([KeyBinding::new(
+            "ctrl-shift-tab",
+            ToggleDevtools,
+            Some("Devtools"),
+        )]);
+        cx.bind_keys([KeyBinding::new("cmd-1", SwitchToTab1, Some("Devtools"))]);
+        cx.bind_keys([KeyBinding::new("ctrl-1", SwitchToTab1, Some("Devtools"))]);
+        cx.bind_keys([KeyBinding::new("cmd-2", SwitchToTab2, Some("Devtools"))]);
+        cx.bind_keys([KeyBinding::new("ctrl-2", SwitchToTab2, Some("Devtools"))]);
+        cx.bind_keys([KeyBinding::new("cmd-3", SwitchToTab3, Some("Devtools"))]);
+        cx.bind_keys([KeyBinding::new("ctrl-3", SwitchToTab3, Some("Devtools"))]);
+        cx.bind_keys([KeyBinding::new("cmd-4", SwitchToTab4, Some("Devtools"))]);
+        cx.bind_keys([KeyBinding::new("ctrl-4", SwitchToTab4, Some("Devtools"))]);
+        cx.bind_keys([KeyBinding::new("/", FocusTimelineSearch, Some("Devtools"))]);
 
         let subscription = cx.observe_global::<RouterState>(move |this, cx| {
             this.refresh_log(cx);
@@ -160,8 +201,6 @@ impl DevtoolsState {
 
     fn toggle_expanded(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.expanded = !self.expanded;
-        // When collapsing, force focus onto the small button
-        // so the "Devtools" key_context stays active for the shortcut.
         if !self.expanded {
             self.focus_handle.focus(window, cx);
         }
@@ -187,10 +226,13 @@ impl DevtoolsState {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Routes tab
+    // -----------------------------------------------------------------------
+
     fn render_routes_tab(&self, cx: &Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let state = RouterState::try_global(cx);
-
         let mut container = div().gap_3().flex().flex_col();
 
         if let Some(state) = state {
@@ -221,6 +263,113 @@ impl DevtoolsState {
                     ),
             );
 
+            let matched_info = state
+                .current_match
+                .as_ref()
+                .map(|(params, node)| (node.id.clone(), format!("{:?}", params)));
+
+            let node_infos: Vec<(String, String, bool, bool, bool, Option<String>)> = state
+                .route_tree
+                .all_nodes()
+                .map(|n| {
+                    (
+                        n.id.clone(),
+                        n.pattern.raw.clone(),
+                        n.is_layout,
+                        n.is_index,
+                        n.has_loader,
+                        n.parent.clone(),
+                    )
+                })
+                .collect();
+
+            let parent_of: HashMap<String, String> = node_infos
+                .iter()
+                .filter_map(|(id, _, _, _, _, p)| Some((id.clone(), p.clone()?)))
+                .collect();
+
+            fn node_depth(id: &str, parent_of: &HashMap<String, String>) -> usize {
+                let mut d = 0;
+                let mut cur = id;
+                while let Some(p) = parent_of.get(cur) {
+                    d += 1;
+                    cur = p;
+                }
+                d
+            }
+
+            let matched_leaf_id: Option<String> = matched_info.as_ref().map(|(id, _)| id.clone());
+            let matched_chain: HashSet<String> = if let Some(ref leaf_id) = matched_leaf_id {
+                let mut chain = HashSet::new();
+                let mut cur: &str = leaf_id.as_str();
+                loop {
+                    chain.insert(cur.to_string());
+                    cur = match parent_of.get(cur) {
+                        Some(p) => p,
+                        None => break,
+                    };
+                }
+                chain
+            } else {
+                HashSet::new()
+            };
+
+            struct ChainRow {
+                id: String,
+                pattern: String,
+                tag: &'static str,
+                is_leaf: bool,
+                depth_f32: f32,
+            }
+
+            let chain_rows: Vec<ChainRow> = if let Some((ref leaf_id, _)) = matched_info {
+                let mut chain_ids: Vec<String> = Vec::new();
+                let mut cur: &str = leaf_id.as_str();
+                loop {
+                    chain_ids.push(cur.to_string());
+                    cur = match parent_of.get(cur) {
+                        Some(p) => p,
+                        None => break,
+                    };
+                }
+                chain_ids.reverse();
+
+                chain_ids
+                    .iter()
+                    .enumerate()
+                    .map(|(i, chain_id)| {
+                        let info = node_infos.iter().find(|(id, _, _, _, _, _)| id == chain_id);
+                        let (pattern, is_layout, is_index) = info
+                            .map(|(_, p, l, idx, _, _)| (p.clone(), *l, *idx))
+                            .unwrap_or(("?".to_string(), false, false));
+
+                        let tag = if is_layout {
+                            "layout"
+                        } else if is_index {
+                            "index"
+                        } else {
+                            "leaf"
+                        };
+
+                        ChainRow {
+                            id: chain_id.clone(),
+                            pattern,
+                            tag,
+                            is_leaf: i == chain_ids.len() - 1,
+                            depth_f32: 16.0 * i as f32,
+                        }
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+
+            let params_display = matched_info
+                .as_ref()
+                .map(|(_, p)| format!("Params: {}", p))
+                .unwrap_or_else(|| "No route matched!".to_string());
+            let has_match = matched_info.is_some();
+
             container = container.child(
                 div()
                     .p_3()
@@ -237,51 +386,201 @@ impl DevtoolsState {
                                 .text_color(theme.success)
                                 .font_weight(FontWeight::MEDIUM)
                                 .child(Icon::new(IconName::Check))
-                                .child("Matched Route"),
+                                .child("Matched Route Chain"),
                         );
-                        if let Some((params, node)) = &state.current_match {
-                            card = card
-                                .child(format!("ID: {}", node.id))
-                                .child(format!("Pattern: {}", node.pattern.raw))
-                                .child("Params:")
-                                .child(format!("{:?}", params));
+
+                        for row in chain_rows {
+                            let arrow = if row.is_leaf { "→" } else { "└" };
+                            let arrow_color = if row.is_leaf {
+                                theme.primary
+                            } else {
+                                theme.muted_foreground
+                            };
+
+                            let row_div = div()
+                                .pl(px(row.depth_f32))
+                                .pr_2()
+                                .py(px(2.0))
+                                .rounded(px(3.0))
+                                .when(row.is_leaf, |d| d.bg(theme.primary.opacity(0.15)))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .w(px(16.0))
+                                                .text_color(arrow_color)
+                                                .text_size(px(11.0))
+                                                .child(arrow),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.foreground)
+                                                .text_size(px(12.0))
+                                                .child(row.id),
+                                        )
+                                        .child(
+                                            div()
+                                                .px_1()
+                                                .rounded(px(3.0))
+                                                .bg(theme.muted_foreground.opacity(0.15))
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(10.0))
+                                                .child(row.tag),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child(row.pattern),
+                                        ),
+                                );
+
+                            card = card.child(row_div);
+                        }
+
+                        if has_match {
+                            card = card.child(
+                                div()
+                                    .mt_1()
+                                    .pl(px(16.0))
+                                    .text_color(theme.muted_foreground)
+                                    .text_size(px(11.0))
+                                    .child(params_display),
+                            );
                         } else {
                             card = card
                                 .child(div().text_color(theme.warning).child("No route matched!"));
                         }
+
                         card
                     }),
             );
+
+            let mut sorted_nodes: Vec<(String, String, bool, bool, bool, usize)> = node_infos
+                .iter()
+                .map(|(id, pattern, is_layout, is_index, has_loader, _)| {
+                    let depth = node_depth(id, &parent_of);
+                    (
+                        id.clone(),
+                        pattern.clone(),
+                        *is_layout,
+                        *is_index,
+                        *has_loader,
+                        depth,
+                    )
+                })
+                .collect();
+            sorted_nodes.sort_by_key(|(id, _, _, _, _, depth)| (*depth, id.clone()));
+
+            let total_routes = sorted_nodes.len();
+            let layout_count = sorted_nodes.iter().filter(|(_, _, l, _, _, _)| *l).count();
+            let loader_count = sorted_nodes
+                .iter()
+                .filter(|(_, _, _, _, ld, _)| *ld)
+                .count();
 
             container = container
                 .child(
                     div()
                         .flex()
                         .items_center()
-                        .gap_1()
-                        .text_color(theme.info)
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(Icon::new(IconName::FolderOpen))
-                        .child("Route Tree"),
+                        .justify_between()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .text_color(theme.info)
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(Icon::new(IconName::FolderOpen))
+                                .child("Route Tree"),
+                        )
+                        .child(
+                            div()
+                                .text_color(theme.muted_foreground)
+                                .text_size(px(11.0))
+                                .child(format!(
+                                    "{} routes · {} layouts · {} with loaders",
+                                    total_routes, layout_count, loader_count
+                                )),
+                        ),
                 )
-                .children(state.route_tree.all_nodes().map(|node| {
-                    let is_active = state
-                        .current_match
-                        .as_ref()
-                        .map(|(_, n)| n.id == node.id)
-                        .unwrap_or(false);
-                    let indent = node.parent.as_ref().map(|_| "  ").unwrap_or("");
-                    let marker = if is_active { "→" } else { " " };
-                    let text = format!("{}{} {} ({})", indent, marker, node.id, node.pattern.raw);
-                    div()
-                        .px_2()
-                        .py_1()
-                        .rounded(px(4.0))
-                        .when(is_active, |d| {
-                            d.bg(theme.primary.opacity(0.2)).text_color(theme.primary)
-                        })
-                        .child(text)
-                }));
+                .children(sorted_nodes.iter().map(
+                    |(id, pattern, is_layout, is_index, has_loader, depth)| {
+                        let is_in_chain = matched_chain.contains(id);
+                        let is_leaf_match = matched_leaf_id.as_deref() == Some(id.as_str());
+                        let indent_px = px(16.0 * *depth as f32);
+
+                        let mut tags: Vec<&'static str> = Vec::new();
+                        if *is_layout {
+                            tags.push("layout");
+                        }
+                        if *is_index {
+                            tags.push("index");
+                        }
+                        if *has_loader {
+                            tags.push("loader");
+                        }
+
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .pl(indent_px)
+                            .pr_2()
+                            .py(px(3.0))
+                            .rounded(px(4.0))
+                            .when(is_in_chain, |d| {
+                                d.bg(if is_leaf_match {
+                                    theme.primary.opacity(0.2)
+                                } else {
+                                    theme.success.opacity(0.1)
+                                })
+                            })
+                            .hover(|style| style.bg(theme.secondary.opacity(0.5)))
+                            .child(
+                                div()
+                                    .min_w(px(110.0))
+                                    .text_color(if is_leaf_match {
+                                        theme.primary
+                                    } else if is_in_chain {
+                                        theme.success
+                                    } else {
+                                        theme.foreground
+                                    })
+                                    .text_size(px(11.0))
+                                    .font_weight(if is_leaf_match {
+                                        FontWeight::MEDIUM
+                                    } else {
+                                        FontWeight::NORMAL
+                                    })
+                                    .child(id.clone()),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .text_color(theme.muted_foreground)
+                                    .text_size(px(11.0))
+                                    .child(pattern.clone()),
+                            )
+                            .when(!tags.is_empty(), |d| {
+                                d.child(div().flex().gap_1().children(tags.into_iter().map(
+                                    |tag| {
+                                        div()
+                                            .px_1()
+                                            .rounded(px(2.0))
+                                            .bg(theme.muted_foreground.opacity(0.1))
+                                            .text_color(theme.muted_foreground)
+                                            .text_size(px(9.0))
+                                            .child(tag)
+                                    },
+                                )))
+                            })
+                    },
+                ));
         } else {
             container = container.child(
                 div()
@@ -292,6 +591,10 @@ impl DevtoolsState {
 
         container
     }
+
+    // -----------------------------------------------------------------------
+    // Timeline tab
+    // -----------------------------------------------------------------------
 
     fn render_timeline_tab(
         &mut self,
@@ -602,28 +905,152 @@ impl DevtoolsState {
             )
     }
 
+    // -----------------------------------------------------------------------
+    // Cache tab
+    // -----------------------------------------------------------------------
+
     fn render_cache_tab(&self, cx: &Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        div()
-            .gap_3()
-            .flex()
-            .flex_col()
-            .child(
+        let state = RouterState::try_global(cx);
+        let mut container = div().gap_3().flex().flex_col();
+
+        container = container.child(
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .text_color(theme.info)
+                .font_weight(FontWeight::MEDIUM)
+                .child(Icon::new(IconName::Inbox))
+                .child("Cache Inspection"),
+        );
+
+        if let Some(state) = state {
+            let loader_routes: Vec<(String, String)> = state
+                .route_tree
+                .all_nodes()
+                .filter(|n| n.has_loader)
+                .map(|n| (n.id.clone(), n.pattern.raw.clone()))
+                .collect();
+
+            if loader_routes.is_empty() {
+                container = container.child(
+                    div()
+                        .p_3()
+                        .bg(theme.secondary)
+                        .rounded(px(6.0))
+                        .border_1()
+                        .border_color(theme.border)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_color(theme.muted_foreground)
+                                        .child("No routes with loaders registered."),
+                                )
+                                .child(
+                                    div()
+                                        .text_color(theme.muted_foreground)
+                                        .opacity(0.7)
+                                        .text_size(px(11.0))
+                                        .child(
+                                            "Use define_route! with a loader: to enable cache tracking.",
+                                        ),
+                                ),
+                        ),
+                );
+            } else {
+                container = container.child(
+                    div()
+                        .p_3()
+                        .bg(theme.secondary)
+                        .rounded(px(6.0))
+                        .border_1()
+                        .border_color(theme.border)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_color(theme.muted_foreground)
+                                        .text_size(px(11.0))
+                                        .child(format!(
+                                            "{} route(s) with loaders (cache integration pending):",
+                                            loader_routes.len()
+                                        )),
+                                )
+                                .children(loader_routes.into_iter().map(|(id, pattern)| {
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .pl_2()
+                                        .child(
+                                            div()
+                                                .w(px(8.0))
+                                                .h(px(8.0))
+                                                .rounded_full()
+                                                .bg(theme.warning.opacity(0.5)),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.foreground)
+                                                .text_size(px(11.0))
+                                                .child(id),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child(pattern),
+                                        )
+                                })),
+                        ),
+                );
+            }
+
+            container = container.child(
                 div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .text_color(theme.info)
-                    .font_weight(FontWeight::MEDIUM)
-                    .child(Icon::new(IconName::Inbox))
-                    .child("Cache Inspection"),
-            )
-            .child(
+                    .mt_2()
+                    .p_3()
+                    .bg(theme.secondary.opacity(0.5))
+                    .rounded(px(6.0))
+                    .border_1()
+                    .border_color(theme.border.opacity(0.5))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .text_color(theme.muted_foreground)
+                            .opacity(0.6)
+                            .text_size(px(11.0))
+                            .child("Planned features:")
+                            .child("• Per-route cache status (fresh / stale / loading / error)")
+                            .child("• Stale-time & GC-time countdowns")
+                            .child("• Manual cache invalidation per route")
+                            .child("• Cache size statistics"),
+                    ),
+            );
+        } else {
+            container = container.child(
                 div()
-                    .text_color(theme.muted_foreground)
-                    .child("Cache inspection (rs-query integration)"),
-            )
+                    .text_color(theme.warning)
+                    .child("No router state found"),
+            );
+        }
+
+        container
     }
+
+    // -----------------------------------------------------------------------
+    // State tab
+    // -----------------------------------------------------------------------
 
     fn render_state_tab(&self, cx: &Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
@@ -631,6 +1058,19 @@ impl DevtoolsState {
         let mut container = div().gap_3().flex().flex_col();
 
         if let Some(state) = state {
+            let loc = state.current_location();
+            let total_routes = state.route_tree.all_nodes().count();
+            let layout_count = state.route_tree.all_nodes().filter(|n| n.is_layout).count();
+            let loader_count = state
+                .route_tree
+                .all_nodes()
+                .filter(|n| n.has_loader)
+                .count();
+            let can_back = state.history.can_go_back();
+            let can_forward = state.history.can_go_forward();
+            let blocker_count = state.blockers.len();
+            let has_blockers = !state.blockers.is_empty();
+
             container = container
                 .child(
                     div()
@@ -653,22 +1093,212 @@ impl DevtoolsState {
                             div()
                                 .flex()
                                 .flex_col()
-                                .gap_1()
-                                .text_color(theme.foreground)
-                                .child(format!(
-                                    "Current Location: {}",
-                                    state.current_location().pathname
-                                ))
-                                .child(format!("Can go back: {}", state.history.can_go_back()))
-                                .child(format!(
-                                    "Can go forward: {}",
-                                    state.history.can_go_forward()
-                                ))
-                                .child(format!("Blockers count: {}", state.blockers.len())),
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_color(theme.foreground)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_size(px(12.0))
+                                        .child("Navigation"),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Current Path"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.primary)
+                                                .text_size(px(11.0))
+                                                .child(loc.pathname.clone()),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Search Params"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.foreground)
+                                                .text_size(px(11.0))
+                                                .child(format!("{:?}", loc.search)),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Can Go Back"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(if can_back {
+                                                    theme.success
+                                                } else {
+                                                    theme.muted_foreground
+                                                })
+                                                .text_size(px(11.0))
+                                                .child(can_back.to_string()),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Can Go Forward"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(if can_forward {
+                                                    theme.success
+                                                } else {
+                                                    theme.muted_foreground
+                                                })
+                                                .text_size(px(11.0))
+                                                .child(can_forward.to_string()),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Active Blockers"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(if has_blockers {
+                                                    theme.warning
+                                                } else {
+                                                    theme.muted_foreground
+                                                })
+                                                .text_size(px(11.0))
+                                                .child(blocker_count.to_string()),
+                                        ),
+                                ),
+                        ),
+                )
+                .child(
+                    div()
+                        .p_3()
+                        .bg(theme.secondary)
+                        .rounded(px(6.0))
+                        .border_1()
+                        .border_color(theme.border)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_color(theme.foreground)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_size(px(12.0))
+                                        .child("Route Tree Statistics"),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Total Routes"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.foreground)
+                                                .text_size(px(11.0))
+                                                .child(total_routes.to_string()),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Layouts"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.info)
+                                                .text_size(px(11.0))
+                                                .child(layout_count.to_string()),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Routes with Loaders"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(if loader_count > 0 {
+                                                    theme.warning
+                                                } else {
+                                                    theme.muted_foreground
+                                                })
+                                                .text_size(px(11.0))
+                                                .child(loader_count.to_string()),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Leaf Routes"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.foreground)
+                                                .text_size(px(11.0))
+                                                .child((total_routes - layout_count).to_string()),
+                                        ),
+                                ),
                         ),
                 );
         } else {
-            container = container.child(div().text_color(theme.warning).child("No router state"));
+            container = container.child(
+                div()
+                    .text_color(theme.warning)
+                    .child("No router state found"),
+            );
         }
 
         container
@@ -725,6 +1355,25 @@ impl Render for DevtoolsState {
             .key_context("Devtools")
             .on_action(cx.listener(|this, _: &ToggleDevtools, window, cx| {
                 this.toggle_expanded(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchToTab1, _window, cx| {
+                this.set_selected_tab(DevtoolsTab::Routes, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchToTab2, _window, cx| {
+                this.set_selected_tab(DevtoolsTab::Cache, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchToTab3, _window, cx| {
+                this.set_selected_tab(DevtoolsTab::Timeline, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SwitchToTab4, _window, cx| {
+                this.set_selected_tab(DevtoolsTab::State, cx);
+            }))
+            .on_action(cx.listener(|this, _: &FocusTimelineSearch, window, cx| {
+                this.set_selected_tab(DevtoolsTab::Timeline, cx);
+                this.ensure_timeline_search(window, cx);
+                if let Some(search) = &this.timeline_search {
+                    search.update(cx, |state, cx| state.focus(window, cx));
+                }
             }))
             .child(
                 div()
@@ -797,32 +1446,5 @@ impl Render for DevtoolsState {
                     }),
             )
             .into_any_element()
-    }
-}
-
-#[derive(Clone)]
-pub struct NaviDevtools {
-    state: Entity<DevtoolsState>,
-}
-
-impl NaviDevtools {
-    pub fn new(cx: &mut App) -> Self {
-        Self {
-            state: cx.new(DevtoolsState::new),
-        }
-    }
-}
-
-impl RenderOnce for NaviDevtools {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        div().child(self.state)
-    }
-}
-
-impl IntoElement for NaviDevtools {
-    type Element = gpui::Component<Self>;
-
-    fn into_element(self) -> Self::Element {
-        gpui::Component::new(self)
     }
 }

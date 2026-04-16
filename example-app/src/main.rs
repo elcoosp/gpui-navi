@@ -411,7 +411,6 @@ impl RenderOnce for NotFoundPage {
 // Validation Test Pages (conditionally compiled)
 // ----------------------------------------------------------------------------
 
-// Validator integration test
 #[cfg(feature = "validator")]
 mod validator_test {
     use super::*;
@@ -459,7 +458,6 @@ mod validator_test {
     }
 }
 
-// Garde integration test
 #[cfg(feature = "garde")]
 mod garde_test {
     use super::*;
@@ -508,7 +506,6 @@ mod garde_test {
     }
 }
 
-// Validify integration test
 #[cfg(feature = "validify")]
 mod validify_test {
     use super::*;
@@ -556,7 +553,6 @@ mod validify_test {
     }
 }
 
-// Valico integration test
 #[cfg(feature = "valico")]
 mod valico_test {
     use super::*;
@@ -665,7 +661,6 @@ fn main() {
     env_logger::init();
     log::info!("Starting Navi example app");
 
-    // Register core route components
     register_route_component("__root__", |_| {
         Component::new(RootLayout).into_any_element()
     });
@@ -691,7 +686,6 @@ fn main() {
         Component::new(ValidationTestIndex).into_any_element()
     });
 
-    // Conditionally register validation test components
     #[cfg(feature = "validator")]
     register_route_component("ValidatorTestRoute", |_| {
         Component::new(validator_test::ValidatorTestPage).into_any_element()
@@ -717,7 +711,6 @@ fn main() {
             log::info!("Building route tree");
             let mut tree = RouteTree::new();
 
-            // Core routes
             tree.add_route(RouteNode {
                 id: "__root__".to_string(),
                 pattern: RoutePattern::parse("/"),
@@ -805,7 +798,6 @@ fn main() {
                 preload_stale_time: None,
             });
 
-            // Validation test routes
             tree.add_route(RouteNode {
                 id: "validation_index".to_string(),
                 pattern: RoutePattern::parse("/validation-test"),
@@ -872,7 +864,6 @@ fn main() {
 
                     RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
 
-                    // Wrap the root view with Root and provide window + cx
                     cx.new(|cx| Root::new(root_view, window, cx))
                 },
             )

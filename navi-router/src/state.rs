@@ -66,7 +66,7 @@ pub struct RouterState {
     loading: bool,
     loader_registry: LoaderRegistry,
 
-    loader_cache: HashMap<String, Arc<dyn std::any::Any + Send + Sync>>,
+    pub loader_cache: HashMap<String, Arc<dyn std::any::Any + Send + Sync>>,
     pending_loaders: HashMap<String, LoaderTask>,
     /// The window handle, used to refresh the UI after loader updates.
     window_handle: AnyWindowHandle,

@@ -274,6 +274,7 @@ pub struct DevtoolsState {
     filter_event_type: RouterEventType,
     focus_handle: FocusHandle,
     nav_input: Option<Entity<InputState>>,
+    tree_search: Option<Entity<InputState>>, // NEW
     selected_event_detail: Option<EventDetail>,
 }
 
@@ -336,6 +337,7 @@ impl DevtoolsState {
             filter_event_type: RouterEventType::All,
             focus_handle: cx.focus_handle(),
             nav_input: None,
+            tree_search: None, // NEW
             selected_event_detail: None,
         };
         this.refresh_log(cx);
@@ -361,6 +363,18 @@ impl DevtoolsState {
                 s
             });
             self.nav_input = Some(state);
+        }
+    }
+
+    // NEW: Tree search input initializer
+    fn ensure_tree_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.tree_search.is_none() {
+            let state = cx.new(|cx| {
+                let mut s = InputState::new(window, cx);
+                s.set_placeholder("Filter routes...", window, cx);
+                s
+            });
+            self.tree_search = Some(state);
         }
     }
 
@@ -445,13 +459,14 @@ impl DevtoolsState {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         self.ensure_nav_input(window, cx);
+        self.ensure_tree_search(window, cx); // NEW
 
         let theme = cx.theme();
         let state = RouterState::try_global(cx);
         let mut container = div().gap_3().flex().flex_col();
 
-        // Extract window handle early for closures
         let window_handle_for_tree: AnyWindowHandle = window.window_handle().into();
+        let tree_search_entity = self.tree_search.clone().unwrap(); // NEW
 
         if let Some(state) = state {
             let loc = state.current_location();
@@ -462,7 +477,6 @@ impl DevtoolsState {
                 format!("{}{}", loc.pathname, search_str)
             };
 
-            // Current Location with Copy button
             container = container.child(
                 div()
                     .p_3()
@@ -509,7 +523,6 @@ impl DevtoolsState {
                     ),
             );
 
-            // Direct Navigation Input
             let nav_input_entity = self.nav_input.clone().unwrap();
             container = container.child(
                 div()
@@ -566,7 +579,6 @@ impl DevtoolsState {
                     ),
             );
 
-            // --- Matched Route Chain ---
             let matched_info = state
                 .current_match
                 .as_ref()
@@ -763,9 +775,24 @@ impl DevtoolsState {
                     }),
             );
 
+            // --- NEW: Route Tree Search Input ---
+            container = container.child(
+                Input::new(&tree_search_entity)
+                    .prefix(Icon::new(IconName::Search))
+                    .cleanable(true)
+                    .small(),
+            );
+
             // --- Full Route Tree ---
             let mut sorted_nodes: Vec<(String, String, bool, bool, bool, usize)> = node_infos
                 .iter()
+                // NEW: Filter based on tree search input
+                .filter(|(id, pattern, _, _, _, _)| {
+                    let query = tree_search_entity.read(cx).value().to_lowercase();
+                    query.is_empty()
+                        || id.to_lowercase().contains(&query)
+                        || pattern.to_lowercase().contains(&query)
+                })
                 .map(|(id, pattern, is_layout, is_index, has_loader, _)| {
                     let depth = node_depth(id, &parent_of);
                     (
@@ -909,10 +936,6 @@ impl DevtoolsState {
     // Timeline tab
     // -----------------------------------------------------------------------
 
-    // -----------------------------------------------------------------------
-    // Timeline tab
-    // -----------------------------------------------------------------------
-
     fn render_timeline_tab(
         &mut self,
         window: &mut Window,
@@ -991,8 +1014,10 @@ impl DevtoolsState {
         let weak_self = cx.entity().downgrade();
         let has_detail = selected_detail.is_some();
 
-        // Extract window handle for Time-Travel closures
         let window_handle_for_jump: AnyWindowHandle = window.window_handle().into();
+
+        let json_log = serde_json::to_string_pretty(&self.event_log)
+            .unwrap_or_else(|_| "Failed to serialize log".to_string());
 
         div()
             .flex()
@@ -1069,7 +1094,22 @@ impl DevtoolsState {
                             .child(
                                 Clipboard::new("copy-all-timeline")
                                     .value(copy_all_text)
-                                    .tooltip("Copy all events"),
+                                    .tooltip("Copy all events as text"),
+                            )
+                            .child(
+                                Button::new("export-json-log")
+                                    .icon(IconName::File)
+                                    .ghost()
+                                    .small()
+                                    .tooltip("Export log as JSON")
+                                    .on_click({
+                                        let json_log = json_log.clone();
+                                        move |_, _window, cx| {
+                                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                                json_log.clone(),
+                                            ));
+                                        }
+                                    }),
                             )
                             .child(
                                 Button::new("clear-timeline")
@@ -1203,7 +1243,6 @@ impl DevtoolsState {
                                                     format!("+{:.0}ms", delta)
                                                 };
 
-                                                // Time Travel Logic
                                                 let is_rendered = display.badge == "REN";
                                                 let jump_path = if is_rendered {
                                                     let mut p = display.detail.to_pathname.clone();
@@ -1279,10 +1318,7 @@ impl DevtoolsState {
                                                             .child(delta_text),
                                                     )
                                                     .child(
-                                                        div()
-                                                            // REMOVED .flex_1() HERE
-                                                            .overflow_hidden()
-                                                            .child(styled_text),
+                                                        div().overflow_hidden().child(styled_text),
                                                     )
                                                     .when(is_rendered, |d| {
                                                         let path = jump_path.clone().unwrap();
@@ -1313,6 +1349,7 @@ impl DevtoolsState {
             )
             .when(has_detail, |d| d.child(self.render_event_detail_panel(cx)))
     }
+
     fn render_event_detail_panel(&self, cx: &Context<Self>) -> Div {
         let theme = cx.theme();
         let detail = self
@@ -1347,7 +1384,6 @@ impl DevtoolsState {
                 )
         };
 
-        // Replaced parameter with direct closure capture
         let state_block = |label: &str, value: String| -> Div {
             div()
                 .pl(px(70.0))
@@ -1457,40 +1493,22 @@ impl DevtoolsState {
         );
 
         if let Some(state) = state {
-            let loader_routes: Vec<(String, String)> = state
-                .route_tree
-                .all_nodes()
-                .filter(|n| n.has_loader)
-                .map(|n| (n.id.clone(), n.pattern.raw.clone()))
-                .collect();
+            // Extract actual keys from the active loader cache
+            let cache_keys: Vec<String> = state.loader_cache.keys().cloned().collect();
 
-            if loader_routes.is_empty() {
-                container = container.child(
-                    div()
-                        .p_3()
-                        .bg(theme.secondary)
-                        .rounded(px(6.0))
-                        .border_1()
-                        .border_color(theme.border)
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap_2()
-                                .child(
-                                    div()
-                                        .text_color(theme.muted_foreground)
-                                        .child("No routes with loaders registered."),
-                                )
-                                .child(
-                                    div()
-                                        .text_color(theme.muted_foreground)
-                                        .opacity(0.7)
-                                        .text_size(px(11.0))
-                                        .child("Use define_route! with a loader: to enable cache tracking."),
-                                ),
-                        ),
-                );
+            if cache_keys.is_empty() {
+                container =
+                    container.child(
+                        div()
+                            .p_3()
+                            .bg(theme.secondary)
+                            .rounded(px(6.0))
+                            .border_1()
+                            .border_color(theme.border)
+                            .child(div().text_color(theme.muted_foreground).child(
+                                "Cache is empty. Navigate to routes with loaders to populate.",
+                            )),
+                    );
             } else {
                 container = container.child(
                     div()
@@ -1508,12 +1526,9 @@ impl DevtoolsState {
                                     div()
                                         .text_color(theme.muted_foreground)
                                         .text_size(px(11.0))
-                                        .child(format!(
-                                            "{} route(s) with loaders (cache integration pending):",
-                                            loader_routes.len()
-                                        )),
+                                        .child(format!("{} cached item(s)", cache_keys.len())),
                                 )
-                                .children(loader_routes.into_iter().map(|(id, pattern)| {
+                                .children(cache_keys.into_iter().map(|key| {
                                     div()
                                         .flex()
                                         .items_center()
@@ -1524,48 +1539,19 @@ impl DevtoolsState {
                                                 .w(px(8.0))
                                                 .h(px(8.0))
                                                 .rounded_full()
-                                                .bg(theme.warning.opacity(0.5)),
+                                                .bg(theme.success.opacity(0.5)), // Green dot for fresh cache
                                         )
                                         .child(
                                             div()
                                                 .text_color(theme.foreground)
                                                 .text_size(px(11.0))
-                                                .child(id),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_color(theme.muted_foreground)
-                                                .text_size(px(11.0))
-                                                .child(pattern),
+                                                .font_family("monospace")
+                                                .child(key),
                                         )
                                 })),
                         ),
                 );
             }
-
-            container = container.child(
-                div()
-                    .mt_2()
-                    .p_3()
-                    .bg(theme.secondary.opacity(0.5))
-                    .rounded(px(6.0))
-                    .border_1()
-                    .border_color(theme.border.opacity(0.5))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .text_color(theme.muted_foreground)
-                            .opacity(0.6)
-                            .text_size(px(11.0))
-                            .child("Planned features:")
-                            .child("• Per-route cache status (fresh / stale / loading / error)")
-                            .child("• Stale-time & GC-time countdowns")
-                            .child("• Manual cache invalidation per route")
-                            .child("• Cache size statistics"),
-                    ),
-            );
         } else {
             container = container.child(
                 div()
@@ -1599,6 +1585,7 @@ impl DevtoolsState {
             let can_forward = state.history.can_go_forward();
             let blocker_count = state.blockers.len();
             let has_blockers = !state.blockers.is_empty();
+            let is_blocked = state.is_blocked();
 
             let search_str = format_search(&loc.search);
             let search_display = if search_str.is_empty() {
@@ -1606,6 +1593,74 @@ impl DevtoolsState {
             } else {
                 search_str
             };
+
+            if is_blocked {
+                container = container.child(
+                    div()
+                        .p_3()
+                        .bg(theme.warning.opacity(0.15))
+                        .rounded(px(6.0))
+                        .border_1()
+                        .border_color(theme.warning.opacity(0.5))
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .text_color(theme.warning)
+                                                .font_weight(FontWeight::BOLD)
+                                                .text_size(px(12.0))
+                                                .child("⚠ Navigation Blocked"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child(format!(
+                                                    "({} active blocker{}))",
+                                                    blocker_count,
+                                                    if blocker_count > 1 { "s" } else { "" }
+                                                )),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            Button::new("blocker-proceed")
+                                                .label("Proceed")
+                                                .primary()
+                                                .small()
+                                                .on_click(cx.listener(|_, _, _, cx| {
+                                                    RouterState::update(cx, |state, cx| {
+                                                        state.proceed(cx);
+                                                    });
+                                                })),
+                                        )
+                                        .child(
+                                            Button::new("blocker-cancel")
+                                                .label("Cancel Pending")
+                                                .ghost()
+                                                .small()
+                                                .on_click(cx.listener(|_, _, _, cx| {
+                                                    RouterState::update(cx, |state, _cx| {
+                                                        state.reset_block();
+                                                    });
+                                                })),
+                                        ),
+                                ),
+                        ),
+                );
+            }
 
             container = container
                 .child(
@@ -1731,7 +1786,11 @@ impl DevtoolsState {
                                                     theme.muted_foreground
                                                 })
                                                 .text_size(px(11.0))
-                                                .child(blocker_count.to_string()),
+                                                .child(if is_blocked {
+                                                    "Pending".to_string()
+                                                } else {
+                                                    blocker_count.to_string()
+                                                }),
                                         ),
                                 ),
                         ),

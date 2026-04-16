@@ -359,6 +359,7 @@ impl RenderOnce for SettingsPage {
 
 struct BlockerState {
     block: bool,
+    #[allow(dead_code)]
     focus_handle: FocusHandle,
 }
 

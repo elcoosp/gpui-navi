@@ -1,12 +1,12 @@
 use gpui::{
-    App, Context, Entity, EventEmitter, FontWeight, Render, RenderOnce, Size, StyledText,
+    App, Context, Entity, EventEmitter, FontWeight, Pixels, Render, RenderOnce, Size, StyledText,
     Subscription, TextStyle, Window, div, prelude::*, px,
 };
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, VirtualListScrollHandle,
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
-    input::{Input, InputEvent, InputState},
+    input::{Input, InputState},
     scroll::ScrollableElement,
     tab::{Tab, TabBar},
     v_virtual_list,
@@ -34,6 +34,8 @@ pub struct DevtoolsState {
     _subscription: Subscription,
     last_log_len: usize,
     highlight_new_count: usize,
+    panel_width: Pixels,
+    panel_height: Pixels,
 }
 
 impl EventEmitter<()> for DevtoolsState {}
@@ -53,6 +55,8 @@ impl DevtoolsState {
             _subscription: subscription,
             last_log_len: 0,
             highlight_new_count: 0,
+            panel_width: px(550.0),
+            panel_height: px(450.0),
         };
         this.refresh_log(cx);
         this
@@ -90,10 +94,7 @@ impl DevtoolsState {
         } else {
             self.event_log
                 .iter()
-                .filter(|e| {
-                    let event_str = format!("{:?}", e.event).to_lowercase();
-                    event_str.contains(&query)
-                })
+                .filter(|e| format!("{:?}", e.event).to_lowercase().contains(&query))
                 .cloned()
                 .collect()
         }
@@ -242,15 +243,28 @@ impl DevtoolsState {
         self.ensure_timeline_search(window, cx);
         let theme = cx.theme();
         let mut filtered = self.filtered_events(cx);
+        // Compute deltas (chronological order)
+        let mut deltas = Vec::new();
+        if !filtered.is_empty() {
+            deltas.push(0.0);
+            for i in 1..filtered.len() {
+                let delta = filtered[i].timestamp - filtered[i - 1].timestamp;
+                deltas.push(delta.num_milliseconds() as f64);
+            }
+        }
+        // Reverse both (newest first)
         filtered.reverse();
+        deltas.reverse();
+
         let item_count = filtered.len();
         let row_height = px(32.0);
-        let row_width = px(2000.0);
+        let row_width = px(2500.0);
         let item_sizes = Rc::new(vec![Size::new(row_width, row_height); item_count]);
 
         let search_entity = self.timeline_search.clone().unwrap();
         let scroll_handle = self.timeline_scroll_handle.clone();
 
+        // Copy all theme colors (they are Copy)
         let bg_color = theme.background;
         let secondary_color = theme.secondary;
         let muted_fg = theme.muted_foreground;
@@ -259,8 +273,10 @@ impl DevtoolsState {
         let border_color = theme.border;
         let highlight_color = theme.success.opacity(0.25);
         let search_highlight_bg = theme.warning;
+        let warning_color = theme.warning;
 
         let filtered_for_list = filtered.clone();
+        let deltas_for_list = deltas.clone();
         let entity = cx.entity().clone();
         let highlight_count = self.highlight_new_count;
 
@@ -276,11 +292,19 @@ impl DevtoolsState {
             .collect::<Vec<_>>()
             .join("\n");
 
+        // Determine empty state message
+        let empty_message = if self.event_log.is_empty() {
+            "No events recorded yet"
+        } else {
+            "No events match the search"
+        };
+
         div()
             .flex()
             .flex_col()
             .gap_3()
             .size_full()
+            // Header, search input, etc. (unchanged)
             .child(
                 div()
                     .flex()
@@ -324,6 +348,7 @@ impl DevtoolsState {
                     .cleanable(true)
                     .small(),
             )
+            // Content area with conditional rendering
             .child(
                 div()
                     .flex_1()
@@ -331,121 +356,150 @@ impl DevtoolsState {
                     .border_color(border_color)
                     .rounded(px(6.0))
                     .overflow_hidden()
-                    .child(
-                        div().overflow_x_scrollbar().size_full().child(
-                            v_virtual_list(
-                                entity,
-                                "timeline-list",
-                                item_sizes,
-                                move |_view, visible_range, _window, _cx| {
-                                    let events = filtered_for_list.clone();
-                                    let search_query = search_query.clone();
-                                    visible_range
-                                        .map(move |ix| {
-                                            let event = &events[ix];
-                                            let even = ix % 2 == 0;
-                                            let is_new = ix < highlight_count;
-                                            let event_text = format!("{:?}", event.event);
-                                            let text_len = event_text.len();
-                                            let styled_text = if search_query.is_empty() {
-                                                StyledText::new(event_text).with_runs(vec![
-                                                    TextStyle {
-                                                        color: fg_color,
-                                                        ..Default::default()
+                    .child(if filtered.is_empty() {
+                        // Centered empty state message
+                        div()
+                            .size_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(div().text_color(muted_fg).child(empty_message))
+                            .into_any_element()
+                    } else {
+                        // Virtual list with horizontal scroll
+                        div()
+                            .overflow_x_scrollbar()
+                            .size_full()
+                            .child(
+                                v_virtual_list(
+                                    entity,
+                                    "timeline-list",
+                                    item_sizes,
+                                    move |_view, visible_range, _window, _cx| {
+                                        let events = filtered_for_list.clone();
+                                        let deltas = deltas_for_list.clone();
+                                        let search_query = search_query.clone();
+                                        visible_range
+                                            .map(move |ix| {
+                                                let event = &events[ix];
+                                                let delta = deltas[ix];
+                                                let even = ix % 2 == 0;
+                                                let is_new = ix < highlight_count;
+                                                let event_text = format!("{:?}", event.event);
+                                                let text_len = event_text.len();
+
+                                                let styled_text = if search_query.is_empty() {
+                                                    StyledText::new(event_text).with_runs(vec![
+                                                        TextStyle {
+                                                            color: fg_color,
+                                                            ..Default::default()
+                                                        }
+                                                        .to_run(text_len),
+                                                    ])
+                                                } else {
+                                                    let query_lower = search_query.to_lowercase();
+                                                    let text_lower = event_text.to_lowercase();
+                                                    let mut runs = Vec::new();
+                                                    let mut last_end = 0;
+                                                    let mut start = 0;
+
+                                                    while let Some(pos) =
+                                                        text_lower[start..].find(&query_lower)
+                                                    {
+                                                        let abs_pos = start + pos;
+                                                        if abs_pos > last_end {
+                                                            runs.push(
+                                                                TextStyle {
+                                                                    color: fg_color,
+                                                                    ..Default::default()
+                                                                }
+                                                                .to_run(abs_pos - last_end),
+                                                            );
+                                                        }
+                                                        runs.push(
+                                                            TextStyle {
+                                                                color: fg_color,
+                                                                background_color: Some(
+                                                                    search_highlight_bg,
+                                                                ),
+                                                                ..Default::default()
+                                                            }
+                                                            .to_run(query_lower.len()),
+                                                        );
+                                                        last_end = abs_pos + query_lower.len();
+                                                        start = abs_pos + query_lower.len();
                                                     }
-                                                    .to_run(text_len),
-                                                ])
-                                            } else {
-                                                let query_lower = search_query.to_lowercase();
-                                                let text_lower = event_text.to_lowercase();
-                                                let mut runs = Vec::new();
-                                                let mut last_end = 0;
-                                                let mut start = 0;
-                                                while let Some(pos) =
-                                                    text_lower[start..].find(&query_lower)
-                                                {
-                                                    let abs_pos = start + pos;
-                                                    if abs_pos > last_end {
+                                                    if last_end < text_len {
                                                         runs.push(
                                                             TextStyle {
                                                                 color: fg_color,
                                                                 ..Default::default()
                                                             }
-                                                            .to_run(abs_pos - last_end),
+                                                            .to_run(text_len - last_end),
                                                         );
                                                     }
-                                                    runs.push(
-                                                        TextStyle {
-                                                            color: fg_color,
-                                                            background_color: Some(
-                                                                search_highlight_bg,
-                                                            ),
-                                                            ..Default::default()
-                                                        }
-                                                        .to_run(query_lower.len()),
-                                                    );
-                                                    last_end = abs_pos + query_lower.len();
-                                                    start = abs_pos + query_lower.len();
-                                                }
-                                                if last_end < text_len {
-                                                    runs.push(
-                                                        TextStyle {
-                                                            color: fg_color,
-                                                            ..Default::default()
-                                                        }
-                                                        .to_run(text_len - last_end),
-                                                    );
-                                                }
-                                                StyledText::new(event_text).with_runs(runs)
-                                            };
+                                                    StyledText::new(event_text).with_runs(runs)
+                                                };
 
-                                            div()
-                                                .w(row_width)
-                                                .h(row_height)
-                                                .px_3()
-                                                .flex()
-                                                .items_center()
-                                                .gap_3()
-                                                .bg(if is_new {
-                                                    highlight_color
-                                                } else if even {
-                                                    bg_color
-                                                } else {
-                                                    secondary_color.opacity(0.3)
-                                                })
-                                                .hover(|style| {
-                                                    style.bg(secondary_color.opacity(0.6))
-                                                })
-                                                .child(
-                                                    div()
-                                                        .min_w(px(100.0))
-                                                        .text_color(muted_fg)
-                                                        .font_family("monospace")
-                                                        .text_sm()
-                                                        .child(
-                                                            event
-                                                                .timestamp
-                                                                .format("%H:%M:%S%.3f")
-                                                                .to_string(),
-                                                        ),
-                                                )
-                                                .child(div().flex_1().child(styled_text))
-                                        })
-                                        .collect()
-                                },
+                                                div()
+                                                    .w(row_width)
+                                                    .h(row_height)
+                                                    .px_3()
+                                                    .flex()
+                                                    .items_center()
+                                                    .gap_3()
+                                                    .bg(if is_new {
+                                                        highlight_color
+                                                    } else if even {
+                                                        bg_color
+                                                    } else {
+                                                        secondary_color.opacity(0.3)
+                                                    })
+                                                    .hover(|style| {
+                                                        style.bg(secondary_color.opacity(0.6))
+                                                    })
+                                                    .child(
+                                                        div()
+                                                            .min_w(px(80.0))
+                                                            .text_color(muted_fg)
+                                                            .font_family("monospace")
+                                                            .text_sm()
+                                                            .child(
+                                                                event
+                                                                    .timestamp
+                                                                    .format("%H:%M:%S%.3f")
+                                                                    .to_string(),
+                                                            ),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .min_w(px(60.0))
+                                                            .text_right()
+                                                            .text_color(if delta > 100.0 {
+                                                                warning_color
+                                                            } else {
+                                                                muted_fg
+                                                            })
+                                                            .text_sm()
+                                                            .child(if ix == 0 {
+                                                                div().child("—")
+                                                            } else {
+                                                                div().child(format!(
+                                                                    "+{:.0}ms",
+                                                                    delta
+                                                                ))
+                                                            }),
+                                                    )
+                                                    .child(div().flex_1().child(styled_text))
+                                            })
+                                            .collect()
+                                    },
+                                )
+                                .track_scroll(&scroll_handle),
                             )
-                            .track_scroll(&scroll_handle),
-                        ),
-                    ),
+                            .into_any_element()
+                    }),
             )
-            .when(filtered.is_empty(), |d| {
-                d.child(
-                    div()
-                        .p_3()
-                        .text_color(muted_fg)
-                        .child("No events match the search"),
-                )
-            })
     }
 
     fn render_cache_tab(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -538,8 +592,8 @@ impl Render for DevtoolsState {
 
         let theme = cx.theme();
         let viewport = window.viewport_size();
-        let panel_width = px(550.0).min(viewport.width - px(20.0));
-        let panel_height = px(450.0).min(viewport.height - px(20.0));
+        let panel_width = self.panel_width.min(viewport.width - px(20.0));
+        let panel_height = self.panel_height.min(viewport.height - px(20.0));
 
         div()
             .absolute()

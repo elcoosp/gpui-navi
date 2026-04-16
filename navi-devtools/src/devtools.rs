@@ -158,8 +158,13 @@ impl DevtoolsState {
         cx.notify();
     }
 
-    fn toggle_expanded(&mut self, cx: &mut Context<Self>) {
+    fn toggle_expanded(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.expanded = !self.expanded;
+        // When collapsing, force focus onto the small button
+        // so the "Devtools" key_context stays active for the shortcut.
+        if !self.expanded {
+            self.focus_handle.focus(window, cx);
+        }
         cx.notify();
     }
 
@@ -673,15 +678,26 @@ impl DevtoolsState {
 impl Render for DevtoolsState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.expanded {
-            return Button::new("devtools-toggle")
-                .icon(IconName::Info)
-                .rounded_full()
-                .size(px(40.0))
-                .shadow_md()
+            return div()
                 .absolute()
                 .bottom_3()
                 .right_3()
-                .on_click(cx.listener(|this, _, _, cx| this.toggle_expanded(cx)))
+                .track_focus(&self.focus_handle)
+                .key_context("Devtools")
+                .on_action(cx.listener(|this, _: &ToggleDevtools, window, cx| {
+                    this.toggle_expanded(window, cx);
+                }))
+                .child(
+                    Button::new("devtools-toggle")
+                        .icon(IconName::Info)
+                        .ghost()
+                        .rounded_full()
+                        .size(px(40.0))
+                        .shadow_md()
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.toggle_expanded(window, cx);
+                        })),
+                )
                 .into_any_element();
         }
 
@@ -707,8 +723,8 @@ impl Render for DevtoolsState {
             .overflow_hidden()
             .track_focus(&self.focus_handle)
             .key_context("Devtools")
-            .on_action(cx.listener(|this, _: &ToggleDevtools, _window, cx| {
-                this.toggle_expanded(cx);
+            .on_action(cx.listener(|this, _: &ToggleDevtools, window, cx| {
+                this.toggle_expanded(window, cx);
             }))
             .child(
                 div()
@@ -734,7 +750,9 @@ impl Render for DevtoolsState {
                             .icon(IconName::Close)
                             .ghost()
                             .small()
-                            .on_click(cx.listener(|this, _, _, cx| this.toggle_expanded(cx))),
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.toggle_expanded(window, cx);
+                            })),
                     ),
             )
             .child(

@@ -1,6 +1,6 @@
 use gpui::{
-    App, Context, Entity, EventEmitter, FocusHandle, FontWeight, KeyBinding, Render, RenderOnce,
-    Size, StyledText, Subscription, TextStyle, Window, actions, div, prelude::*, px,
+    App, Context, Entity, EventEmitter, FocusHandle, FontWeight, Hsla, KeyBinding, Render, Size,
+    StyledText, Subscription, TextStyle, Window, actions, div, prelude::*, px,
 };
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, VirtualListScrollHandle,
@@ -65,18 +65,6 @@ impl RouterEventType {
             Self::Rendered => "Rendered",
         }
     }
-
-    fn badge(&self) -> &'static str {
-        match self {
-            Self::All => "ALL",
-            Self::BeforeNavigate => "NAV",
-            Self::BeforeLoad => "BLD",
-            Self::Load => "LOAD",
-            Self::BeforeRouteMount => "MNT",
-            Self::Resolved => "OK",
-            Self::Rendered => "REN",
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -85,6 +73,89 @@ pub enum DevtoolsTab {
     Cache,
     Timeline,
     State,
+}
+
+/// Render-friendly representation of a router event for the timeline.
+#[derive(Clone)]
+struct EventDisplay {
+    timestamp_str: String,
+    badge: &'static str,
+    badge_color: Hsla,
+    text: String,
+}
+
+/// Format a `RouterEvent` into a searchable, human-readable string.
+fn format_event_text(event: &RouterEvent) -> String {
+    match event {
+        RouterEvent::BeforeNavigate { from, to } => {
+            let from_path = from.as_ref().map(|l| l.pathname.as_str()).unwrap_or("?");
+            format!("{} → {}", from_path, to.pathname)
+        }
+        RouterEvent::BeforeLoad { to, .. }
+        | RouterEvent::Load { to, .. }
+        | RouterEvent::BeforeRouteMount { to, .. }
+        | RouterEvent::Resolved { to, .. }
+        | RouterEvent::Rendered { to, .. } => to.pathname.clone(),
+    }
+}
+
+/// Build a full `EventDisplay` with badge metadata and formatted text.
+fn build_event_display(
+    event: &RouterEvent,
+    timestamp_str: String,
+    colors: &EventColors,
+) -> EventDisplay {
+    match event {
+        RouterEvent::BeforeNavigate { from, to } => {
+            let from_path = from
+                .as_ref()
+                .map(|l| l.pathname.clone())
+                .unwrap_or_else(|| "?".to_string());
+            EventDisplay {
+                timestamp_str,
+                badge: "NAV",
+                badge_color: colors.primary,
+                text: format!("{} → {}", from_path, to.pathname),
+            }
+        }
+        RouterEvent::BeforeLoad { to, .. } => EventDisplay {
+            timestamp_str,
+            badge: "BLD",
+            badge_color: colors.warning,
+            text: to.pathname.clone(),
+        },
+        RouterEvent::Load { to, .. } => EventDisplay {
+            timestamp_str,
+            badge: "LOAD",
+            badge_color: colors.warning,
+            text: to.pathname.clone(),
+        },
+        RouterEvent::BeforeRouteMount { to, .. } => EventDisplay {
+            timestamp_str,
+            badge: "MNT",
+            badge_color: colors.info,
+            text: to.pathname.clone(),
+        },
+        RouterEvent::Resolved { to, .. } => EventDisplay {
+            timestamp_str,
+            badge: "OK",
+            badge_color: colors.success,
+            text: to.pathname.clone(),
+        },
+        RouterEvent::Rendered { to, .. } => EventDisplay {
+            timestamp_str,
+            badge: "REN",
+            badge_color: colors.info,
+            text: to.pathname.clone(),
+        },
+    }
+}
+
+struct EventColors {
+    primary: Hsla,
+    success: Hsla,
+    warning: Hsla,
+    info: Hsla,
 }
 
 pub struct DevtoolsState {
@@ -188,7 +259,7 @@ impl DevtoolsState {
                 (self.filter_event_type == RouterEventType::All
                     || event_type == self.filter_event_type)
                     && (query.is_empty()
-                        || format!("{:?}", e.event).to_lowercase().contains(&query))
+                        || format_event_text(&e.event).to_lowercase().contains(&query))
             })
             .cloned()
             .collect()
@@ -604,6 +675,13 @@ impl DevtoolsState {
         self.ensure_timeline_search(window, cx);
 
         let theme = cx.theme();
+        let colors = EventColors {
+            primary: theme.primary,
+            success: theme.success,
+            warning: theme.warning,
+            info: theme.info,
+        };
+
         let mut filtered = self.filtered_events(cx);
         let mut deltas = Vec::new();
         if !filtered.is_empty() {
@@ -615,6 +693,17 @@ impl DevtoolsState {
         }
         filtered.reverse();
         deltas.reverse();
+
+        let event_displays: Vec<EventDisplay> = filtered
+            .iter()
+            .map(|e| {
+                build_event_display(
+                    &e.event,
+                    e.timestamp.format("%H:%M:%S%.3f").to_string(),
+                    &colors,
+                )
+            })
+            .collect();
 
         let item_count = filtered.len();
         let row_height = px(32.0);
@@ -634,8 +723,8 @@ impl DevtoolsState {
         let search_highlight_bg = theme.warning;
         let warning_color = theme.warning;
 
-        let filtered_for_list = filtered.clone();
-        let deltas_for_list = deltas.clone();
+        let displays_for_list = event_displays;
+        let deltas_for_list = deltas;
         let entity = cx.entity().clone();
         let highlight_count = self.highlight_new_count;
 
@@ -645,9 +734,9 @@ impl DevtoolsState {
             .map(|s| s.read(cx).value())
             .unwrap_or_default();
 
-        let copy_all_text = filtered
+        let copy_all_text = displays_for_list
             .iter()
-            .map(|e| format!("[{}] {:?}", e.timestamp.format("%H:%M:%S%.3f"), e.event))
+            .map(|d| format!("[{}] {}", d.badge, d.text))
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -756,7 +845,7 @@ impl DevtoolsState {
                     .border_color(border_color)
                     .rounded(px(6.0))
                     .overflow_hidden()
-                    .child(if filtered.is_empty() {
+                    .child(if displays_for_list.is_empty() {
                         let empty_msg = if self.event_log.is_empty() {
                             "No events recorded yet"
                         } else {
@@ -779,26 +868,28 @@ impl DevtoolsState {
                                     "timeline-list",
                                     item_sizes,
                                     move |_view, visible_range, _window, _cx| {
-                                        let events = filtered_for_list.clone();
+                                        let displays = displays_for_list.clone();
                                         let deltas = deltas_for_list.clone();
                                         let search_query = search_query.clone();
                                         visible_range
                                             .map(move |ix| {
-                                                let event = &events[ix];
+                                                let display = &displays[ix];
                                                 let delta = deltas[ix];
                                                 let even = ix % 2 == 0;
                                                 let is_new = ix < highlight_count;
-                                                let event_text = format!("{:?}", event.event);
+                                                let event_text = &display.text;
                                                 let text_len = event_text.len();
 
                                                 let styled_text = if search_query.is_empty() {
-                                                    StyledText::new(event_text).with_runs(vec![
-                                                        TextStyle {
-                                                            color: fg_color,
-                                                            ..Default::default()
-                                                        }
-                                                        .to_run(text_len),
-                                                    ])
+                                                    StyledText::new(event_text.clone()).with_runs(
+                                                        vec![
+                                                            TextStyle {
+                                                                color: fg_color,
+                                                                ..Default::default()
+                                                            }
+                                                            .to_run(text_len),
+                                                        ],
+                                                    )
                                                 } else {
                                                     let query_lower = search_query.to_lowercase();
                                                     let text_lower = event_text.to_lowercase();
@@ -841,7 +932,14 @@ impl DevtoolsState {
                                                             .to_run(text_len - last_end),
                                                         );
                                                     }
-                                                    StyledText::new(event_text).with_runs(runs)
+                                                    StyledText::new(event_text.clone())
+                                                        .with_runs(runs)
+                                                };
+
+                                                let delta_text: String = if ix == 0 {
+                                                    "—".to_string()
+                                                } else {
+                                                    format!("+{:.0}ms", delta)
                                                 };
 
                                                 div()
@@ -866,32 +964,28 @@ impl DevtoolsState {
                                                             .min_w(px(80.0))
                                                             .text_color(muted_fg)
                                                             .font_family("monospace")
-                                                            .text_sm()
-                                                            .child(
-                                                                event
-                                                                    .timestamp
-                                                                    .format("%H:%M:%S%.3f")
-                                                                    .to_string(),
-                                                            ),
+                                                            .text_size(px(11.0))
+                                                            .child(display.timestamp_str.clone()),
                                                     )
                                                     .child(
                                                         div()
-                                                            .min_w(px(60.0))
+                                                            .min_w(px(36.0))
+                                                            .text_color(display.badge_color)
+                                                            .font_weight(FontWeight::BOLD)
+                                                            .text_size(px(10.0))
+                                                            .child(display.badge),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .min_w(px(56.0))
                                                             .text_right()
                                                             .text_color(if delta > 100.0 {
                                                                 warning_color
                                                             } else {
                                                                 muted_fg
                                                             })
-                                                            .text_sm()
-                                                            .child(if ix == 0 {
-                                                                div().child("—")
-                                                            } else {
-                                                                div().child(format!(
-                                                                    "+{:.0}ms",
-                                                                    delta
-                                                                ))
-                                                            }),
+                                                            .text_size(px(10.0))
+                                                            .child(delta_text),
                                                     )
                                                     .child(div().flex_1().child(styled_text))
                                             })

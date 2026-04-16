@@ -1,6 +1,7 @@
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;
+use gpui_component::scroll::ScrollableElement;
 use gpui_component_assets::Assets;
 use navi_devtools::DevtoolsState;
 use navi_macros::{define_route, use_loader_data, use_search};
@@ -57,10 +58,50 @@ impl RenderOnce for HomePage {
             .flex()
             .flex_col()
             .items_center()
-            .justify_center()
-            .gap_4()
-            .child("🏠 Welcome to Navi Router!")
-            .child("This demo showcases nested layouts, dynamic routes, loaders, and more.")
+            .overflow_y_scrollbar()
+            .gap_6()
+            .p_8()
+            .child(
+                div()
+                    .text_xl()
+                    .font_weight(FontWeight::BOLD)
+                    .child("🏠 Welcome to Navi Router!"),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(0xa6adc8))
+                    .child("This demo showcases nested layouts, dynamic routes, loaders, and more."),
+            )
+            .child(
+                div()
+                    .max_w(px(600.0))
+                    .flex()
+                    .flex_col()
+                    .gap_4()
+                    .text_color(rgb(0xbac2de))
+                    .child(
+                        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+                    )
+                    .child(
+                        "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+                    )
+                    .child(
+                        "Curabitur pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius, turpis et commodo pharetra, est eros bibendum elit, nec luctus magna felis sollicitudin mauris. Integer in mauris eu nibh euismod gravida."
+                    )
+                    .child(
+                        "Duis ac tellus et risus vulputate vehicula. Donec lobortis risus a elit. Etiam tempor. Ut ullamcorper, ligula ut dictum pharetra, nisi nunc fringilla magna, in commodo elit erat nec turpis. Ut pharetra augue nec augue."
+                    )
+                    .child(
+                        "Nam dui ligula, fringilla a, euismod sodales, sollicitudin vel, wisi. Morbi auctor lorem non justo. Nam lacus libero, pretium at, lobortis vitae, ultricies et, tellus. Donec aliquet, tortor sed accumsan bibendum, erat ligula aliquet magna, vitae ornare odio metus a mi."
+                    )
+                    .child(
+                        "Morbi ac orci et nisl hendrerit mollis. Suspendisse ut massa. Cras nec ante. Pellentesque a nulla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aliquam tincidunt urna."
+                    )
+                    .child(
+                        "Nulla ullamcorper vestibulum turpis. Pellentesque cursus luctus mauris. Nulla malesuada porttitor diam. Donec felis erat, congue non, volutpat at, tincidunt tristique, libero. Vivamus viverra fermentum felis."
+                    )
+            )
     }
 }
 

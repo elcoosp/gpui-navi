@@ -274,7 +274,7 @@ pub struct DevtoolsState {
     filter_event_type: RouterEventType,
     focus_handle: FocusHandle,
     nav_input: Option<Entity<InputState>>,
-    tree_search: Option<Entity<InputState>>, // NEW
+    tree_search: Option<Entity<InputState>>,
     selected_event_detail: Option<EventDetail>,
 }
 
@@ -337,7 +337,7 @@ impl DevtoolsState {
             filter_event_type: RouterEventType::All,
             focus_handle: cx.focus_handle(),
             nav_input: None,
-            tree_search: None, // NEW
+            tree_search: None,
             selected_event_detail: None,
         };
         this.refresh_log(cx);
@@ -366,7 +366,6 @@ impl DevtoolsState {
         }
     }
 
-    // NEW: Tree search input initializer
     fn ensure_tree_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.tree_search.is_none() {
             let state = cx.new(|cx| {
@@ -459,14 +458,14 @@ impl DevtoolsState {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         self.ensure_nav_input(window, cx);
-        self.ensure_tree_search(window, cx); // NEW
+        self.ensure_tree_search(window, cx);
 
         let theme = cx.theme();
         let state = RouterState::try_global(cx);
         let mut container = div().gap_3().flex().flex_col();
 
         let window_handle_for_tree: AnyWindowHandle = window.window_handle().into();
-        let tree_search_entity = self.tree_search.clone().unwrap(); // NEW
+        let tree_search_entity = self.tree_search.clone().unwrap();
 
         if let Some(state) = state {
             let loc = state.current_location();
@@ -775,7 +774,6 @@ impl DevtoolsState {
                     }),
             );
 
-            // --- NEW: Route Tree Search Input ---
             container = container.child(
                 Input::new(&tree_search_entity)
                     .prefix(Icon::new(IconName::Search))
@@ -783,10 +781,8 @@ impl DevtoolsState {
                     .small(),
             );
 
-            // --- Full Route Tree ---
             let mut sorted_nodes: Vec<(String, String, bool, bool, bool, usize)> = node_infos
                 .iter()
-                // NEW: Filter based on tree search input
                 .filter(|(id, pattern, _, _, _, _)| {
                     let query = tree_search_entity.read(cx).value().to_lowercase();
                     query.is_empty()
@@ -1019,6 +1015,20 @@ impl DevtoolsState {
         let json_log = serde_json::to_string_pretty(&self.event_log)
             .unwrap_or_else(|_| "Failed to serialize log".to_string());
 
+        let avg_delta = if deltas_for_list.is_empty() {
+            0.0
+        } else {
+            deltas_for_list.iter().sum::<f64>() / deltas_for_list.len() as f64
+        };
+        let max_delta = deltas_for_list.iter().fold(0.0_f64, |a, b| a.max(*b));
+        let slowest_color = if max_delta > 500.0 {
+            theme.danger
+        } else if max_delta > 100.0 {
+            theme.warning
+        } else {
+            theme.muted_foreground
+        };
+
         div()
             .flex()
             .flex_col()
@@ -1044,6 +1054,30 @@ impl DevtoolsState {
                             .flex()
                             .items_center()
                             .gap_2()
+                            .child(
+                                Button::new("hist-back")
+                                    .icon(IconName::ArrowLeft)
+                                    .ghost()
+                                    .small()
+                                    .tooltip("History Back")
+                                    .on_click(cx.listener(|_, _, _, cx| {
+                                        RouterState::update(cx, |state, _cx| {
+                                            state.history.back();
+                                        });
+                                    })),
+                            )
+                            .child(
+                                Button::new("hist-forward")
+                                    .icon(IconName::ArrowRight)
+                                    .ghost()
+                                    .small()
+                                    .tooltip("History Forward")
+                                    .on_click(cx.listener(|_, _, _, cx| {
+                                        RouterState::update(cx, |state, _cx| {
+                                            state.history.forward();
+                                        });
+                                    })),
+                            )
                             .child(
                                 Button::new("filter-button")
                                     .label(format!("Filter: {}", self.filter_event_type.label()))
@@ -1129,6 +1163,50 @@ impl DevtoolsState {
                     .prefix(Icon::new(IconName::Search))
                     .cleanable(true)
                     .small(),
+            )
+            .child(
+                div()
+                    .px_2()
+                    .py_1()
+                    .bg(theme.secondary.opacity(0.5))
+                    .rounded(px(4.0))
+                    .border_1()
+                    .border_color(theme.border.opacity(0.5))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .gap_3()
+                            .child(
+                                div()
+                                    .text_size(px(10.0))
+                                    .text_color(theme.muted_foreground)
+                                    .child(format!("Total: {}", self.event_log.len())),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.0))
+                                    .text_color(if avg_delta > 100.0 {
+                                        theme.warning
+                                    } else {
+                                        theme.muted_foreground
+                                    })
+                                    .child(format!("Avg: {:.1}ms", avg_delta)),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(10.0))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(slowest_color)
+                            .child(if max_delta > 0.0 {
+                                format!("Slowest: {:.0}ms", max_delta)
+                            } else {
+                                "Slowest: —".to_string()
+                            }),
+                    ),
             )
             .child(
                 div()
@@ -1253,7 +1331,6 @@ impl DevtoolsState {
                                                 } else {
                                                     None
                                                 };
-
                                                 div()
                                                     .w(row_width)
                                                     .h(row_height)
@@ -1261,7 +1338,6 @@ impl DevtoolsState {
                                                     .flex()
                                                     .items_center()
                                                     .gap_3()
-                                                    .cursor_pointer()
                                                     .bg(if is_selected {
                                                         primary_bg
                                                     } else if is_new {
@@ -1273,21 +1349,6 @@ impl DevtoolsState {
                                                     })
                                                     .hover(|style| {
                                                         style.bg(secondary_color.opacity(0.6))
-                                                    })
-                                                    .on_mouse_down(MouseButton::Left, {
-                                                        let entity = entity_inner.clone();
-                                                        let displays = displays_for_click.clone();
-                                                        move |_event, _window, cx| {
-                                                            if let Some(display) = displays.get(ix)
-                                                            {
-                                                                entity.update(cx, |state, cx| {
-                                                                    state.select_event(
-                                                                        display.detail.clone(),
-                                                                        cx,
-                                                                    );
-                                                                });
-                                                            }
-                                                        }
                                                     })
                                                     .child(
                                                         div()
@@ -1320,6 +1381,37 @@ impl DevtoolsState {
                                                     .child(
                                                         div().overflow_hidden().child(styled_text),
                                                     )
+                                                    // Dedicated select button (icon) to show event detail
+                                                    .child(
+                                                        Button::new(("select-event", ix))
+                                                            .icon(IconName::Info)
+                                                            .ghost()
+                                                            .xsmall()
+                                                            .tooltip("Show event details")
+                                                            .on_click({
+                                                                let entity = entity_inner.clone();
+                                                                let displays =
+                                                                    displays_for_click.clone();
+                                                                move |_, _window, cx| {
+                                                                    if let Some(display) =
+                                                                        displays.get(ix)
+                                                                    {
+                                                                        entity.update(
+                                                                            cx,
+                                                                            |state, cx| {
+                                                                                state.select_event(
+                                                                                    display
+                                                                                        .detail
+                                                                                        .clone(),
+                                                                                    cx,
+                                                                                );
+                                                                            },
+                                                                        );
+                                                                    }
+                                                                }
+                                                            }),
+                                                    )
+                                                    // Jump button (only for REN events)
                                                     .when(is_rendered, |d| {
                                                         let path = jump_path.clone().unwrap();
                                                         let window_handle =
@@ -1493,7 +1585,6 @@ impl DevtoolsState {
         );
 
         if let Some(state) = state {
-            // Extract actual keys from the active loader cache
             let cache_keys: Vec<String> = state.loader_cache.keys().cloned().collect();
 
             if cache_keys.is_empty() {
@@ -1539,7 +1630,7 @@ impl DevtoolsState {
                                                 .w(px(8.0))
                                                 .h(px(8.0))
                                                 .rounded_full()
-                                                .bg(theme.success.opacity(0.5)), // Green dot for fresh cache
+                                                .bg(theme.success.opacity(0.5)),
                                         )
                                         .child(
                                             div()
@@ -1937,7 +2028,7 @@ impl Render for DevtoolsState {
             .right_0()
             .w(panel_width)
             .h(panel_height)
-            .bg(theme.background)
+            .bg(theme.background.opacity(0.95))
             .text_color(theme.foreground)
             .border_1()
             .border_color(theme.border)

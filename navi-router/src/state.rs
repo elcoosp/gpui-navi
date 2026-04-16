@@ -1,4 +1,5 @@
 use crate::blocker::{Blocker, BlockerId};
+use crate::event_bus::push_event;
 use crate::history::History;
 use crate::loader::{LoaderRegistry, LoaderTask};
 use crate::location::{Location, NavigateOptions, ViewTransitionOptions};
@@ -121,10 +122,13 @@ impl RouterState {
             }
         }
 
-        self.emit(RouterEvent::BeforeNavigate {
-            from: Some(self.current_location()),
-            to: loc.clone(),
-        });
+        push_event(
+            RouterEvent::BeforeNavigate {
+                from: Some(self.current_location()),
+                to: loc.clone(),
+            },
+            cx,
+        );
 
         self.current_match = self
             .route_tree

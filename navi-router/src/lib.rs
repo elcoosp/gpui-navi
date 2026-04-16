@@ -1,5 +1,6 @@
 pub mod blocker;
 pub mod components;
+pub mod event_bus;
 pub mod history;
 pub mod loader;
 pub mod location;

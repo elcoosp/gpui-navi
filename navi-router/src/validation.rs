@@ -170,18 +170,6 @@ where
     }
 }
 
-fn obj_to_query(obj: &serde_json::Map<String, serde_json::Value>) -> HashMap<String, String> {
-    obj.iter()
-        .filter_map(|(k, v)| {
-            if v.is_string() {
-                Some((k.clone(), v.as_str().unwrap().to_string()))
-            } else {
-                Some((k.clone(), v.to_string()))
-            }
-        })
-        .collect()
-}
-
 pub trait SearchMiddleware: Send + Sync {
     fn transform(&self, search: serde_json::Value) -> serde_json::Value;
 }

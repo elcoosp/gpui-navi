@@ -21,6 +21,7 @@ impl RouterProvider {
         route_tree: RouteTree,
         cx: &mut App,
     ) -> Self {
+        crate::event_bus::init_event_log(cx);
         log::info!(
             "RouterProvider::new: initializing context for window {:?}",
             window_id

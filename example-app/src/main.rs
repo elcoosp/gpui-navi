@@ -1,6 +1,6 @@
 use gpui::prelude::*;
-
 use gpui::*;
+use gpui_component::Root;
 use gpui_component_assets::Assets;
 use navi_devtools::DevtoolsState;
 use navi_macros::{define_route, use_loader_data, use_search};
@@ -468,9 +468,9 @@ mod garde_test {
     #[garde(allow_unvalidated)]
     pub struct GardeSearch {
         #[garde(range(min = 1, max = 100))]
-        pub page: Option<u32>, // 数字类型，匹配 range 验证
+        pub page: Option<u32>,
         #[garde(length(min = 1, max = 10))]
-        pub sort: Option<String>, // 字符串类型，匹配 length 验证
+        pub sort: Option<String>,
     }
 
     define_route!(
@@ -495,7 +495,7 @@ mod garde_test {
                     validated.page, validated.sort
                 ))
                 .child(
-                    Link::new("/validation-test/garde?page=50&sort=desc") // 修正 sort 值
+                    Link::new("/validation-test/garde?page=50&sort=desc")
                         .child("Valid params (page=50, sort=desc)"),
                 )
                 .child(
@@ -642,14 +642,18 @@ struct AppView {
     router_provider: RouterProvider,
     devtools: Entity<DevtoolsState>,
 }
+
 impl Render for AppView {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         log::debug!("AppView rendered");
         div()
             .size_full()
             .relative()
             .child(self.router_provider.clone().child(RootLayout))
             .child(self.devtools.clone())
+            .children(Root::render_dialog_layer(window, cx))
+            .children(Root::render_sheet_layer(window, cx))
+            .children(Root::render_notification_layer(window, cx))
     }
 }
 
@@ -838,7 +842,7 @@ fn main() {
                 tree.add_route(node);
             }
 
-            let devtools = cx.new(|_cx| DevtoolsState::new());
+            let devtools = cx.new(|cx| DevtoolsState::new(cx));
 
             log::info!("Opening window");
             cx.open_window(
@@ -867,7 +871,8 @@ fn main() {
 
                     RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
 
-                    root_view
+                    // Wrap the root view with Root and provide window + cx
+                    cx.new(|cx| Root::new(root_view, window, cx))
                 },
             )
             .unwrap();

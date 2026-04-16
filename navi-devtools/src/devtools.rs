@@ -1,10 +1,17 @@
-use gpui::{prelude::*, *};
-use gpui_component::{
-    Icon, IconName, Sizable,
-    button::{Button, ButtonVariants as _},
-    scroll::ScrollableElement,
+use gpui::{
+    App, Context, Entity, EventEmitter, FontWeight, MouseButton, Render, RenderOnce, Size,
+    Subscription, Window, div, prelude::*, px,
 };
-use navi_router::{RouterEvent, RouterState};
+use gpui_component::{
+    ActiveTheme, Icon, IconName, Sizable, VirtualListScrollHandle,
+    button::{Button, ButtonVariants},
+    input::{Input, InputEvent, InputState},
+    scroll::ScrollableElement,
+    tab::{Tab, TabBar},
+    v_virtual_list,
+};
+use navi_router::{RouterState, event_bus};
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DevtoolsTab {
@@ -18,26 +25,73 @@ pub struct DevtoolsState {
     expanded: bool,
     selected_tab: DevtoolsTab,
     event_log: Vec<crate::timeline::LoggedEvent>,
+    timeline_search: Option<Entity<InputState>>,
+    timeline_scroll_handle: VirtualListScrollHandle,
+    _subscription: Subscription,
 }
 
 impl EventEmitter<()> for DevtoolsState {}
 
 impl DevtoolsState {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let subscription = cx.observe_global::<RouterState>(move |this, cx| {
+            this.refresh_log(cx);
+        });
+
+        let mut this = Self {
             expanded: true,
             selected_tab: DevtoolsTab::Routes,
             event_log: Vec::new(),
+            timeline_search: None,
+            timeline_scroll_handle: VirtualListScrollHandle::new(),
+            _subscription: subscription,
+        };
+        this.refresh_log(cx);
+        this
+    }
+
+    fn ensure_timeline_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.timeline_search.is_none() {
+            let state = cx.new(|cx| {
+                let mut s = InputState::new(window, cx);
+                s.set_placeholder("Search events...", window, cx);
+                s
+            });
+            cx.subscribe::<InputState, InputEvent>(&state, |_, _, _event, cx| {
+                cx.notify();
+            })
+            .detach();
+            self.timeline_search = Some(state);
         }
     }
 
-    pub fn add_event(&mut self, event: RouterEvent, cx: &mut Context<Self>) {
-        self.event_log
-            .push(crate::timeline::LoggedEvent::new(event));
-        if self.event_log.len() > 100 {
-            self.event_log.remove(0);
-        }
+    fn refresh_log(&mut self, cx: &mut Context<Self>) {
+        let events = event_bus::get_event_log(cx);
+        self.event_log = events
+            .into_iter()
+            .map(crate::timeline::LoggedEvent::new)
+            .collect();
         cx.notify();
+    }
+
+    fn filtered_events(&self, cx: &App) -> Vec<crate::timeline::LoggedEvent> {
+        let query = self
+            .timeline_search
+            .as_ref()
+            .map(|s| s.read(cx).value().to_lowercase())
+            .unwrap_or_default();
+        if query.is_empty() {
+            self.event_log.clone()
+        } else {
+            self.event_log
+                .iter()
+                .filter(|e| {
+                    let event_str = format!("{:?}", e.event).to_lowercase();
+                    event_str.contains(&query)
+                })
+                .cloned()
+                .collect()
+        }
     }
 
     fn set_selected_tab(&mut self, tab: DevtoolsTab, cx: &mut Context<Self>) {
@@ -45,223 +99,44 @@ impl DevtoolsState {
         cx.notify();
     }
 
-    #[allow(dead_code)]
     fn toggle_expanded(&mut self, cx: &mut Context<Self>) {
         self.expanded = !self.expanded;
         cx.notify();
     }
-}
 
-impl Render for DevtoolsState {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if !self.expanded {
-            return div();
+    fn tab_index(&self) -> usize {
+        match self.selected_tab {
+            DevtoolsTab::Routes => 0,
+            DevtoolsTab::Cache => 1,
+            DevtoolsTab::Timeline => 2,
+            DevtoolsTab::State => 3,
         }
-
-        // Fixed dark theme colors
-        let bg: Hsla = rgb(0x1e1e2e).into();
-        let fg: Hsla = rgb(0xcdd6f4).into();
-        let secondary_bg: Hsla = rgb(0x313244).into();
-        let border_color: Hsla = rgb(0x45475a).into();
-        let primary: Hsla = rgb(0x89b4fa).into();
-        let success: Hsla = rgb(0xa6e3a1).into();
-        let warning: Hsla = rgb(0xf9e2af).into();
-        let info: Hsla = rgb(0x89dceb).into();
-        let muted_fg: Hsla = rgb(0x9399b2).into();
-
-        let viewport = window.viewport_size();
-        let panel_width = px(550.0).min(viewport.width - px(20.0));
-        let panel_height = px(450.0).min(viewport.height - px(20.0));
-
-        div()
-            .absolute()
-            .bottom_0()
-            .right_0()
-            .w(panel_width)
-            .h(panel_height)
-            .bg(bg)
-            .text_color(fg)
-            .border_1()
-            .border_color(border_color)
-            .rounded_tl(px(8.0))
-            .shadow_lg()
-            .flex()
-            .flex_col()
-            .overflow_hidden()
-            .child(
-                // Header
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px_2()
-                    .py_1()
-                    .bg(secondary_bg)
-                    .border_b_1()
-                    .border_color(border_color)
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(Icon::new(IconName::Info))
-                            .child(" Devtools"),
-                    )
-                    .child(
-                        Button::new("close-devtools")
-                            .ghost()
-                            .xsmall()
-                            .icon(Icon::new(IconName::Close))
-                            .on_click(cx.listener(
-                                |this: &mut Self, _event: &gpui::ClickEvent, _window, cx| {
-                                    this.toggle_expanded(cx);
-                                },
-                            )),
-                    ),
-            )
-            .child(
-                // Custom tab bar
-                div()
-                    .flex()
-                    .border_b_1()
-                    .border_color(border_color)
-                    .child(self.render_tab_button(
-                        DevtoolsTab::Routes,
-                        "Routes",
-                        IconName::Folder,
-                        primary,
-                        fg,
-                        cx,
-                    ))
-                    .child(self.render_tab_button(
-                        DevtoolsTab::Cache,
-                        "Cache",
-                        IconName::Inbox,
-                        primary,
-                        fg,
-                        cx,
-                    ))
-                    .child(self.render_tab_button(
-                        DevtoolsTab::Timeline,
-                        "Timeline",
-                        IconName::Calendar,
-                        primary,
-                        fg,
-                        cx,
-                    ))
-                    .child(self.render_tab_button(
-                        DevtoolsTab::State,
-                        "State",
-                        IconName::Settings,
-                        primary,
-                        fg,
-                        cx,
-                    )),
-            )
-            .child(
-                // Scrollable content area
-                div()
-                    .flex_1()
-                    .p_3()
-                    .pb_6()
-                    .child(match self.selected_tab {
-                        DevtoolsTab::Routes => self.render_routes_tab(
-                            fg,
-                            secondary_bg,
-                            border_color,
-                            primary,
-                            success,
-                            warning,
-                            info,
-                            cx,
-                        ),
-                        DevtoolsTab::Cache => self.render_cache_tab(info, muted_fg),
-                        DevtoolsTab::Timeline => {
-                            self.render_timeline_tab(fg, border_color, info, muted_fg)
-                        }
-                        DevtoolsTab::State => {
-                            self.render_state_tab(fg, secondary_bg, border_color, info, warning, cx)
-                        }
-                    })
-                    .overflow_y_scrollbar(),
-            )
-    }
-}
-
-impl DevtoolsState {
-    fn render_tab_button(
-        &self,
-        tab: DevtoolsTab,
-        label: &'static str,
-        icon: IconName,
-        primary: Hsla,
-        fg: Hsla,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let is_selected = self.selected_tab == tab;
-        div()
-            .px_3()
-            .py_1()
-            .cursor_pointer()
-            .bg(if is_selected {
-                primary.opacity(0.15)
-            } else {
-                Hsla::transparent_black()
-            })
-            .border_b_2()
-            .border_color(if is_selected {
-                primary
-            } else {
-                Hsla::transparent_black()
-            })
-            .hover(|style| {
-                style.bg(if is_selected {
-                    primary.opacity(0.2)
-                } else {
-                    fg.opacity(0.1)
-                })
-            })
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .text_color(if is_selected { primary } else { fg })
-                    .child(Icon::new(icon))
-                    .child(label),
-            )
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(move |this: &mut Self, _event, _window, cx| {
-                    this.set_selected_tab(tab, cx);
-                }),
-            )
     }
 
-    fn render_routes_tab(
-        &self,
-        _fg: Hsla,
-        secondary_bg: Hsla,
-        border_color: Hsla,
-        primary: Hsla,
-        success: Hsla,
-        warning: Hsla,
-        info: Hsla,
-        cx: &mut Context<Self>,
-    ) -> Div {
+    fn tab_from_index(&self, idx: usize) -> DevtoolsTab {
+        match idx {
+            0 => DevtoolsTab::Routes,
+            1 => DevtoolsTab::Cache,
+            2 => DevtoolsTab::Timeline,
+            3 => DevtoolsTab::State,
+            _ => DevtoolsTab::Routes,
+        }
+    }
+
+    fn render_routes_tab(&self, cx: &Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let state = RouterState::try_global(cx);
-        let mut container = div().gap_2().flex().flex_col();
+
+        let mut container = div().gap_3().flex().flex_col();
 
         if let Some(state) = state {
-            let current_location = state.current_location();
-
             container = container.child(
                 div()
                     .p_3()
-                    .bg(secondary_bg)
+                    .bg(theme.secondary)
                     .rounded(px(6.0))
                     .border_1()
-                    .border_color(border_color)
+                    .border_color(theme.border)
                     .child(
                         div()
                             .flex()
@@ -272,35 +147,34 @@ impl DevtoolsState {
                                     .flex()
                                     .items_center()
                                     .gap_1()
-                                    .text_color(primary)
+                                    .text_color(theme.primary)
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(Icon::new(IconName::Map))
                                     .child("Current Location"),
                             )
-                            .child(format!("Path: {}", current_location.pathname))
-                            .child(format!("Search: {:?}", current_location.search)),
+                            .child(format!("Path: {}", state.current_location().pathname))
+                            .child(format!("Search: {:?}", state.current_location().search)),
                     ),
             );
 
             container = container.child(
                 div()
                     .p_3()
-                    .bg(secondary_bg)
+                    .bg(theme.secondary)
                     .rounded(px(6.0))
                     .border_1()
-                    .border_color(border_color)
+                    .border_color(theme.border)
                     .child({
                         let mut card = div().flex().flex_col().gap_1().child(
                             div()
                                 .flex()
                                 .items_center()
                                 .gap_1()
-                                .text_color(success)
+                                .text_color(theme.success)
                                 .font_weight(FontWeight::MEDIUM)
                                 .child(Icon::new(IconName::Check))
                                 .child("Matched Route"),
                         );
-
                         if let Some((params, node)) = &state.current_match {
                             card = card
                                 .child(format!("ID: {}", node.id))
@@ -308,86 +182,175 @@ impl DevtoolsState {
                                 .child("Params:")
                                 .child(format!("{:?}", params));
                         } else {
-                            card = card.child("No route matched!").text_color(warning);
+                            card = card
+                                .child(div().text_color(theme.warning).child("No route matched!"));
                         }
                         card
                     }),
             );
 
-            container = container.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .text_color(info)
-                    .font_weight(FontWeight::MEDIUM)
-                    .child(Icon::new(IconName::FolderOpen))
-                    .child("Route Tree"),
-            );
-
-            for node in state.route_tree.all_nodes() {
-                let is_active = state
-                    .current_match
-                    .as_ref()
-                    .map(|(_, n)| n.id == node.id)
-                    .unwrap_or(false);
-                let indent = node.parent.as_ref().map(|_| "  ").unwrap_or("");
-                let marker = if is_active { "→" } else { " " };
-                let text = format!("{}{} {} ({})", indent, marker, node.id, node.pattern.raw);
-                container = container.child(
+            container = container
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .text_color(theme.info)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(Icon::new(IconName::FolderOpen))
+                        .child("Route Tree"),
+                )
+                .children(state.route_tree.all_nodes().map(|node| {
+                    let is_active = state
+                        .current_match
+                        .as_ref()
+                        .map(|(_, n)| n.id == node.id)
+                        .unwrap_or(false);
+                    let indent = node.parent.as_ref().map(|_| "  ").unwrap_or("");
+                    let marker = if is_active { "→" } else { " " };
+                    let text = format!("{}{} {} ({})", indent, marker, node.id, node.pattern.raw);
                     div()
                         .px_2()
                         .py_1()
                         .rounded(px(4.0))
-                        .when(is_active, |this: Div| {
-                            this.bg(primary.opacity(0.2)).text_color(primary)
+                        .when(is_active, |d| {
+                            d.bg(theme.primary.opacity(0.2)).text_color(theme.primary)
                         })
-                        .child(text),
-                );
-            }
+                        .child(text)
+                }));
         } else {
-            container = container.child(div().text_color(warning).child("No router state found"));
+            container = container.child(
+                div()
+                    .text_color(theme.warning)
+                    .child("No router state found"),
+            );
         }
+
         container
     }
+    fn render_timeline_tab(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        self.ensure_timeline_search(window, cx);
+        let theme = cx.theme();
+        let filtered = self.filtered_events(cx);
+        let item_count = filtered.len();
+        let row_height = px(32.0);
+        let row_width = px(2000.0); // force horizontal scroll
+        let item_sizes = Rc::new(vec![Size::new(row_width, row_height); item_count]);
 
-    fn render_timeline_tab(&self, fg: Hsla, border_color: Hsla, info: Hsla, muted_fg: Hsla) -> Div {
+        let search_entity = self.timeline_search.clone().unwrap();
+        let scroll_handle = self.timeline_scroll_handle.clone();
+
+        let bg_color = theme.background;
+        let secondary_color = theme.secondary;
+        let muted_fg = theme.muted_foreground;
+        let fg_color = theme.foreground;
+        let info_color = theme.info;
+        let border_color = theme.border;
+
+        let filtered_for_list = filtered.clone();
+        let entity = cx.entity().clone();
+
         div()
-            .gap_2()
             .flex()
             .flex_col()
+            .gap_3()
+            .size_full()
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap_1()
-                    .text_color(info)
+                    .text_color(info_color)
                     .font_weight(FontWeight::MEDIUM)
                     .child(Icon::new(IconName::Calendar))
                     .child("Event Timeline"),
             )
-            .children(self.event_log.iter().rev().map(|event| {
+            .child(
+                Input::new(&search_entity)
+                    .prefix(Icon::new(IconName::Search))
+                    .cleanable(true)
+                    .small(),
+            )
+            .child(
                 div()
-                    .px_2()
-                    .py_1()
-                    .text_sm()
-                    .border_b_1()
-                    .border_color(border_color.opacity(0.5))
-                    .text_color(fg)
-                    .child(format!(
-                        "[{}] {:?}",
-                        event.timestamp.format("%H:%M:%S%.3f"),
-                        event.event
-                    ))
-            }))
-            .when(self.event_log.is_empty(), |this: Div| {
-                this.child(div().text_color(muted_fg).child("No events yet"))
+                    .flex_1()
+                    .border_1()
+                    .border_color(border_color)
+                    .rounded(px(6.0))
+                    .overflow_hidden()
+                    .child(
+                        // Horizontal scroll container
+                        div().overflow_x_scrollbar().size_full().child(
+                            v_virtual_list(
+                                entity,
+                                "timeline-list",
+                                item_sizes,
+                                move |_view, visible_range, _window, _cx| {
+                                    let events = filtered_for_list.clone();
+                                    visible_range
+                                        .map(move |ix| {
+                                            let event = &events[ix];
+                                            let even = ix % 2 == 0;
+                                            div()
+                                                .w(row_width)
+                                                .h(row_height)
+                                                .px_3()
+                                                .flex()
+                                                .items_center()
+                                                .gap_3()
+                                                .bg(if even {
+                                                    bg_color
+                                                } else {
+                                                    secondary_color.opacity(0.3)
+                                                })
+                                                .hover(|style| {
+                                                    style.bg(secondary_color.opacity(0.6))
+                                                })
+                                                .child(
+                                                    div()
+                                                        .min_w(px(100.0))
+                                                        .text_color(muted_fg)
+                                                        .font_family("monospace")
+                                                        .text_sm()
+                                                        .child(
+                                                            event
+                                                                .timestamp
+                                                                .format("%H:%M:%S%.3f")
+                                                                .to_string(),
+                                                        ),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .flex_1()
+                                                        .text_color(fg_color)
+                                                        .text_sm()
+                                                        .child(format!("{:?}", event.event)),
+                                                )
+                                        })
+                                        .collect()
+                                },
+                            )
+                            .track_scroll(&scroll_handle), // vertical scroll
+                        ),
+                    ),
+            )
+            .when(filtered.is_empty(), |d| {
+                d.child(
+                    div()
+                        .p_3()
+                        .text_color(muted_fg)
+                        .child("No events match the search"),
+                )
             })
     }
-
-    fn render_cache_tab(&self, info: Hsla, muted_fg: Hsla) -> Div {
+    fn render_cache_tab(&self, cx: &Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         div()
-            .gap_2()
+            .gap_3()
             .flex()
             .flex_col()
             .child(
@@ -395,29 +358,22 @@ impl DevtoolsState {
                     .flex()
                     .items_center()
                     .gap_1()
-                    .text_color(info)
+                    .text_color(theme.info)
                     .font_weight(FontWeight::MEDIUM)
                     .child(Icon::new(IconName::Inbox))
                     .child("Cache Inspection"),
             )
             .child(
                 div()
-                    .text_color(muted_fg)
+                    .text_color(theme.muted_foreground)
                     .child("Cache inspection (rs-query integration)"),
             )
     }
 
-    fn render_state_tab(
-        &self,
-        fg: Hsla,
-        secondary_bg: Hsla,
-        border_color: Hsla,
-        info: Hsla,
-        warning: Hsla,
-        cx: &mut Context<Self>,
-    ) -> Div {
+    fn render_state_tab(&self, cx: &Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let state = RouterState::try_global(cx);
-        let mut container = div().gap_2().flex().flex_col();
+        let mut container = div().gap_3().flex().flex_col();
 
         if let Some(state) = state {
             container = container
@@ -426,7 +382,7 @@ impl DevtoolsState {
                         .flex()
                         .items_center()
                         .gap_1()
-                        .text_color(info)
+                        .text_color(theme.info)
                         .font_weight(FontWeight::MEDIUM)
                         .child(Icon::new(IconName::Info))
                         .child("Router State"),
@@ -434,16 +390,16 @@ impl DevtoolsState {
                 .child(
                     div()
                         .p_3()
-                        .bg(secondary_bg)
+                        .bg(theme.secondary)
                         .rounded(px(6.0))
                         .border_1()
-                        .border_color(border_color)
+                        .border_color(theme.border)
                         .child(
                             div()
                                 .flex()
                                 .flex_col()
                                 .gap_1()
-                                .text_color(fg)
+                                .text_color(theme.foreground)
                                 .child(format!(
                                     "Current Location: {}",
                                     state.current_location().pathname
@@ -457,9 +413,117 @@ impl DevtoolsState {
                         ),
                 );
         } else {
-            container = container.child(div().text_color(warning).child("No router state"));
+            container = container.child(div().text_color(theme.warning).child("No router state"));
         }
+
         container
+    }
+}
+
+impl Render for DevtoolsState {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.expanded {
+            return Button::new("devtools-toggle")
+                .icon(IconName::Info)
+                .rounded_full()
+                .size(px(40.0))
+                .shadow_md()
+                .absolute()
+                .bottom_3()
+                .right_3()
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_expanded(cx)))
+                .into_any_element();
+        }
+
+        let theme = cx.theme();
+        let viewport = window.viewport_size();
+        let panel_width = px(550.0).min(viewport.width - px(20.0));
+        let panel_height = px(450.0).min(viewport.height - px(20.0));
+
+        div()
+            .absolute()
+            .bottom_0()
+            .right_0()
+            .w(panel_width)
+            .h(panel_height)
+            .bg(theme.background)
+            .text_color(theme.foreground)
+            .border_1()
+            .border_color(theme.border)
+            .rounded_tl(px(8.0))
+            .shadow_lg()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .px_2()
+                    .py_1()
+                    .bg(theme.secondary)
+                    .rounded_tl(px(8.0))
+                    .border_b_1()
+                    .border_color(theme.border)
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(Icon::new(IconName::Info))
+                            .child(" Devtools"),
+                    )
+                    .child(
+                        Button::new("close-devtools")
+                            .icon(IconName::Close)
+                            .ghost()
+                            .small()
+                            .on_click(cx.listener(|this, _, _, cx| this.toggle_expanded(cx))),
+                    ),
+            )
+            .child(
+                TabBar::new("devtools-tabs")
+                    .selected_index(self.tab_index())
+                    .on_click(cx.listener(|this, index, _, cx| {
+                        this.set_selected_tab(this.tab_from_index(*index), cx);
+                    }))
+                    .child(
+                        Tab::new()
+                            .label("Routes")
+                            .prefix(Icon::new(IconName::Folder).ml_1()),
+                    )
+                    .child(
+                        Tab::new()
+                            .label("Cache")
+                            .prefix(Icon::new(IconName::Inbox).ml_1()),
+                    )
+                    .child(
+                        Tab::new()
+                            .label("Timeline")
+                            .prefix(Icon::new(IconName::Calendar).ml_1()),
+                    )
+                    .child(
+                        Tab::new()
+                            .label("State")
+                            .prefix(Icon::new(IconName::Settings).ml_1()),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .p_3()
+                    .overflow_y_scrollbar()
+                    .child(match self.selected_tab {
+                        DevtoolsTab::Routes => self.render_routes_tab(cx).into_any_element(),
+                        DevtoolsTab::Cache => self.render_cache_tab(cx).into_any_element(),
+                        DevtoolsTab::Timeline => {
+                            self.render_timeline_tab(window, cx).into_any_element()
+                        }
+                        DevtoolsTab::State => self.render_state_tab(cx).into_any_element(),
+                    }),
+            )
+            .into_any_element()
     }
 }
 
@@ -471,7 +535,7 @@ pub struct NaviDevtools {
 impl NaviDevtools {
     pub fn new(cx: &mut App) -> Self {
         Self {
-            state: cx.new(|_cx| DevtoolsState::new()),
+            state: cx.new(DevtoolsState::new),
         }
     }
 }

@@ -4132,8 +4132,10 @@ dependencies = [
  "chrono",
  "gpui",
  "gpui-component",
+ "log",
  "navi-core",
  "navi-router",
+ "once_cell",
  "serde",
  "serde_json",
 ]

@@ -1,21 +1,60 @@
 use gpui::{
-    App, Context, Entity, EventEmitter, FontWeight, Pixels, Render, RenderOnce, Size, StyledText,
-    Subscription, TextStyle, Window, div, prelude::*, px,
+    App, Context, Entity, EventEmitter, FocusHandle, FontWeight, KeyBinding, Render, RenderOnce,
+    Size, StyledText, Subscription, TextStyle, Window, actions, div, prelude::*, px,
 };
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, VirtualListScrollHandle,
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
     input::{Input, InputState},
+    menu::{DropdownMenu, PopupMenuItem},
     scroll::ScrollableElement,
     tab::{Tab, TabBar},
     v_virtual_list,
 };
 use navi_router::{
-    RouterState,
+    RouterEvent, RouterState,
     event_bus::{self, TimedEvent},
 };
 use std::rc::Rc;
+
+actions!(devtools, [ToggleDevtools]);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RouterEventType {
+    All,
+    BeforeNavigate,
+    BeforeLoad,
+    Load,
+    BeforeRouteMount,
+    Resolved,
+    Rendered,
+}
+
+impl RouterEventType {
+    fn from_event(event: &RouterEvent) -> Self {
+        match event {
+            RouterEvent::BeforeNavigate { .. } => Self::BeforeNavigate,
+            RouterEvent::BeforeLoad { .. } => Self::BeforeLoad,
+            RouterEvent::Load { .. } => Self::Load,
+            RouterEvent::BeforeRouteMount { .. } => Self::BeforeRouteMount,
+            RouterEvent::Resolved { .. } => Self::Resolved,
+            RouterEvent::Rendered { .. } => Self::Rendered,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Self::All => "All Events",
+            Self::BeforeNavigate => "BeforeNavigate",
+            Self::BeforeLoad => "BeforeLoad",
+            Self::Load => "Load",
+            Self::BeforeRouteMount => "BeforeRouteMount",
+            Self::Resolved => "Resolved",
+            Self::Rendered => "Rendered",
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DevtoolsTab {
@@ -34,29 +73,41 @@ pub struct DevtoolsState {
     _subscription: Subscription,
     last_log_len: usize,
     highlight_new_count: usize,
-    panel_width: Pixels,
-    panel_height: Pixels,
+    filter_event_type: RouterEventType,
+    focus_handle: FocusHandle,
 }
 
 impl EventEmitter<()> for DevtoolsState {}
 
 impl DevtoolsState {
     pub fn new(cx: &mut Context<Self>) -> Self {
+        // Bind keyboard shortcuts globally
+        cx.bind_keys([KeyBinding::new(
+            "cmd-shift-d",
+            ToggleDevtools,
+            Some("Devtools"),
+        )]);
+        cx.bind_keys([KeyBinding::new(
+            "ctrl-shift-d",
+            ToggleDevtools,
+            Some("Devtools"),
+        )]);
+
         let subscription = cx.observe_global::<RouterState>(move |this, cx| {
             this.refresh_log(cx);
         });
 
         let mut this = Self {
             expanded: true,
-            selected_tab: DevtoolsTab::Routes,
+            selected_tab: DevtoolsTab::Timeline,
             event_log: Vec::new(),
             timeline_search: None,
             timeline_scroll_handle: VirtualListScrollHandle::new(),
             _subscription: subscription,
             last_log_len: 0,
             highlight_new_count: 0,
-            panel_width: px(550.0),
-            panel_height: px(450.0),
+            filter_event_type: RouterEventType::All,
+            focus_handle: cx.focus_handle(),
         };
         this.refresh_log(cx);
         this
@@ -89,15 +140,17 @@ impl DevtoolsState {
             .as_ref()
             .map(|s| s.read(cx).value().to_lowercase())
             .unwrap_or_default();
-        if query.is_empty() {
-            self.event_log.clone()
-        } else {
-            self.event_log
-                .iter()
-                .filter(|e| format!("{:?}", e.event).to_lowercase().contains(&query))
-                .cloned()
-                .collect()
-        }
+        self.event_log
+            .iter()
+            .filter(|e| {
+                let event_type = RouterEventType::from_event(&e.event);
+                (self.filter_event_type == RouterEventType::All
+                    || event_type == self.filter_event_type)
+                    && (query.is_empty()
+                        || format!("{:?}", e.event).to_lowercase().contains(&query))
+            })
+            .cloned()
+            .collect()
     }
 
     fn set_selected_tab(&mut self, tab: DevtoolsTab, cx: &mut Context<Self>) {
@@ -125,7 +178,7 @@ impl DevtoolsState {
             1 => DevtoolsTab::Cache,
             2 => DevtoolsTab::Timeline,
             3 => DevtoolsTab::State,
-            _ => DevtoolsTab::Routes,
+            _ => DevtoolsTab::Timeline,
         }
     }
 
@@ -241,9 +294,9 @@ impl DevtoolsState {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         self.ensure_timeline_search(window, cx);
+
         let theme = cx.theme();
         let mut filtered = self.filtered_events(cx);
-        // Compute deltas (chronological order)
         let mut deltas = Vec::new();
         if !filtered.is_empty() {
             deltas.push(0.0);
@@ -252,7 +305,6 @@ impl DevtoolsState {
                 deltas.push(delta.num_milliseconds() as f64);
             }
         }
-        // Reverse both (newest first)
         filtered.reverse();
         deltas.reverse();
 
@@ -264,7 +316,6 @@ impl DevtoolsState {
         let search_entity = self.timeline_search.clone().unwrap();
         let scroll_handle = self.timeline_scroll_handle.clone();
 
-        // Copy all theme colors (they are Copy)
         let bg_color = theme.background;
         let secondary_color = theme.secondary;
         let muted_fg = theme.muted_foreground;
@@ -292,19 +343,13 @@ impl DevtoolsState {
             .collect::<Vec<_>>()
             .join("\n");
 
-        // Determine empty state message
-        let empty_message = if self.event_log.is_empty() {
-            "No events recorded yet"
-        } else {
-            "No events match the search"
-        };
+        let weak_self = cx.entity().downgrade();
 
         div()
             .flex()
             .flex_col()
             .gap_3()
             .size_full()
-            // Header, search input, etc. (unchanged)
             .child(
                 div()
                     .flex()
@@ -323,7 +368,55 @@ impl DevtoolsState {
                     .child(
                         div()
                             .flex()
-                            .gap_1()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Button::new("filter-button")
+                                    .label(format!("Filter: {}", self.filter_event_type.label()))
+                                    .ghost()
+                                    .small()
+                                    .dropdown_menu({
+                                        let weak_self = weak_self.clone();
+                                        move |menu, _window, cx| {
+                                            let mut menu = menu;
+                                            for event_type in [
+                                                RouterEventType::All,
+                                                RouterEventType::BeforeNavigate,
+                                                RouterEventType::BeforeLoad,
+                                                RouterEventType::Load,
+                                                RouterEventType::BeforeRouteMount,
+                                                RouterEventType::Resolved,
+                                                RouterEventType::Rendered,
+                                            ] {
+                                                let is_checked = weak_self
+                                                    .upgrade()
+                                                    .map(|this| {
+                                                        this.read(cx).filter_event_type
+                                                            == event_type
+                                                    })
+                                                    .unwrap_or(false);
+                                                menu = menu.item(
+                                                    PopupMenuItem::new(event_type.label())
+                                                        .checked(is_checked)
+                                                        .on_click({
+                                                            let weak_self = weak_self.clone();
+                                                            let event_type = event_type;
+                                                            move |_, _window, cx| {
+                                                                weak_self
+                                                                    .update(cx, |this, inner_cx| {
+                                                                        this.filter_event_type =
+                                                                            event_type;
+                                                                        inner_cx.notify();
+                                                                    })
+                                                                    .ok();
+                                                            }
+                                                        }),
+                                                );
+                                            }
+                                            menu
+                                        }
+                                    }),
+                            )
                             .child(
                                 Clipboard::new("copy-all-timeline")
                                     .value(copy_all_text)
@@ -348,7 +441,6 @@ impl DevtoolsState {
                     .cleanable(true)
                     .small(),
             )
-            // Content area with conditional rendering
             .child(
                 div()
                     .flex_1()
@@ -357,16 +449,19 @@ impl DevtoolsState {
                     .rounded(px(6.0))
                     .overflow_hidden()
                     .child(if filtered.is_empty() {
-                        // Centered empty state message
+                        let empty_msg = if self.event_log.is_empty() {
+                            "No events recorded yet"
+                        } else {
+                            "No events match the search or filter"
+                        };
                         div()
                             .size_full()
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(div().text_color(muted_fg).child(empty_message))
+                            .child(div().text_color(muted_fg).child(empty_msg))
                             .into_any_element()
                     } else {
-                        // Virtual list with horizontal scroll
                         div()
                             .overflow_x_scrollbar()
                             .size_full()
@@ -592,8 +687,8 @@ impl Render for DevtoolsState {
 
         let theme = cx.theme();
         let viewport = window.viewport_size();
-        let panel_width = self.panel_width.min(viewport.width - px(20.0));
-        let panel_height = self.panel_height.min(viewport.height - px(20.0));
+        let panel_width = px(550.0).min(viewport.width - px(20.0));
+        let panel_height = px(450.0).min(viewport.height - px(20.0));
 
         div()
             .absolute()
@@ -610,6 +705,11 @@ impl Render for DevtoolsState {
             .flex()
             .flex_col()
             .overflow_hidden()
+            .track_focus(&self.focus_handle)
+            .key_context("Devtools")
+            .on_action(cx.listener(|this, _: &ToggleDevtools, _window, cx| {
+                this.toggle_expanded(cx);
+            }))
             .child(
                 div()
                     .flex()

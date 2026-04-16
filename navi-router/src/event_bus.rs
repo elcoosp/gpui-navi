@@ -2,9 +2,10 @@ use crate::RouterEvent;
 use chrono::{DateTime, Local};
 use gpui::{App, Global};
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TimedEvent {
     pub timestamp: DateTime<Local>,
     pub event: RouterEvent,

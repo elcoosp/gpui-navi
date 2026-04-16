@@ -6,13 +6,14 @@ use crate::location::{Location, NavigateOptions, ViewTransitionOptions};
 use crate::route_tree::{RouteNode, RouteTree};
 use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
 /// Events emitted by the router during navigation lifecycle.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum RouterEvent {
     BeforeNavigate {
         from: Option<Location>,

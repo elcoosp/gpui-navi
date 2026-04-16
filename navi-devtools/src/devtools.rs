@@ -782,14 +782,13 @@ impl DevtoolsState {
                 node_infos_map: &HashMap<String, (String, bool, bool, bool)>,
                 children_map: &HashMap<String, Vec<String>>,
                 collapsed: &HashSet<String>,
-                theme: &gpui_component::Theme,
                 matched_chain: &HashSet<String>,
                 matched_leaf_id: Option<&str>,
                 window_handle: AnyWindowHandle,
-                toggle_callback: &dyn Fn(&String, &mut Window, &mut Context<DevtoolsState>),
                 cx: &mut Context<DevtoolsState>,
                 window: &mut Window,
             ) -> Vec<Div> {
+                let theme = cx.theme();
                 let mut rows = Vec::new();
                 let info = node_infos_map.get(id).unwrap();
                 let pattern = &info.0;
@@ -822,7 +821,7 @@ impl DevtoolsState {
 
                 if has_children {
                     let id_clone = id.to_string();
-                    let toggle = toggle_callback.clone();
+                    let entity = cx.entity().clone();
                     row = row.child(
                         Button::new(format!("toggle-{}", id))
                             .icon(if is_collapsed {
@@ -832,8 +831,10 @@ impl DevtoolsState {
                             })
                             .ghost()
                             .xsmall()
-                            .on_click(move |_, window, cx| {
-                                toggle(&id_clone, window, cx);
+                            .on_click(move |_, _window, cx| {
+                                entity.update(cx, |this, cx| {
+                                    this.toggle_route_node(id_clone.clone(), cx);
+                                });
                             }),
                     );
                 } else {
@@ -917,11 +918,9 @@ impl DevtoolsState {
                                 node_infos_map,
                                 children_map,
                                 collapsed,
-                                theme,
                                 matched_chain,
                                 matched_leaf_id,
                                 window_handle.clone(),
-                                toggle_callback,
                                 cx,
                                 window,
                             ));
@@ -932,11 +931,6 @@ impl DevtoolsState {
                 rows
             }
 
-            let toggle_callback = cx.listener(
-                |this, id: &String, _window: &mut Window, cx: &mut Context<Self>| {
-                    this.toggle_route_node(id.clone(), cx);
-                },
-            );
             container = container
                 .child(
                     div()
@@ -974,11 +968,9 @@ impl DevtoolsState {
                                 &node_infos_map,
                                 &children_map,
                                 &self.collapsed_route_nodes,
-                                &theme,
                                 &matched_chain,
                                 matched_leaf_id.as_deref(),
                                 window_handle_for_tree.clone(),
-                                &toggle_callback,
                                 cx,
                                 window,
                             )

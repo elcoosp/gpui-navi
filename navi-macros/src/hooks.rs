@@ -46,13 +46,19 @@ pub fn use_loader_data(input: TokenStream) -> TokenStream {
         {
             log::debug!("use_loader_data called for {}", stringify!(#route_ty));
 
-            let data_ready = navi_router::RouterState::try_global(cx)
+            let state = navi_router::RouterState::try_global(cx);
+            let data_ready = state.as_ref()
                 .and_then(|s| s.get_loader_data::<#route_ty>())
                 .is_some();
 
             if !data_ready {
-                log::debug!("Loader data not ready, triggering loader");
-                navi_router::RouterState::update(cx, |state, cx| state.trigger_loader(cx));
+                let is_loading = state.map(|s| s.is_loading()).unwrap_or(false);
+                if !is_loading {
+                    log::debug!("Loader data not ready and not loading, triggering loader");
+                    navi_router::RouterState::update(cx, |state, cx| state.trigger_loader(cx));
+                } else {
+                    log::debug!("Loader data not ready but already loading, skipping trigger");
+                }
             }
 
             let result = navi_router::RouterState::try_global(cx)

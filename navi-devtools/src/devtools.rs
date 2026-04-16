@@ -1,10 +1,11 @@
 use gpui::{
-    App, Context, Entity, EventEmitter, FontWeight, MouseButton, Render, RenderOnce, Size,
-    Subscription, Window, div, prelude::*, px,
+    App, Context, Entity, EventEmitter, FontWeight, Render, RenderOnce, Size, Subscription, Window,
+    div, prelude::*, px,
 };
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, VirtualListScrollHandle,
     button::{Button, ButtonVariants},
+    clipboard::Clipboard,
     input::{Input, InputEvent, InputState},
     scroll::ScrollableElement,
     tab::{Tab, TabBar},
@@ -228,6 +229,7 @@ impl DevtoolsState {
 
         container
     }
+
     fn render_timeline_tab(
         &mut self,
         window: &mut Window,
@@ -238,7 +240,7 @@ impl DevtoolsState {
         let filtered = self.filtered_events(cx);
         let item_count = filtered.len();
         let row_height = px(32.0);
-        let row_width = px(2000.0); // force horizontal scroll
+        let row_width = px(2000.0);
         let item_sizes = Rc::new(vec![Size::new(row_width, row_height); item_count]);
 
         let search_entity = self.timeline_search.clone().unwrap();
@@ -254,6 +256,13 @@ impl DevtoolsState {
         let filtered_for_list = filtered.clone();
         let entity = cx.entity().clone();
 
+        // Prepare the text to copy when the copy all button is clicked
+        let copy_all_text = filtered
+            .iter()
+            .map(|e| format!("[{}] {:?}", e.timestamp.format("%H:%M:%S%.3f"), e.event))
+            .collect::<Vec<_>>()
+            .join("\n");
+
         div()
             .flex()
             .flex_col()
@@ -263,11 +272,18 @@ impl DevtoolsState {
                 div()
                     .flex()
                     .items_center()
-                    .gap_1()
-                    .text_color(info_color)
-                    .font_weight(FontWeight::MEDIUM)
-                    .child(Icon::new(IconName::Calendar))
-                    .child("Event Timeline"),
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .text_color(info_color)
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(Icon::new(IconName::Calendar))
+                            .child("Event Timeline"),
+                    )
+                    .child(Clipboard::new("copy-all-timeline").value(copy_all_text)),
             )
             .child(
                 Input::new(&search_entity)
@@ -334,7 +350,7 @@ impl DevtoolsState {
                                         .collect()
                                 },
                             )
-                            .track_scroll(&scroll_handle), // vertical scroll
+                            .track_scroll(&scroll_handle),
                         ),
                     ),
             )
@@ -347,6 +363,7 @@ impl DevtoolsState {
                 )
             })
     }
+
     fn render_cache_tab(&self, cx: &Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         div()

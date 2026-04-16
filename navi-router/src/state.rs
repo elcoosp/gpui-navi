@@ -122,30 +122,66 @@ impl RouterState {
             }
         }
 
+        let from = Some(self.current_location());
+        let to = loc.clone();
+
+        // 1. BeforeNavigate
         push_event(
             RouterEvent::BeforeNavigate {
-                from: Some(self.current_location()),
-                to: loc.clone(),
+                from: from.clone(),
+                to: to.clone(),
             },
             cx,
         );
 
+        // 2. Update route match
         self.current_match = self
             .route_tree
             .match_path(&loc.pathname)
             .map(|(params, node)| (params, node.clone()));
 
+        // 3. Update history
         if options.replace {
             self.history.replace(loc);
         } else {
             self.history.push(loc);
         }
 
-        // Notify the root view to re-render (important for search param updates)
-        if let Some(view_id) = self.root_view {
-            cx.notify(view_id);
+        // 4. Resolved
+        push_event(
+            RouterEvent::Resolved {
+                from: from.clone(),
+                to: to.clone(),
+            },
+            cx,
+        );
+
+        // 5. Loader handling
+        let has_loader = self
+            .current_match
+            .as_ref()
+            .map(|(_, node)| node.has_loader)
+            .unwrap_or(false);
+
+        if has_loader {
+            // Use the full method with explicit locations
+            self.trigger_loader_with_locations(from, to, cx);
+        } else {
+            // No loader: proceed to mount and render
+            push_event(
+                RouterEvent::BeforeRouteMount {
+                    from: from.clone(),
+                    to: to.clone(),
+                },
+                cx,
+            );
+            if let Some(view_id) = self.root_view {
+                cx.notify(view_id);
+            }
+            push_event(RouterEvent::Rendered { from, to }, cx);
         }
     }
+
     /// Get the current location from history.
     pub fn current_location(&self) -> Location {
         self.history.current()
@@ -189,6 +225,7 @@ impl RouterState {
             );
         }
     }
+
     /// Reset/cancel a blocked navigation.
     pub fn reset_block(&mut self) {
         self.pending_navigation = None;
@@ -210,8 +247,25 @@ impl RouterState {
         self.loader_registry.insert(route_id, loader);
     }
 
-    /// Trigger the loader for the current route.
+    /// Legacy trigger_loader method (for backward compatibility).
+    /// It determines the current navigation locations from the state.
     pub fn trigger_loader(&mut self, cx: &mut App) {
+        let from = Some(self.current_location());
+        let to = self
+            .pending_navigation
+            .clone()
+            .unwrap_or_else(|| self.current_location());
+        self.trigger_loader_with_locations(from, to, cx);
+    }
+
+    /// Trigger the loader for the current route with explicit navigation locations.
+    /// `from` and `to` are the navigation locations that caused this loader to run.
+    pub fn trigger_loader_with_locations(
+        &mut self,
+        from: Option<Location>,
+        to: Location,
+        cx: &mut App,
+    ) {
         if let Some((params, node)) = &self.current_match {
             if node.has_loader {
                 log::debug!("Loader trigger for route: {}", node.id);
@@ -225,14 +279,44 @@ impl RouterState {
                 let key = format!("{}:{}", node.id, params_json);
                 log::debug!("Loader cache key: {}", key);
 
+                // Cache hit – data already available
                 if self.loader_cache.contains_key(&key) {
                     log::debug!("Loader cache hit for key: {}", key);
+                    push_event(
+                        RouterEvent::Load {
+                            from: from.clone(),
+                            to: to.clone(),
+                        },
+                        cx,
+                    );
+                    push_event(
+                        RouterEvent::BeforeRouteMount {
+                            from: from.clone(),
+                            to: to.clone(),
+                        },
+                        cx,
+                    );
+                    if let Some(view_id) = self.root_view {
+                        cx.notify(view_id);
+                    }
+                    push_event(RouterEvent::Rendered { from, to }, cx);
                     return;
                 }
+
+                // Already pending – avoid duplicate
                 if self.pending_loaders.contains_key(&key) {
                     log::debug!("Loader already pending for key: {}", key);
                     return;
                 }
+
+                // Emit BeforeLoad before starting async work
+                push_event(
+                    RouterEvent::BeforeLoad {
+                        from: from.clone(),
+                        to: to.clone(),
+                    },
+                    cx,
+                );
 
                 if let Some(loader_fn) = self.loader_registry.get(&node.id) {
                     log::debug!("Executing loader for route: {}", node.id);
@@ -243,6 +327,9 @@ impl RouterState {
 
                     let key_clone = key.clone();
                     let window_handle = self.window_handle;
+                    let from_clone = from.clone();
+                    let to_clone = to.clone();
+
                     cx.spawn(async move |cx| {
                         let task = cx.update_global::<RouterState, _>(|state, _| {
                             state.pending_loaders.remove(&key_clone)
@@ -258,15 +345,35 @@ impl RouterState {
                                             data.clone() as Arc<dyn std::any::Any + Send + Sync>,
                                         );
                                         state.loading = state.pending_loaders.is_empty();
-                                        // Notify the root view to re-render
+
+                                        // Emit Load, BeforeRouteMount, Rendered
+                                        push_event(
+                                            RouterEvent::Load {
+                                                from: from_clone.clone(),
+                                                to: to_clone.clone(),
+                                            },
+                                            cx,
+                                        );
+                                        push_event(
+                                            RouterEvent::BeforeRouteMount {
+                                                from: from_clone.clone(),
+                                                to: to_clone.clone(),
+                                            },
+                                            cx,
+                                        );
                                         if let Some(view_id) = state.root_view {
                                             cx.notify(view_id);
                                         }
+                                        push_event(
+                                            RouterEvent::Rendered {
+                                                from: from_clone,
+                                                to: to_clone,
+                                            },
+                                            cx,
+                                        );
                                         cx.refresh_windows();
                                     });
-                                    // Force the specific window to refresh
                                     _ = window_handle.update(cx, |_, window, _| window.refresh());
-                                    // Delayed refresh as fallback
                                     cx.background_executor()
                                         .timer(Duration::from_millis(16))
                                         .await;
@@ -276,6 +383,31 @@ impl RouterState {
                                     log::error!("Loader error for key {}: {}", key_clone, e);
                                     let _ = cx.update_global::<RouterState, _>(|state, cx| {
                                         state.loading = state.pending_loaders.is_empty();
+                                        // Even on error, emit Load and let the route render
+                                        push_event(
+                                            RouterEvent::Load {
+                                                from: from_clone.clone(),
+                                                to: to_clone.clone(),
+                                            },
+                                            cx,
+                                        );
+                                        push_event(
+                                            RouterEvent::BeforeRouteMount {
+                                                from: from_clone.clone(),
+                                                to: to_clone.clone(),
+                                            },
+                                            cx,
+                                        );
+                                        if let Some(view_id) = state.root_view {
+                                            cx.notify(view_id);
+                                        }
+                                        push_event(
+                                            RouterEvent::Rendered {
+                                                from: from_clone,
+                                                to: to_clone,
+                                            },
+                                            cx,
+                                        );
                                         cx.refresh_windows();
                                     });
                                     _ = window_handle.update(cx, |_, window, _| window.refresh());
@@ -314,6 +446,7 @@ impl RouterState {
         log::debug!("Loader data found for key: {}", key);
         Some(data)
     }
+
     // --- Global access helpers ---
 
     pub fn global(cx: &App) -> &Self {

@@ -52,15 +52,13 @@ impl RenderOnce for Outlet {
         if let Some((_params, node)) = current_match {
             log::debug!("Outlet rendering route: {}", node.id);
 
-            // 🔑 创建基于当前 location（包含 search）的唯一 ID
-            let location = state.current_location();
-            let search_hash = seahash::hash(location.search.to_string().as_bytes());
-            let key = ElementId::Name(format!("outlet-{}-{}", node.id, search_hash).into());
+            // Use a stable ID – only the route name, no hash
+            let key = ElementId::Name(format!("outlet-{}", node.id).into());
 
             if let Some(constructor) = REGISTRY.lock().unwrap().get(&node.id) {
                 let element = constructor(cx);
                 return div()
-                    .id(key) // 动态 ID 破坏缓存
+                    .id(key)
                     .child(element)
                     .children(self.children)
                     .into_any_element();

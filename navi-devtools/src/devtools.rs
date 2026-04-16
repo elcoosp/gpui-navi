@@ -1,6 +1,6 @@
 use gpui::{
-    App, Context, Entity, EventEmitter, FontWeight, Render, RenderOnce, Size, Subscription, Window,
-    div, prelude::*, px,
+    App, Context, Entity, EventEmitter, FontWeight, Render, RenderOnce, Size, StyledText,
+    Subscription, TextStyle, Window, div, prelude::*, px,
 };
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, VirtualListScrollHandle,
@@ -11,7 +11,10 @@ use gpui_component::{
     tab::{Tab, TabBar},
     v_virtual_list,
 };
-use navi_router::{RouterState, event_bus};
+use navi_router::{
+    RouterState,
+    event_bus::{self, TimedEvent},
+};
 use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,10 +28,12 @@ pub enum DevtoolsTab {
 pub struct DevtoolsState {
     expanded: bool,
     selected_tab: DevtoolsTab,
-    event_log: Vec<crate::timeline::LoggedEvent>,
+    event_log: Vec<TimedEvent>,
     timeline_search: Option<Entity<InputState>>,
     timeline_scroll_handle: VirtualListScrollHandle,
     _subscription: Subscription,
+    last_log_len: usize,
+    highlight_new_count: usize,
 }
 
 impl EventEmitter<()> for DevtoolsState {}
@@ -46,6 +51,8 @@ impl DevtoolsState {
             timeline_search: None,
             timeline_scroll_handle: VirtualListScrollHandle::new(),
             _subscription: subscription,
+            last_log_len: 0,
+            highlight_new_count: 0,
         };
         this.refresh_log(cx);
         this
@@ -67,15 +74,16 @@ impl DevtoolsState {
     }
 
     fn refresh_log(&mut self, cx: &mut Context<Self>) {
-        let events = event_bus::get_event_log(cx);
-        self.event_log = events
-            .into_iter()
-            .map(crate::timeline::LoggedEvent::new)
-            .collect();
+        let new_log = event_bus::get_event_log(cx);
+        let new_len = new_log.len();
+        let new_events_count = new_len.saturating_sub(self.last_log_len);
+        self.highlight_new_count = new_events_count;
+        self.last_log_len = new_len;
+        self.event_log = new_log;
         cx.notify();
     }
 
-    fn filtered_events(&self, cx: &App) -> Vec<crate::timeline::LoggedEvent> {
+    fn filtered_events(&self, cx: &App) -> Vec<TimedEvent> {
         let query = self
             .timeline_search
             .as_ref()
@@ -237,7 +245,8 @@ impl DevtoolsState {
     ) -> impl IntoElement {
         self.ensure_timeline_search(window, cx);
         let theme = cx.theme();
-        let filtered = self.filtered_events(cx);
+        let mut filtered = self.filtered_events(cx);
+        filtered.reverse();
         let item_count = filtered.len();
         let row_height = px(32.0);
         let row_width = px(2000.0);
@@ -252,11 +261,19 @@ impl DevtoolsState {
         let fg_color = theme.foreground;
         let info_color = theme.info;
         let border_color = theme.border;
+        let highlight_color = theme.success.opacity(0.25);
+        let search_highlight_bg = theme.warning;
 
         let filtered_for_list = filtered.clone();
         let entity = cx.entity().clone();
+        let highlight_count = self.highlight_new_count;
 
-        // Prepare the text to copy when the copy all button is clicked
+        let search_query = self
+            .timeline_search
+            .as_ref()
+            .map(|s| s.read(cx).value())
+            .unwrap_or_default();
+
         let copy_all_text = filtered
             .iter()
             .map(|e| format!("[{}] {:?}", e.timestamp.format("%H:%M:%S%.3f"), e.event))
@@ -283,7 +300,27 @@ impl DevtoolsState {
                             .child(Icon::new(IconName::Calendar))
                             .child("Event Timeline"),
                     )
-                    .child(Clipboard::new("copy-all-timeline").value(copy_all_text)),
+                    .child(
+                        div()
+                            .flex()
+                            .gap_1()
+                            .child(
+                                Clipboard::new("copy-all-timeline")
+                                    .value(copy_all_text)
+                                    .tooltip("Copy all events"),
+                            )
+                            .child(
+                                Button::new("clear-timeline")
+                                    .icon(IconName::Delete)
+                                    .ghost()
+                                    .xsmall()
+                                    .tooltip("Clear all events")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        event_bus::clear_event_log(cx);
+                                        this.refresh_log(cx);
+                                    })),
+                            ),
+                    ),
             )
             .child(
                 Input::new(&search_entity)
@@ -299,7 +336,6 @@ impl DevtoolsState {
                     .rounded(px(6.0))
                     .overflow_hidden()
                     .child(
-                        // Horizontal scroll container
                         div().overflow_x_scrollbar().size_full().child(
                             v_virtual_list(
                                 entity,
@@ -307,10 +343,66 @@ impl DevtoolsState {
                                 item_sizes,
                                 move |_view, visible_range, _window, _cx| {
                                     let events = filtered_for_list.clone();
+                                    let search_query = search_query.clone();
                                     visible_range
                                         .map(move |ix| {
                                             let event = &events[ix];
                                             let even = ix % 2 == 0;
+                                            let is_new = ix < highlight_count;
+                                            let event_text = format!("{:?}", event.event);
+                                            let text_len = event_text.len();
+                                            let styled_text = if search_query.is_empty() {
+                                                StyledText::new(event_text).with_runs(vec![
+                                                    TextStyle {
+                                                        color: fg_color,
+                                                        ..Default::default()
+                                                    }
+                                                    .to_run(text_len),
+                                                ])
+                                            } else {
+                                                let query_lower = search_query.to_lowercase();
+                                                let text_lower = event_text.to_lowercase();
+                                                let mut runs = Vec::new();
+                                                let mut last_end = 0;
+                                                let mut start = 0;
+                                                while let Some(pos) =
+                                                    text_lower[start..].find(&query_lower)
+                                                {
+                                                    let abs_pos = start + pos;
+                                                    if abs_pos > last_end {
+                                                        runs.push(
+                                                            TextStyle {
+                                                                color: fg_color,
+                                                                ..Default::default()
+                                                            }
+                                                            .to_run(abs_pos - last_end),
+                                                        );
+                                                    }
+                                                    runs.push(
+                                                        TextStyle {
+                                                            color: fg_color,
+                                                            background_color: Some(
+                                                                search_highlight_bg,
+                                                            ),
+                                                            ..Default::default()
+                                                        }
+                                                        .to_run(query_lower.len()),
+                                                    );
+                                                    last_end = abs_pos + query_lower.len();
+                                                    start = abs_pos + query_lower.len();
+                                                }
+                                                if last_end < text_len {
+                                                    runs.push(
+                                                        TextStyle {
+                                                            color: fg_color,
+                                                            ..Default::default()
+                                                        }
+                                                        .to_run(text_len - last_end),
+                                                    );
+                                                }
+                                                StyledText::new(event_text).with_runs(runs)
+                                            };
+
                                             div()
                                                 .w(row_width)
                                                 .h(row_height)
@@ -318,7 +410,9 @@ impl DevtoolsState {
                                                 .flex()
                                                 .items_center()
                                                 .gap_3()
-                                                .bg(if even {
+                                                .bg(if is_new {
+                                                    highlight_color
+                                                } else if even {
                                                     bg_color
                                                 } else {
                                                     secondary_color.opacity(0.3)
@@ -339,13 +433,7 @@ impl DevtoolsState {
                                                                 .to_string(),
                                                         ),
                                                 )
-                                                .child(
-                                                    div()
-                                                        .flex_1()
-                                                        .text_color(fg_color)
-                                                        .text_sm()
-                                                        .child(format!("{:?}", event.event)),
-                                                )
+                                                .child(div().flex_1().child(styled_text))
                                         })
                                         .collect()
                                 },

@@ -271,11 +271,14 @@ pub struct DevtoolsState {
     _subscription: Subscription,
     last_log_len: usize,
     highlight_new_count: usize,
-    filter_event_type: RouterEventType,
+    filter_event_types: HashSet<RouterEventType>,
     focus_handle: FocusHandle,
     nav_input: Option<Entity<InputState>>,
     tree_search: Option<Entity<InputState>>,
     selected_event_detail: Option<EventDetail>,
+    collapsed_route_nodes: HashSet<String>,
+    timeline_path_filter: Option<Entity<InputState>>,
+    route_test_params: Option<Entity<InputState>>,
 }
 
 impl EventEmitter<()> for DevtoolsState {}
@@ -334,11 +337,14 @@ impl DevtoolsState {
             _subscription: subscription,
             last_log_len: 0,
             highlight_new_count: 0,
-            filter_event_type: RouterEventType::All,
+            filter_event_types: HashSet::new(),
             focus_handle: cx.focus_handle(),
             nav_input: None,
             tree_search: None,
             selected_event_detail: None,
+            collapsed_route_nodes: HashSet::new(),
+            timeline_path_filter: None,
+            route_test_params: None,
         };
         this.refresh_log(cx);
         this
@@ -352,6 +358,17 @@ impl DevtoolsState {
                 s
             });
             self.timeline_search = Some(state);
+        }
+    }
+
+    fn ensure_timeline_path_filter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.timeline_path_filter.is_none() {
+            let state = cx.new(|cx| {
+                let mut s = InputState::new(window, cx);
+                s.set_placeholder("Filter by path (e.g. /users/42)...", window, cx);
+                s
+            });
+            self.timeline_path_filter = Some(state);
         }
     }
 
@@ -377,6 +394,17 @@ impl DevtoolsState {
         }
     }
 
+    fn ensure_route_test_params(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.route_test_params.is_none() {
+            let state = cx.new(|cx| {
+                let mut s = InputState::new(window, cx);
+                s.set_placeholder("/users/:id?tab=profile", window, cx);
+                s
+            });
+            self.route_test_params = Some(state);
+        }
+    }
+
     fn refresh_log(&mut self, cx: &mut Context<Self>) {
         let new_log = event_bus::get_event_log(cx);
         let new_len = new_log.len();
@@ -393,14 +421,39 @@ impl DevtoolsState {
             .as_ref()
             .map(|s| s.read(cx).value().to_lowercase())
             .unwrap_or_default();
+
+        let path_filter = self
+            .timeline_path_filter
+            .as_ref()
+            .map(|s| s.read(cx).value().to_lowercase())
+            .unwrap_or_default();
+
         self.event_log
             .iter()
             .filter(|e| {
                 let event_type = RouterEventType::from_event(&e.event);
-                (self.filter_event_type == RouterEventType::All
-                    || event_type == self.filter_event_type)
-                    && (query.is_empty()
-                        || format_event_text(&e.event).to_lowercase().contains(&query))
+                let type_ok = self.filter_event_types.is_empty()
+                    || self.filter_event_types.contains(&event_type);
+                let text_ok =
+                    query.is_empty() || format_event_text(&e.event).to_lowercase().contains(&query);
+                let path_ok = path_filter.is_empty() || {
+                    let (from, to) = match &e.event {
+                        RouterEvent::BeforeNavigate { from, to } => (from.as_ref(), Some(to)),
+                        RouterEvent::BeforeLoad { from, to } => (from.as_ref(), Some(to)),
+                        RouterEvent::Load { from, to } => (from.as_ref(), Some(to)),
+                        RouterEvent::BeforeRouteMount { from, to } => (from.as_ref(), Some(to)),
+                        RouterEvent::Resolved { from, to } => (from.as_ref(), Some(to)),
+                        RouterEvent::Rendered { from, to } => (from.as_ref(), Some(to)),
+                    };
+                    let from_match = from
+                        .map(|l| l.pathname.to_lowercase().contains(&path_filter))
+                        .unwrap_or(false);
+                    let to_match = to
+                        .map(|l| l.pathname.to_lowercase().contains(&path_filter))
+                        .unwrap_or(false);
+                    from_match || to_match
+                };
+                type_ok && text_ok && path_ok
             })
             .cloned()
             .collect()
@@ -448,6 +501,15 @@ impl DevtoolsState {
         cx.notify();
     }
 
+    fn toggle_route_node(&mut self, node_id: String, cx: &mut Context<Self>) {
+        if self.collapsed_route_nodes.contains(&node_id) {
+            self.collapsed_route_nodes.remove(&node_id);
+        } else {
+            self.collapsed_route_nodes.insert(node_id);
+        }
+        cx.notify();
+    }
+
     // -----------------------------------------------------------------------
     // Routes tab
     // -----------------------------------------------------------------------
@@ -459,6 +521,7 @@ impl DevtoolsState {
     ) -> impl IntoElement {
         self.ensure_nav_input(window, cx);
         self.ensure_tree_search(window, cx);
+        self.ensure_route_test_params(window, cx);
 
         let theme = cx.theme();
         let state = RouterState::try_global(cx);
@@ -466,6 +529,7 @@ impl DevtoolsState {
 
         let window_handle_for_tree: AnyWindowHandle = window.window_handle().into();
         let tree_search_entity = self.tree_search.clone().unwrap();
+        let route_test_entity = self.route_test_params.clone().unwrap();
 
         if let Some(state) = state {
             let loc = state.current_location();
@@ -578,6 +642,61 @@ impl DevtoolsState {
                     ),
             );
 
+            // Route Tester
+            container = container.child(
+                div()
+                    .p_3()
+                    .bg(theme.secondary)
+                    .rounded(px(6.0))
+                    .border_1()
+                    .border_color(theme.border)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .text_color(theme.info)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(Icon::new(IconName::SquareTerminal))
+                                    .child("Route Tester"),
+                            )
+                            .child(
+                                div()
+                                    .text_color(theme.muted_foreground)
+                                    .text_size(px(11.0))
+                                    .child("Enter any path with parameters and query string"),
+                            )
+                            .child(
+                                Input::new(&route_test_entity)
+                                    .prefix(Icon::new(IconName::Globe))
+                                    .cleanable(true)
+                                    .small(),
+                            )
+                            .child(
+                                Button::new("test-route-go")
+                                    .label("Test Navigation")
+                                    .primary()
+                                    .small()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        let val = this
+                                            .route_test_params
+                                            .as_ref()
+                                            .map(|i| i.read(cx).value().to_string())
+                                            .unwrap_or_default();
+                                        if !val.trim().is_empty() {
+                                            let nav = Navigator::new(window.window_handle().into());
+                                            nav.push(&val, cx);
+                                        }
+                                    })),
+                            ),
+                    ),
+            );
+
             let matched_info = state
                 .current_match
                 .as_ref()
@@ -603,15 +722,23 @@ impl DevtoolsState {
                 .filter_map(|(id, _, _, _, _, p)| Some((id.clone(), p.clone()?)))
                 .collect();
 
-            fn node_depth(id: &str, parent_of: &HashMap<String, String>) -> usize {
-                let mut d = 0;
-                let mut cur = id;
-                while let Some(p) = parent_of.get(cur) {
-                    d += 1;
-                    cur = p;
+            let mut children_map: HashMap<String, Vec<String>> = HashMap::new();
+            for (id, _, _, _, _, parent) in &node_infos {
+                if let Some(p) = parent {
+                    children_map.entry(p.clone()).or_default().push(id.clone());
                 }
-                d
             }
+
+            let root_ids: Vec<String> = node_infos
+                .iter()
+                .filter_map(|(id, _, _, _, _, parent)| {
+                    if parent.is_none() {
+                        Some(id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
 
             let matched_leaf_id: Option<String> = matched_info.as_ref().map(|(id, _)| id.clone());
             let matched_chain: HashSet<String> = if let Some(ref leaf_id) = matched_leaf_id {
@@ -629,150 +756,13 @@ impl DevtoolsState {
                 HashSet::new()
             };
 
-            struct ChainRow {
-                id: String,
-                pattern: String,
-                tag: &'static str,
-                is_leaf: bool,
-                depth_f32: f32,
+            let mut node_infos_map: HashMap<String, (String, bool, bool, bool)> = HashMap::new();
+            for (id, pattern, is_layout, is_index, has_loader, _) in &node_infos {
+                node_infos_map.insert(
+                    id.clone(),
+                    (pattern.clone(), *is_layout, *is_index, *has_loader),
+                );
             }
-
-            let chain_rows: Vec<ChainRow> = if let Some((ref leaf_id, _)) = matched_info {
-                let mut chain_ids: Vec<String> = Vec::new();
-                let mut cur: &str = leaf_id.as_str();
-                loop {
-                    chain_ids.push(cur.to_string());
-                    cur = match parent_of.get(cur) {
-                        Some(p) => p,
-                        None => break,
-                    };
-                }
-                chain_ids.reverse();
-
-                chain_ids
-                    .iter()
-                    .enumerate()
-                    .map(|(i, chain_id)| {
-                        let info = node_infos.iter().find(|(id, _, _, _, _, _)| id == chain_id);
-                        let (pattern, is_layout, is_index) = info
-                            .map(|(_, p, l, idx, _, _)| (p.clone(), *l, *idx))
-                            .unwrap_or(("?".to_string(), false, false));
-
-                        let tag = if is_layout {
-                            "layout"
-                        } else if is_index {
-                            "index"
-                        } else {
-                            "leaf"
-                        };
-
-                        ChainRow {
-                            id: chain_id.clone(),
-                            pattern,
-                            tag,
-                            is_leaf: i == chain_ids.len() - 1,
-                            depth_f32: 16.0 * i as f32,
-                        }
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
-
-            let params_display = matched_info
-                .as_ref()
-                .map(|(_, p)| format!("Params: {}", p))
-                .unwrap_or_else(|| "No route matched!".to_string());
-            let has_match = matched_info.is_some();
-
-            container = container.child(
-                div()
-                    .p_3()
-                    .bg(theme.secondary)
-                    .rounded(px(6.0))
-                    .border_1()
-                    .border_color(theme.border)
-                    .child({
-                        let mut card = div().flex().flex_col().gap_1().child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_1()
-                                .text_color(theme.success)
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(Icon::new(IconName::Check))
-                                .child("Matched Route Chain"),
-                        );
-
-                        for row in chain_rows {
-                            let arrow = if row.is_leaf { "→" } else { "└" };
-                            let arrow_color = if row.is_leaf {
-                                theme.primary
-                            } else {
-                                theme.muted_foreground
-                            };
-
-                            let row_div = div()
-                                .pl(px(row.depth_f32))
-                                .pr_2()
-                                .py(px(2.0))
-                                .rounded(px(3.0))
-                                .when(row.is_leaf, |d| d.bg(theme.primary.opacity(0.15)))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .child(
-                                            div()
-                                                .w(px(16.0))
-                                                .text_color(arrow_color)
-                                                .text_size(px(11.0))
-                                                .child(arrow),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_color(theme.foreground)
-                                                .text_size(px(12.0))
-                                                .child(row.id),
-                                        )
-                                        .child(
-                                            div()
-                                                .px_1()
-                                                .rounded(px(3.0))
-                                                .bg(theme.muted_foreground.opacity(0.15))
-                                                .text_color(theme.muted_foreground)
-                                                .text_size(px(10.0))
-                                                .child(row.tag),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_color(theme.muted_foreground)
-                                                .text_size(px(11.0))
-                                                .child(row.pattern),
-                                        ),
-                                );
-
-                            card = card.child(row_div);
-                        }
-
-                        if has_match {
-                            card = card.child(
-                                div()
-                                    .mt_1()
-                                    .pl(px(16.0))
-                                    .text_color(theme.muted_foreground)
-                                    .text_size(px(11.0))
-                                    .child(params_display),
-                            );
-                        } else {
-                            card = card
-                                .child(div().text_color(theme.warning).child("No route matched!"));
-                        }
-
-                        card
-                    }),
-            );
 
             container = container.child(
                 Input::new(&tree_search_entity)
@@ -781,35 +771,172 @@ impl DevtoolsState {
                     .small(),
             );
 
-            let mut sorted_nodes: Vec<(String, String, bool, bool, bool, usize)> = node_infos
-                .iter()
-                .filter(|(id, pattern, _, _, _, _)| {
-                    let query = tree_search_entity.read(cx).value().to_lowercase();
-                    query.is_empty()
-                        || id.to_lowercase().contains(&query)
-                        || pattern.to_lowercase().contains(&query)
-                })
-                .map(|(id, pattern, is_layout, is_index, has_loader, _)| {
-                    let depth = node_depth(id, &parent_of);
-                    (
-                        id.clone(),
-                        pattern.clone(),
-                        *is_layout,
-                        *is_index,
-                        *has_loader,
-                        depth,
+            let total_routes = node_infos.len();
+            let layout_count = node_infos.iter().filter(|(_, _, l, _, _, _)| *l).count();
+            let loader_count = node_infos.iter().filter(|(_, _, _, _, ld, _)| *ld).count();
+
+            // Recursive tree rendering function
+            fn render_node(
+                id: &str,
+                depth: usize,
+                node_infos_map: &HashMap<String, (String, bool, bool, bool)>,
+                children_map: &HashMap<String, Vec<String>>,
+                collapsed: &HashSet<String>,
+                theme: &gpui_component::Theme,
+                matched_chain: &HashSet<String>,
+                matched_leaf_id: Option<&str>,
+                window_handle: AnyWindowHandle,
+                toggle_callback: &dyn Fn(&String, &mut Window, &mut Context<DevtoolsState>),
+                cx: &mut Context<DevtoolsState>,
+                window: &mut Window,
+            ) -> Vec<Div> {
+                let mut rows = Vec::new();
+                let info = node_infos_map.get(id).unwrap();
+                let pattern = &info.0;
+                let is_layout = info.1;
+                let is_index = info.2;
+                let has_loader = info.3;
+                let is_in_chain = matched_chain.contains(id);
+                let is_leaf_match = matched_leaf_id == Some(id);
+                let indent_px = px(16.0 * depth as f32);
+
+                let has_children = children_map.get(id).map(|v| !v.is_empty()).unwrap_or(false);
+                let is_collapsed = collapsed.contains(id);
+
+                let mut row = div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .pl(indent_px)
+                    .pr_2()
+                    .py(px(3.0))
+                    .rounded(px(4.0))
+                    .when(is_in_chain, |d| {
+                        d.bg(if is_leaf_match {
+                            theme.primary.opacity(0.2)
+                        } else {
+                            theme.success.opacity(0.1)
+                        })
+                    })
+                    .hover(|style| style.bg(theme.secondary.opacity(0.5)));
+
+                if has_children {
+                    let id_clone = id.to_string();
+                    let toggle = toggle_callback.clone();
+                    row = row.child(
+                        Button::new(format!("toggle-{}", id))
+                            .icon(if is_collapsed {
+                                IconName::ChevronRight
+                            } else {
+                                IconName::ChevronDown
+                            })
+                            .ghost()
+                            .xsmall()
+                            .on_click(move |_, window, cx| {
+                                toggle(&id_clone, window, cx);
+                            }),
+                    );
+                } else {
+                    row = row.child(div().w(px(20.0)));
+                }
+
+                let pattern_clone = pattern.clone();
+                let window_handle_clone = window_handle.clone();
+                row = row
+                    .child(
+                        div()
+                            .min_w(px(90.0))
+                            .text_color(if is_leaf_match {
+                                theme.primary
+                            } else if is_in_chain {
+                                theme.success
+                            } else {
+                                theme.foreground
+                            })
+                            .text_size(px(11.0))
+                            .font_weight(if is_leaf_match {
+                                FontWeight::MEDIUM
+                            } else {
+                                FontWeight::NORMAL
+                            })
+                            .cursor_pointer()
+                            .on_mouse_down(MouseButton::Left, move |_ev, _window, cx| {
+                                let nav = Navigator::new(window_handle_clone.clone());
+                                nav.push(&pattern_clone, cx);
+                            })
+                            .child(id.to_string()),
                     )
-                })
-                .collect();
-            sorted_nodes.sort_by_key(|(id, _, _, _, _, depth)| (*depth, id.clone()));
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_color(theme.muted_foreground)
+                            .text_size(px(11.0))
+                            .cursor_pointer()
+                            .on_mouse_down(MouseButton::Left, {
+                                let pattern = pattern.clone();
+                                let wh = window_handle.clone();
+                                move |_ev, _window, cx| {
+                                    let nav = Navigator::new(wh.clone());
+                                    nav.push(&pattern, cx);
+                                }
+                            })
+                            .child(pattern.clone()),
+                    )
+                    .when(is_layout || is_index || has_loader, |d| {
+                        let mut tags = Vec::new();
+                        if is_layout {
+                            tags.push("layout");
+                        }
+                        if is_index {
+                            tags.push("index");
+                        }
+                        if has_loader {
+                            tags.push("loader");
+                        }
+                        d.child(div().flex().gap_1().children(tags.into_iter().map(|tag| {
+                            div()
+                                .px_1()
+                                .rounded(px(2.0))
+                                .bg(theme.muted_foreground.opacity(0.1))
+                                .text_color(theme.muted_foreground)
+                                .text_size(px(9.0))
+                                .child(tag)
+                        })))
+                    });
 
-            let total_routes = sorted_nodes.len();
-            let layout_count = sorted_nodes.iter().filter(|(_, _, l, _, _, _)| *l).count();
-            let loader_count = sorted_nodes
-                .iter()
-                .filter(|(_, _, _, _, ld, _)| *ld)
-                .count();
+                rows.push(row);
 
+                if !is_collapsed {
+                    if let Some(children) = children_map.get(id) {
+                        let mut sorted_children = children.clone();
+                        sorted_children.sort();
+                        for child_id in sorted_children {
+                            rows.extend(render_node(
+                                &child_id,
+                                depth + 1,
+                                node_infos_map,
+                                children_map,
+                                collapsed,
+                                theme,
+                                matched_chain,
+                                matched_leaf_id,
+                                window_handle.clone(),
+                                toggle_callback,
+                                cx,
+                                window,
+                            ));
+                        }
+                    }
+                }
+
+                rows
+            }
+
+            let toggle_callback = cx.listener(
+                |this, id: &String, _window: &mut Window, cx: &mut Context<Self>| {
+                    this.toggle_route_node(id.clone(), cx);
+                },
+            );
             container = container
                 .child(
                     div()
@@ -836,87 +963,27 @@ impl DevtoolsState {
                                 )),
                         ),
                 )
-                .children(sorted_nodes.iter().map(
-                    |(id, pattern, is_layout, is_index, has_loader, depth)| {
-                        let is_in_chain = matched_chain.contains(id);
-                        let is_leaf_match = matched_leaf_id.as_deref() == Some(id.as_str());
-                        let indent_px = px(16.0 * *depth as f32);
-
-                        let mut tags: Vec<&'static str> = Vec::new();
-                        if *is_layout {
-                            tags.push("layout");
-                        }
-                        if *is_index {
-                            tags.push("index");
-                        }
-                        if *has_loader {
-                            tags.push("loader");
-                        }
-
-                        let pattern_clone = pattern.clone();
-                        let window_handle = window_handle_for_tree.clone();
-
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .pl(indent_px)
-                            .pr_2()
-                            .py(px(3.0))
-                            .rounded(px(4.0))
-                            .cursor_pointer()
-                            .when(is_in_chain, |d| {
-                                d.bg(if is_leaf_match {
-                                    theme.primary.opacity(0.2)
-                                } else {
-                                    theme.success.opacity(0.1)
-                                })
-                            })
-                            .hover(|style| style.bg(theme.secondary.opacity(0.5)))
-                            .on_mouse_down(MouseButton::Left, move |_ev, _window, cx| {
-                                let nav = Navigator::new(window_handle);
-                                nav.push(&pattern_clone, cx);
-                            })
-                            .child(
-                                div()
-                                    .min_w(px(110.0))
-                                    .text_color(if is_leaf_match {
-                                        theme.primary
-                                    } else if is_in_chain {
-                                        theme.success
-                                    } else {
-                                        theme.foreground
-                                    })
-                                    .text_size(px(11.0))
-                                    .font_weight(if is_leaf_match {
-                                        FontWeight::MEDIUM
-                                    } else {
-                                        FontWeight::NORMAL
-                                    })
-                                    .child(id.clone()),
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .children(root_ids.iter().flat_map(|root_id| {
+                            render_node(
+                                root_id,
+                                0,
+                                &node_infos_map,
+                                &children_map,
+                                &self.collapsed_route_nodes,
+                                &theme,
+                                &matched_chain,
+                                matched_leaf_id.as_deref(),
+                                window_handle_for_tree.clone(),
+                                &toggle_callback,
+                                cx,
+                                window,
                             )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .text_color(theme.muted_foreground)
-                                    .text_size(px(11.0))
-                                    .child(pattern.clone()),
-                            )
-                            .when(!tags.is_empty(), |d| {
-                                d.child(div().flex().gap_1().children(tags.into_iter().map(
-                                    |tag| {
-                                        div()
-                                            .px_1()
-                                            .rounded(px(2.0))
-                                            .bg(theme.muted_foreground.opacity(0.1))
-                                            .text_color(theme.muted_foreground)
-                                            .text_size(px(9.0))
-                                            .child(tag)
-                                    },
-                                )))
-                            })
-                    },
-                ));
+                        })),
+                );
         } else {
             container = container.child(
                 div()
@@ -938,6 +1005,7 @@ impl DevtoolsState {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         self.ensure_timeline_search(window, cx);
+        self.ensure_timeline_path_filter(window, cx);
 
         let theme = cx.theme();
         let colors = EventColors {
@@ -976,6 +1044,7 @@ impl DevtoolsState {
         let item_sizes = Rc::new(vec![Size::new(row_width, row_height); item_count]);
 
         let search_entity = self.timeline_search.clone().unwrap();
+        let path_filter_entity = self.timeline_path_filter.clone().unwrap();
         let scroll_handle = self.timeline_scroll_handle.clone();
 
         let bg_color = theme.background;
@@ -1015,20 +1084,6 @@ impl DevtoolsState {
         let json_log = serde_json::to_string_pretty(&self.event_log)
             .unwrap_or_else(|_| "Failed to serialize log".to_string());
 
-        let avg_delta = if deltas_for_list.is_empty() {
-            0.0
-        } else {
-            deltas_for_list.iter().sum::<f64>() / deltas_for_list.len() as f64
-        };
-        let max_delta = deltas_for_list.iter().fold(0.0_f64, |a, b| a.max(*b));
-        let slowest_color = if max_delta > 500.0 {
-            theme.danger
-        } else if max_delta > 100.0 {
-            theme.warning
-        } else {
-            theme.muted_foreground
-        };
-
         div()
             .flex()
             .flex_col()
@@ -1055,32 +1110,12 @@ impl DevtoolsState {
                             .items_center()
                             .gap_2()
                             .child(
-                                Button::new("hist-back")
-                                    .icon(IconName::ArrowLeft)
-                                    .ghost()
-                                    .small()
-                                    .tooltip("History Back")
-                                    .on_click(cx.listener(|_, _, _, cx| {
-                                        RouterState::update(cx, |state, _cx| {
-                                            state.history.back();
-                                        });
-                                    })),
-                            )
-                            .child(
-                                Button::new("hist-forward")
-                                    .icon(IconName::ArrowRight)
-                                    .ghost()
-                                    .small()
-                                    .tooltip("History Forward")
-                                    .on_click(cx.listener(|_, _, _, cx| {
-                                        RouterState::update(cx, |state, _cx| {
-                                            state.history.forward();
-                                        });
-                                    })),
-                            )
-                            .child(
-                                Button::new("filter-button")
-                                    .label(format!("Filter: {}", self.filter_event_type.label()))
+                                Button::new("filter-types")
+                                    .label(if self.filter_event_types.is_empty() {
+                                        "All Events".to_string()
+                                    } else {
+                                        format!("{} types", self.filter_event_types.len())
+                                    })
                                     .ghost()
                                     .small()
                                     .dropdown_menu({
@@ -1088,7 +1123,6 @@ impl DevtoolsState {
                                         move |menu, _window, cx| {
                                             let mut menu = menu;
                                             for event_type in [
-                                                RouterEventType::All,
                                                 RouterEventType::BeforeNavigate,
                                                 RouterEventType::BeforeLoad,
                                                 RouterEventType::Load,
@@ -1099,8 +1133,9 @@ impl DevtoolsState {
                                                 let is_checked = weak_self
                                                     .upgrade()
                                                     .map(|this| {
-                                                        this.read(cx).filter_event_type
-                                                            == event_type
+                                                        this.read(cx)
+                                                            .filter_event_types
+                                                            .contains(&event_type)
                                                     })
                                                     .unwrap_or(false);
                                                 menu = menu.item(
@@ -1111,16 +1146,39 @@ impl DevtoolsState {
                                                             let event_type = event_type;
                                                             move |_, _window, cx| {
                                                                 weak_self
-                                                                    .update(cx, |this, inner_cx| {
-                                                                        this.filter_event_type =
-                                                                            event_type;
-                                                                        inner_cx.notify();
+                                                                    .update(cx, |this, cx| {
+                                                                        if this
+                                                                            .filter_event_types
+                                                                            .contains(&event_type)
+                                                                        {
+                                                                            this.filter_event_types
+                                                                                .remove(
+                                                                                    &event_type,
+                                                                                );
+                                                                        } else {
+                                                                            this.filter_event_types
+                                                                                .insert(event_type);
+                                                                        }
+                                                                        cx.notify();
                                                                     })
                                                                     .ok();
                                                             }
                                                         }),
                                                 );
                                             }
+                                            menu = menu.item(
+                                                PopupMenuItem::new("All Events").on_click({
+                                                    let weak_self = weak_self.clone();
+                                                    move |_, _window, cx| {
+                                                        weak_self
+                                                            .update(cx, |this, cx| {
+                                                                this.filter_event_types.clear();
+                                                                cx.notify();
+                                                            })
+                                                            .ok();
+                                                    }
+                                                }),
+                                            );
                                             menu
                                         }
                                     }),
@@ -1165,48 +1223,10 @@ impl DevtoolsState {
                     .small(),
             )
             .child(
-                div()
-                    .px_2()
-                    .py_1()
-                    .bg(theme.secondary.opacity(0.5))
-                    .rounded(px(4.0))
-                    .border_1()
-                    .border_color(theme.border.opacity(0.5))
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .flex()
-                            .gap_3()
-                            .child(
-                                div()
-                                    .text_size(px(10.0))
-                                    .text_color(theme.muted_foreground)
-                                    .child(format!("Total: {}", self.event_log.len())),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(10.0))
-                                    .text_color(if avg_delta > 100.0 {
-                                        theme.warning
-                                    } else {
-                                        theme.muted_foreground
-                                    })
-                                    .child(format!("Avg: {:.1}ms", avg_delta)),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(10.0))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(slowest_color)
-                            .child(if max_delta > 0.0 {
-                                format!("Slowest: {:.0}ms", max_delta)
-                            } else {
-                                "Slowest: —".to_string()
-                            }),
-                    ),
+                Input::new(&path_filter_entity)
+                    .prefix(Icon::new(IconName::Search))
+                    .cleanable(true)
+                    .small(),
             )
             .child(
                 div()
@@ -1331,6 +1351,7 @@ impl DevtoolsState {
                                                 } else {
                                                     None
                                                 };
+
                                                 div()
                                                     .w(row_width)
                                                     .h(row_height)
@@ -1381,9 +1402,8 @@ impl DevtoolsState {
                                                     .child(
                                                         div().overflow_hidden().child(styled_text),
                                                     )
-                                                    // Dedicated select button (icon) to show event detail
                                                     .child(
-                                                        Button::new(("select-event", ix))
+                                                        Button::new(format!("select-event-{}", ix))
                                                             .icon(IconName::Info)
                                                             .ghost()
                                                             .xsmall()
@@ -1411,13 +1431,12 @@ impl DevtoolsState {
                                                                 }
                                                             }),
                                                     )
-                                                    // Jump button (only for REN events)
                                                     .when(is_rendered, |d| {
                                                         let path = jump_path.clone().unwrap();
                                                         let window_handle =
                                                             window_handle_for_jump.clone();
                                                         d.child(
-                                                            Button::new(("jump-btn", ix))
+                                                            Button::new(format!("jump-btn-{}", ix))
                                                                 .icon(IconName::Play)
                                                                 .ghost()
                                                                 .xsmall()
@@ -2028,7 +2047,7 @@ impl Render for DevtoolsState {
             .right_0()
             .w(panel_width)
             .h(panel_height)
-            .bg(theme.background.opacity(0.95))
+            .bg(theme.background.opacity(0.9))
             .text_color(theme.foreground)
             .border_1()
             .border_color(theme.border)
@@ -2068,7 +2087,7 @@ impl Render for DevtoolsState {
                     .justify_between()
                     .px_2()
                     .py_1()
-                    .bg(theme.secondary)
+                    .bg(theme.secondary.opacity(0.95))
                     .rounded_tl(px(8.0))
                     .border_b_1()
                     .border_color(theme.border)

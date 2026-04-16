@@ -1,6 +1,7 @@
 use gpui::{
-    App, Context, Entity, EventEmitter, FocusHandle, FontWeight, Hsla, KeyBinding, Render, Size,
-    StyledText, Subscription, TextStyle, Window, actions, div, prelude::*, px,
+    App, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight, Hsla, KeyBinding,
+    MouseButton, Render, Size, StyledText, Subscription, TextStyle, Window, actions, div,
+    prelude::*, px,
 };
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, VirtualListScrollHandle,
@@ -13,7 +14,7 @@ use gpui_component::{
     v_virtual_list,
 };
 use navi_router::{
-    RouterEvent, RouterState,
+    Navigator, RouterEvent, RouterState,
     event_bus::{self, TimedEvent},
 };
 use std::collections::{HashMap, HashSet};
@@ -75,78 +76,160 @@ pub enum DevtoolsTab {
     State,
 }
 
-/// Render-friendly representation of a router event for the timeline.
+// ---------------------------------------------------------------------------
+// Event display types
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, PartialEq)]
+struct EventDetail {
+    from_pathname: Option<String>,
+    from_search: Option<String>,
+    to_pathname: String,
+    to_search: Option<String>,
+}
+
+fn format_search(search: &serde_json::Value) -> String {
+    if let serde_json::Value::Object(map) = search {
+        if map.is_empty() {
+            return String::new();
+        }
+        let pairs: Vec<String> = map
+            .iter()
+            .filter_map(|(k, v)| {
+                let val = match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                Some(format!("{}={}", k, val))
+            })
+            .collect();
+        if pairs.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", pairs.join("&"))
+        }
+    } else {
+        String::new()
+    }
+}
+
+fn extract_event_detail(event: &RouterEvent) -> EventDetail {
+    match event {
+        RouterEvent::BeforeNavigate { from, to }
+        | RouterEvent::BeforeLoad { from, to }
+        | RouterEvent::Load { from, to }
+        | RouterEvent::BeforeRouteMount { from, to }
+        | RouterEvent::Resolved { from, to }
+        | RouterEvent::Rendered { from, to } => {
+            let from_search_str = from
+                .as_ref()
+                .map(|l| format_search(&l.search))
+                .unwrap_or_default();
+            let to_search_str = format_search(&to.search);
+
+            EventDetail {
+                from_pathname: from.as_ref().map(|l| l.pathname.clone()),
+                from_search: if from_search_str.is_empty() {
+                    None
+                } else {
+                    Some(from_search_str)
+                },
+                to_pathname: to.pathname.clone(),
+                to_search: if to_search_str.is_empty() {
+                    None
+                } else {
+                    Some(to_search_str)
+                },
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 struct EventDisplay {
     timestamp_str: String,
     badge: &'static str,
     badge_color: Hsla,
     text: String,
+    detail: EventDetail,
 }
 
-/// Format a `RouterEvent` into a searchable, human-readable string.
 fn format_event_text(event: &RouterEvent) -> String {
     match event {
         RouterEvent::BeforeNavigate { from, to } => {
-            let from_path = from.as_ref().map(|l| l.pathname.as_str()).unwrap_or("?");
-            format!("{} → {}", from_path, to.pathname)
+            let from_path = from
+                .as_ref()
+                .map(|l| format!("{}{}", l.pathname, format_search(&l.search)))
+                .unwrap_or_else(|| "?".to_string());
+            let to_path = format!("{}{}", to.pathname, format_search(&to.search));
+            format!("{} → {}", from_path, to_path)
         }
         RouterEvent::BeforeLoad { to, .. }
         | RouterEvent::Load { to, .. }
         | RouterEvent::BeforeRouteMount { to, .. }
         | RouterEvent::Resolved { to, .. }
-        | RouterEvent::Rendered { to, .. } => to.pathname.clone(),
+        | RouterEvent::Rendered { to, .. } => {
+            format!("{}{}", to.pathname, format_search(&to.search))
+        }
     }
 }
 
-/// Build a full `EventDisplay` with badge metadata and formatted text.
 fn build_event_display(
     event: &RouterEvent,
     timestamp_str: String,
     colors: &EventColors,
 ) -> EventDisplay {
+    let detail = extract_event_detail(event);
+
     match event {
         RouterEvent::BeforeNavigate { from, to } => {
             let from_path = from
                 .as_ref()
-                .map(|l| l.pathname.clone())
+                .map(|l| format!("{}{}", l.pathname, format_search(&l.search)))
                 .unwrap_or_else(|| "?".to_string());
+            let to_path = format!("{}{}", to.pathname, format_search(&to.search));
             EventDisplay {
                 timestamp_str,
                 badge: "NAV",
                 badge_color: colors.primary,
-                text: format!("{} → {}", from_path, to.pathname),
+                text: format!("{} → {}", from_path, to_path),
+                detail,
             }
         }
         RouterEvent::BeforeLoad { to, .. } => EventDisplay {
             timestamp_str,
             badge: "BLD",
             badge_color: colors.warning,
-            text: to.pathname.clone(),
+            text: format!("{}{}", to.pathname, format_search(&to.search)),
+            detail,
         },
         RouterEvent::Load { to, .. } => EventDisplay {
             timestamp_str,
             badge: "LOAD",
             badge_color: colors.warning,
-            text: to.pathname.clone(),
+            text: format!("{}{}", to.pathname, format_search(&to.search)),
+            detail,
         },
         RouterEvent::BeforeRouteMount { to, .. } => EventDisplay {
             timestamp_str,
             badge: "MNT",
             badge_color: colors.info,
-            text: to.pathname.clone(),
+            text: format!("{}{}", to.pathname, format_search(&to.search)),
+            detail,
         },
         RouterEvent::Resolved { to, .. } => EventDisplay {
             timestamp_str,
             badge: "OK",
             badge_color: colors.success,
-            text: to.pathname.clone(),
+            text: format!("{}{}", to.pathname, format_search(&to.search)),
+            detail,
         },
         RouterEvent::Rendered { to, .. } => EventDisplay {
             timestamp_str,
             badge: "REN",
             badge_color: colors.info,
-            text: to.pathname.clone(),
+            text: format!("{}{}", to.pathname, format_search(&to.search)),
+            detail,
         },
     }
 }
@@ -157,6 +240,10 @@ struct EventColors {
     warning: Hsla,
     info: Hsla,
 }
+
+// ---------------------------------------------------------------------------
+// DevtoolsState
+// ---------------------------------------------------------------------------
 
 pub struct DevtoolsState {
     expanded: bool,
@@ -169,6 +256,8 @@ pub struct DevtoolsState {
     highlight_new_count: usize,
     filter_event_type: RouterEventType,
     focus_handle: FocusHandle,
+    nav_input: Option<Entity<InputState>>,
+    selected_event_detail: Option<EventDetail>,
 }
 
 impl EventEmitter<()> for DevtoolsState {}
@@ -203,7 +292,16 @@ impl DevtoolsState {
         cx.bind_keys([KeyBinding::new("ctrl-3", SwitchToTab3, Some("Devtools"))]);
         cx.bind_keys([KeyBinding::new("cmd-4", SwitchToTab4, Some("Devtools"))]);
         cx.bind_keys([KeyBinding::new("ctrl-4", SwitchToTab4, Some("Devtools"))]);
-        cx.bind_keys([KeyBinding::new("/", FocusTimelineSearch, Some("Devtools"))]);
+        cx.bind_keys([KeyBinding::new(
+            "cmd-f",
+            FocusTimelineSearch,
+            Some("Devtools"),
+        )]);
+        cx.bind_keys([KeyBinding::new(
+            "ctrl-f",
+            FocusTimelineSearch,
+            Some("Devtools"),
+        )]);
 
         let subscription = cx.observe_global::<RouterState>(move |this, cx| {
             this.refresh_log(cx);
@@ -220,6 +318,8 @@ impl DevtoolsState {
             highlight_new_count: 0,
             filter_event_type: RouterEventType::All,
             focus_handle: cx.focus_handle(),
+            nav_input: None,
+            selected_event_detail: None,
         };
         this.refresh_log(cx);
         this
@@ -233,6 +333,17 @@ impl DevtoolsState {
                 s
             });
             self.timeline_search = Some(state);
+        }
+    }
+
+    fn ensure_nav_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.nav_input.is_none() {
+            let state = cx.new(|cx| {
+                let mut s = InputState::new(window, cx);
+                s.set_placeholder("Navigate to path (e.g. /users/42)...", window, cx);
+                s
+            });
+            self.nav_input = Some(state);
         }
     }
 
@@ -267,6 +378,7 @@ impl DevtoolsState {
 
     fn set_selected_tab(&mut self, tab: DevtoolsTab, cx: &mut Context<Self>) {
         self.selected_tab = tab;
+        self.selected_event_detail = None;
         cx.notify();
     }
 
@@ -297,16 +409,40 @@ impl DevtoolsState {
         }
     }
 
+    fn select_event(&mut self, detail: EventDetail, cx: &mut Context<Self>) {
+        if self.selected_event_detail.as_ref() == Some(&detail) {
+            self.selected_event_detail = None;
+        } else {
+            self.selected_event_detail = Some(detail);
+        }
+        cx.notify();
+    }
+
     // -----------------------------------------------------------------------
     // Routes tab
     // -----------------------------------------------------------------------
 
-    fn render_routes_tab(&self, cx: &Context<Self>) -> impl IntoElement {
+    fn render_routes_tab(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        self.ensure_nav_input(window, cx);
+
         let theme = cx.theme();
         let state = RouterState::try_global(cx);
         let mut container = div().gap_3().flex().flex_col();
 
         if let Some(state) = state {
+            let loc = state.current_location();
+            let search_str = format_search(&loc.search);
+            let full_path = if search_str.is_empty() {
+                loc.pathname.clone()
+            } else {
+                format!("{}{}", loc.pathname, search_str)
+            };
+
+            // Current Location with Copy button
             container = container.child(
                 div()
                     .p_3()
@@ -323,17 +459,94 @@ impl DevtoolsState {
                                 div()
                                     .flex()
                                     .items_center()
+                                    .justify_between()
                                     .gap_1()
-                                    .text_color(theme.primary)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(Icon::new(IconName::Map))
-                                    .child("Current Location"),
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap_1()
+                                            .text_color(theme.primary)
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .child(Icon::new(IconName::Map))
+                                            .child("Current Location"),
+                                    )
+                                    .child(
+                                        Clipboard::new("copy-current-path")
+                                            .value(full_path)
+                                            .tooltip("Copy path"),
+                                    ),
                             )
-                            .child(format!("Path: {}", state.current_location().pathname))
-                            .child(format!("Search: {:?}", state.current_location().search)),
+                            .child(format!("Path: {}", loc.pathname))
+                            .child(format!(
+                                "Search: {}",
+                                if search_str.is_empty() {
+                                    "None".to_string()
+                                } else {
+                                    search_str
+                                }
+                            )),
                     ),
             );
 
+            // Direct Navigation Input
+            let nav_input_entity = self.nav_input.clone().unwrap();
+            container = container.child(
+                div()
+                    .p_3()
+                    .bg(theme.secondary)
+                    .rounded(px(6.0))
+                    .border_1()
+                    .border_color(theme.border)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .text_color(theme.info)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(Icon::new(IconName::ArrowRight))
+                                    .child("Navigate to Path"),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        Input::new(&nav_input_entity)
+                                            .prefix(Icon::new(IconName::Search))
+                                            .cleanable(true)
+                                            .small(),
+                                    )
+                                    .child(
+                                        Button::new("nav-go-btn").label("Go").compact().on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                let val = this
+                                                    .nav_input
+                                                    .as_ref()
+                                                    .map(|i| i.read(cx).value().to_string())
+                                                    .unwrap_or_default();
+                                                let trimmed = val.trim();
+                                                if !trimmed.is_empty() && trimmed.starts_with('/') {
+                                                    let nav = Navigator::new(
+                                                        window.window_handle().into(),
+                                                    );
+                                                    nav.push(trimmed, cx);
+                                                }
+                                            }),
+                                        ),
+                                    ),
+                            ),
+                    ),
+            );
+
+            // --- Matched Route Chain ---
             let matched_info = state
                 .current_match
                 .as_ref()
@@ -530,6 +743,7 @@ impl DevtoolsState {
                     }),
             );
 
+            // --- Full Route Tree ---
             let mut sorted_nodes: Vec<(String, String, bool, bool, bool, usize)> = node_infos
                 .iter()
                 .map(|(id, pattern, is_layout, is_index, has_loader, _)| {
@@ -722,11 +936,13 @@ impl DevtoolsState {
         let highlight_color = theme.success.opacity(0.25);
         let search_highlight_bg = theme.warning;
         let warning_color = theme.warning;
+        let primary_bg = theme.primary.opacity(0.15);
 
         let displays_for_list = event_displays;
         let deltas_for_list = deltas;
         let entity = cx.entity().clone();
         let highlight_count = self.highlight_new_count;
+        let selected_detail = self.selected_event_detail.clone();
 
         let search_query = self
             .timeline_search
@@ -741,6 +957,8 @@ impl DevtoolsState {
             .join("\n");
 
         let weak_self = cx.entity().downgrade();
+
+        let has_detail = selected_detail.is_some();
 
         div()
             .flex()
@@ -841,6 +1059,7 @@ impl DevtoolsState {
             .child(
                 div()
                     .flex_1()
+                    .min_h_0()
                     .border_1()
                     .border_color(border_color)
                     .rounded(px(6.0))
@@ -862,21 +1081,29 @@ impl DevtoolsState {
                         div()
                             .overflow_x_scrollbar()
                             .size_full()
-                            .child(
+                            .child({
+                                let entity_for_list = entity.clone();
                                 v_virtual_list(
-                                    entity,
+                                    entity_for_list,
                                     "timeline-list",
                                     item_sizes,
                                     move |_view, visible_range, _window, _cx| {
                                         let displays = displays_for_list.clone();
                                         let deltas = deltas_for_list.clone();
                                         let search_query = search_query.clone();
+                                        let displays_for_click = displays_for_list.clone();
+                                        let selected_detail_inner = selected_detail.clone();
+                                        let entity_inner = entity.clone();
                                         visible_range
                                             .map(move |ix| {
                                                 let display = &displays[ix];
                                                 let delta = deltas[ix];
                                                 let even = ix % 2 == 0;
                                                 let is_new = ix < highlight_count;
+                                                let is_selected = selected_detail_inner
+                                                    .as_ref()
+                                                    .map(|d| d == &display.detail)
+                                                    .unwrap_or(false);
                                                 let event_text = &display.text;
                                                 let text_len = event_text.len();
 
@@ -936,7 +1163,7 @@ impl DevtoolsState {
                                                         .with_runs(runs)
                                                 };
 
-                                                let delta_text: String = if ix == 0 {
+                                                let delta_text = if ix == 0 {
                                                     "—".to_string()
                                                 } else {
                                                     format!("+{:.0}ms", delta)
@@ -949,7 +1176,10 @@ impl DevtoolsState {
                                                     .flex()
                                                     .items_center()
                                                     .gap_3()
-                                                    .bg(if is_new {
+                                                    .cursor_pointer()
+                                                    .bg(if is_selected {
+                                                        primary_bg
+                                                    } else if is_new {
                                                         highlight_color
                                                     } else if even {
                                                         bg_color
@@ -958,6 +1188,21 @@ impl DevtoolsState {
                                                     })
                                                     .hover(|style| {
                                                         style.bg(secondary_color.opacity(0.6))
+                                                    })
+                                                    .on_mouse_down(MouseButton::Left, {
+                                                        let entity = entity_inner.clone();
+                                                        let displays = displays_for_click.clone();
+                                                        move |_event, _window, cx| {
+                                                            if let Some(display) = displays.get(ix)
+                                                            {
+                                                                entity.update(cx, |state, cx| {
+                                                                    state.select_event(
+                                                                        display.detail.clone(),
+                                                                        cx,
+                                                                    );
+                                                                });
+                                                            }
+                                                        }
                                                     })
                                                     .child(
                                                         div()
@@ -992,11 +1237,101 @@ impl DevtoolsState {
                                             .collect()
                                     },
                                 )
-                                .track_scroll(&scroll_handle),
-                            )
+                                .track_scroll(&scroll_handle)
+                            })
                             .into_any_element()
                     }),
             )
+            .when(has_detail, |d| d.child(self.render_event_detail_panel(cx)))
+    }
+
+    fn render_event_detail_panel(&self, cx: &Context<Self>) -> Div {
+        let theme = cx.theme();
+        let detail = self
+            .selected_event_detail
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| EventDetail {
+                from_pathname: None,
+                from_search: None,
+                to_pathname: "?".to_string(),
+                to_search: None,
+            });
+
+        let label_row = |label: &str, value: String| -> Div {
+            div()
+                .flex()
+                .gap_2()
+                .child(
+                    div()
+                        .min_w(px(70.0))
+                        .text_color(theme.muted_foreground)
+                        .text_size(px(10.0))
+                        .child(label.to_string()),
+                )
+                .child(
+                    div()
+                        .text_color(theme.foreground)
+                        .text_size(px(11.0))
+                        .child(value),
+                )
+        };
+
+        let mut panel = div()
+            .mt_1()
+            .p_3()
+            .bg(theme.secondary)
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(theme.border)
+            .border_t_1()
+            .border_color(theme.muted_foreground.opacity(0.3))
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .text_color(theme.muted_foreground)
+                    .text_size(px(10.0))
+                    .child("EVENT PAYLOAD")
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .ml_auto()
+                            .cursor_pointer()
+                            .text_color(theme.muted_foreground)
+                            .hover(|s| s.text_color(theme.foreground))
+                            .child("✕")
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _, _, cx| {
+                                    this.selected_event_detail = None;
+                                    cx.notify();
+                                }),
+                            ),
+                    ),
+            );
+
+        if let Some(from) = &detail.from_pathname {
+            panel = panel.child(label_row("From:", from.clone()));
+            if let Some(search) = &detail.from_search {
+                panel = panel.child(label_row("  Search:", search.clone()));
+            }
+        } else {
+            panel = panel.child(label_row("From:", "(initial navigation)".to_string()));
+        }
+
+        panel = panel.child(label_row("To:", detail.to_pathname.clone()));
+        if let Some(search) = &detail.to_search {
+            panel = panel.child(label_row("  Search:", search.clone()));
+        }
+
+        panel
     }
 
     // -----------------------------------------------------------------------
@@ -1165,6 +1500,13 @@ impl DevtoolsState {
             let blocker_count = state.blockers.len();
             let has_blockers = !state.blockers.is_empty();
 
+            let search_str = format_search(&loc.search);
+            let search_display = if search_str.is_empty() {
+                "None".to_string()
+            } else {
+                search_str
+            };
+
             container = container
                 .child(
                     div()
@@ -1226,7 +1568,7 @@ impl DevtoolsState {
                                             div()
                                                 .text_color(theme.foreground)
                                                 .text_size(px(11.0))
-                                                .child(format!("{:?}", loc.search)),
+                                                .child(search_display),
                                         ),
                                 )
                                 .child(
@@ -1485,17 +1827,23 @@ impl Render for DevtoolsState {
                             .flex()
                             .items_center()
                             .gap_1()
-                            .child(Icon::new(IconName::Info))
-                            .child(" Devtools"),
-                    )
-                    .child(
-                        Button::new("close-devtools")
-                            .icon(IconName::Close)
-                            .ghost()
-                            .small()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.toggle_expanded(window, cx);
-                            })),
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(Icon::new(IconName::Info))
+                                    .child(" Devtools"),
+                            )
+                            .child(
+                                Button::new("close-devtools")
+                                    .icon(IconName::Close)
+                                    .ghost()
+                                    .small()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.toggle_expanded(window, cx);
+                                    })),
+                            ),
                     ),
             )
             .child(
@@ -1531,7 +1879,9 @@ impl Render for DevtoolsState {
                     .p_3()
                     .overflow_y_scrollbar()
                     .child(match self.selected_tab {
-                        DevtoolsTab::Routes => self.render_routes_tab(cx).into_any_element(),
+                        DevtoolsTab::Routes => {
+                            self.render_routes_tab(window, cx).into_any_element()
+                        }
                         DevtoolsTab::Cache => self.render_cache_tab(cx).into_any_element(),
                         DevtoolsTab::Timeline => {
                             self.render_timeline_tab(window, cx).into_any_element()

@@ -1,9 +1,8 @@
+use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::{define_route, use_loader_data};
-use navi_router::RouteDef;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UserParams {
@@ -24,7 +23,7 @@ define_route!(
     data: UserData,
     loader: |params: UserParams, executor: gpui::BackgroundExecutor| async move {
         let id = params.id;
-        executor.timer(Duration::from_millis(800)).await;
+        executor.timer(std::time::Duration::from_millis(800)).await;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(UserData {
             id: id.clone(),
             name: format!("User {}", id),

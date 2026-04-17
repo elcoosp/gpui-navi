@@ -1,11 +1,11 @@
+use navi_router::RouteDef;
+
 #[cfg(feature = "validator")]
 use gpui::prelude::*;
 #[cfg(feature = "validator")]
 use gpui::*;
 #[cfg(feature = "validator")]
 use navi_macros::{define_route, use_search};
-#[cfg(feature = "validator")]
-use navi_router::RouteDef;
 #[cfg(feature = "validator")]
 use navi_router::components::Link;
 #[cfg(feature = "validator")]

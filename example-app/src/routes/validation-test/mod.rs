@@ -1,3 +1,4 @@
+use navi_router::RouteDef;
 #[cfg(feature = "garde")]
 pub mod garde;
 pub mod index;

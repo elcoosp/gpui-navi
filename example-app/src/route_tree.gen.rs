@@ -46,7 +46,7 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 #[cfg(feature = "garde")]
 
     {
-        let mut node = validation_test_garde::ValidationTestGardeRoute::build_node();
+        let mut node = validation_test_garde::GardeTestRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -54,7 +54,7 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 #[cfg(feature = "validify")]
 
     {
-        let mut node = validation_test_validify::ValidationTestValidifyRoute::build_node();
+        let mut node = validation_test_validify::ValidifyTestRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -68,7 +68,7 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 #[cfg(feature = "validator")]
 
     {
-        let mut node = validation_test_validator::ValidationTestValidatorRoute::build_node();
+        let mut node = validation_test_validator::ValidatorTestRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -76,13 +76,13 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 #[cfg(feature = "valico")]
 
     {
-        let mut node = validation_test_valico::ValidationTestValicoRoute::build_node();
+        let mut node = validation_test_valico::ValicoTestRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
 
     {
-        let mut node = docs_param_::DocsParamRoute::build_node();
+        let mut node = docs_param_::DocsRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -100,7 +100,7 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
-        let mut node = users::UsersUsersRoute::build_node();
+        let mut node = users::UsersRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -114,14 +114,14 @@ about::AboutRoute::register(cx);
 __root::RootRoute::register(cx);
 index::IndexRoute::register(cx);
 settings::SettingsRoute::register(cx);
-#[cfg(feature = "garde")] validation_test_garde::ValidationTestGardeRoute::register(cx);
-#[cfg(feature = "validify")] validation_test_validify::ValidationTestValidifyRoute::register(cx);
+#[cfg(feature = "garde")] validation_test_garde::GardeTestRoute::register(cx);
+#[cfg(feature = "validify")] validation_test_validify::ValidifyTestRoute::register(cx);
 validation_test_index::ValidationTestIndexRoute::register(cx);
-#[cfg(feature = "validator")] validation_test_validator::ValidationTestValidatorRoute::register(cx);
-#[cfg(feature = "valico")] validation_test_valico::ValidationTestValicoRoute::register(cx);
-docs_param_::DocsParamRoute::register(cx);
+#[cfg(feature = "validator")] validation_test_validator::ValidatorTestRoute::register(cx);
+#[cfg(feature = "valico")] validation_test_valico::ValicoTestRoute::register(cx);
+docs_param_::DocsRoute::register(cx);
 users_param_id::UsersParamIdRoute::register(cx);
 users_index::UsersIndexRoute::register(cx);
-users::UsersUsersRoute::register(cx);
+users::UsersRoute::register(cx);
 
 }

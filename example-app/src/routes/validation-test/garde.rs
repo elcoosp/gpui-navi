@@ -1,11 +1,10 @@
+use navi_router::RouteDef;
 #[cfg(feature = "garde")]
 use gpui::prelude::*;
 #[cfg(feature = "garde")]
 use gpui::*;
 #[cfg(feature = "garde")]
 use navi_macros::{define_route, use_search};
-#[cfg(feature = "garde")]
-use navi_router::RouteDef;
 #[cfg(feature = "garde")]
 use navi_router::components::Link;
 #[cfg(feature = "garde")]

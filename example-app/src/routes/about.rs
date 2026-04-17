@@ -1,7 +1,7 @@
+use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
-use navi_router::RouteDef;
 
 #[derive(Clone, IntoElement)]
 struct AboutPage;

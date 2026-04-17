@@ -1,11 +1,10 @@
+use navi_router::RouteDef;
 #[cfg(feature = "valico")]
 use gpui::prelude::*;
 #[cfg(feature = "valico")]
 use gpui::*;
 #[cfg(feature = "valico")]
 use navi_macros::{define_route, use_search};
-#[cfg(feature = "valico")]
-use navi_router::RouteDef;
 #[cfg(feature = "valico")]
 use navi_router::components::Link;
 #[cfg(feature = "valico")]

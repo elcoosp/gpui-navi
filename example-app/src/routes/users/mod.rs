@@ -1,7 +1,7 @@
+use navi_router::RouteDef;
 pub mod index;
 pub mod param_id;
 
-use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;

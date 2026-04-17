@@ -1,11 +1,10 @@
+use navi_router::RouteDef;
 #[cfg(feature = "validify")]
 use gpui::prelude::*;
 #[cfg(feature = "validify")]
 use gpui::*;
 #[cfg(feature = "validify")]
 use navi_macros::{define_route, use_search};
-#[cfg(feature = "validify")]
-use navi_router::RouteDef;
 #[cfg(feature = "validify")]
 use navi_router::components::Link;
 #[cfg(feature = "validify")]

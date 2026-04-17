@@ -1,7 +1,7 @@
+use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::{define_route, use_search};
-use navi_router::RouteDef;
 use navi_router::{Navigator, ValidateSearch, ValidationError, ValidationResult};
 use navi_router::components::Link;
 use serde::Deserialize;
@@ -96,7 +96,7 @@ impl RenderOnce for UsersIndexPage {
             )
             .children(user_ids.into_iter().map(|id| {
                 Link::new(format!("/users/{}", id))
-                    .active_style(|el| el.bg(rgb(0x2563eb)).text_color(white()))
+                    .active_style(|el| el.bg(rgb(0x2563eb)).text_color(gpui::white()))
                     .child(format!("User {}", id))
             }))
     }

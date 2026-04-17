@@ -1,7 +1,7 @@
+use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::scroll::ScrollableElement;
-use navi_router::RouteDef;
 use navi_macros::define_route;
 
 #[derive(Clone, IntoElement)]

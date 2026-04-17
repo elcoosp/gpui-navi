@@ -1,93 +1,154 @@
-// navi-macros/src/route.rs
-
 use proc_macro::TokenStream;
 use quote::quote;
-use darling::{FromMeta, ast::NestedMeta};
-use syn::{Ident, LitBool, LitStr};
+use syn::{
+    parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+    Expr, Ident, LitBool, LitStr, Token, Type,
+};
 
-#[derive(Debug, FromMeta)]
-struct RouteDefArgs {
-    path: LitStr,
-    #[darling(default)]
-    params: Option<syn::Path>,
-    #[darling(default)]
-    search: Option<syn::Path>,
-    #[darling(default)]
-    data: Option<syn::Path>,
-    #[darling(default)]
-    loader: Option<syn::Expr>,
-    #[darling(default)]
-    component: Option<syn::Path>,
-    #[darling(default)]
-    stale_time: Option<syn::Expr>,
-    #[darling(default)]
-    gc_time: Option<syn::Expr>,
-    #[darling(default)]
-    preload_stale_time: Option<syn::Expr>,
-    #[darling(default)]
-    is_layout: Option<LitBool>,
-    #[darling(default)]
-    is_index: Option<LitBool>,
-    #[darling(default)]
-    parent: Option<LitStr>,
+struct RouteDefInput {
+    name: Ident,
+    _comma: Token![,],
+    fields: Punctuated<Field, Token![,]>,
+}
+
+struct Field {
+    key: Ident,
+    _colon: Token![:],
+    value: FieldValue,
+}
+
+enum FieldValue {
+    LitStr(LitStr),
+    LitBool(LitBool),
+    Type(Type),
+    Expr(Expr),
+}
+
+impl Parse for RouteDefInput {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name = input.parse()?;
+        let _comma = input.parse()?;
+        let fields = Punctuated::parse_terminated(input)?;
+        Ok(RouteDefInput { name, _comma, fields })
+    }
+}
+
+impl Parse for Field {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Field {
+            key: input.parse()?,
+            _colon: input.parse()?,
+            value: input.parse()?,
+        })
+    }
+}
+
+impl Parse for FieldValue {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        if input.peek(LitStr) {
+            Ok(FieldValue::LitStr(input.parse()?))
+        } else if input.peek(LitBool) {
+            Ok(FieldValue::LitBool(input.parse()?))
+        } else if input.peek(Ident) && (input.peek2(Token![<]) || input.peek2(Token![::]) || input.peek2(Token![,]) || input.is_empty()) {
+            // Heuristic: if it looks like a type (path with optional generics) or followed by comma/end
+            Ok(FieldValue::Type(input.parse()?))
+        } else {
+            // Fallback to expression
+            Ok(FieldValue::Expr(input.parse()?))
+        }
+    }
 }
 
 pub fn define_route(input: TokenStream) -> TokenStream {
-    let input2: proc_macro2::TokenStream = input.into();
+    let input = syn::parse_macro_input!(input as RouteDefInput);
+    let name = input.name;
+    let mut path = None;
+    let mut params_ty = None;
+    let mut search_ty = None;
+    let mut data_ty = None;
+    let mut loader_closure = None;
+    let mut component_ty = None;
+    let mut stale_time = None;
+    let mut gc_time = None;
+    let mut is_layout = None;
+    let mut is_index = None;
+    let mut parent = None;
 
-    // Split off the route name (first identifier)
-    let mut iter = input2.clone().into_iter();
-    let name_tt = match iter.next() {
-        Some(t) => t,
-        None => return darling::Error::custom("define_route! requires a route name").write_errors().into(),
-    };
-    let name: Ident = match syn::parse2(proc_macro2::TokenStream::from(name_tt)) {
-        Ok(i) => i,
-        Err(e) => return e.to_compile_error().into(),
-    };
-
-    let remaining: proc_macro2::TokenStream = iter.collect();
-
-    let attr_args = match NestedMeta::parse_meta_list(remaining) {
-        Ok(a) => a,
-        Err(e) => return e.to_compile_error().into(),
-    };
-
-    let args = match RouteDefArgs::from_list(&attr_args) {
-        Ok(a) => a,
-        Err(e) => return e.write_errors().into(),
-    };
-
-    // Validation
-    if args.loader.is_some() && args.data.is_none() {
-        return quote::quote_spanned! { name.span() =>
-            compile_error!("define_route!: `loader` requires `data` to be specified.");
-        }.into();
+    for field in input.fields {
+        let key_str = field.key.to_string();
+        match key_str.as_str() {
+            "path" => {
+                if let FieldValue::LitStr(lit) = field.value {
+                    path = Some(lit);
+                }
+            }
+            "params" => {
+                if let FieldValue::Type(ty) = field.value {
+                    params_ty = Some(ty);
+                }
+            }
+            "search" => {
+                if let FieldValue::Type(ty) = field.value {
+                    search_ty = Some(ty);
+                }
+            }
+            "data" => {
+                if let FieldValue::Type(ty) = field.value {
+                    data_ty = Some(ty);
+                }
+            }
+            "loader" => {
+                if let FieldValue::Expr(expr) = field.value {
+                    loader_closure = Some(expr);
+                }
+            }
+            "component" => {
+                if let FieldValue::Type(ty) = field.value {
+                    component_ty = Some(ty);
+                }
+            }
+            "stale_time" => {
+                if let FieldValue::Expr(expr) = field.value {
+                    stale_time = Some(expr);
+                }
+            }
+            "gc_time" => {
+                if let FieldValue::Expr(expr) = field.value {
+                    gc_time = Some(expr);
+                }
+            }
+            "is_layout" => {
+                if let FieldValue::LitBool(lit) = field.value {
+                    is_layout = Some(lit);
+                }
+            }
+            "is_index" => {
+                if let FieldValue::LitBool(lit) = field.value {
+                    is_index = Some(lit);
+                }
+            }
+            "parent" => {
+                if let FieldValue::LitStr(lit) = field.value {
+                    parent = Some(lit);
+                }
+            }
+            _ => {}
+        }
     }
 
-    expand_define_route(name, args).into()
-}
+    let path = path.expect("path is required");
+    let params_ty = params_ty.unwrap_or_else(|| syn::parse_quote!(()));
+    let search_ty = search_ty.unwrap_or_else(|| syn::parse_quote!(()));
+    let data_ty = data_ty.unwrap_or_else(|| syn::parse_quote!(()));
+    let component_ty = component_ty;
+    let is_layout = is_layout.map(|b| b.value).unwrap_or(false);
+    let is_index = is_index.map(|b| b.value).unwrap_or(false);
+    let parent = parent.map(|s| s.value());
 
-fn expand_define_route(name: Ident, args: RouteDefArgs) -> proc_macro2::TokenStream {
-    let path = &args.path;
-    let params_ty = args.params.unwrap_or_else(|| syn::parse_quote!(()));
-    let search_ty = args.search.unwrap_or_else(|| syn::parse_quote!(()));
-    let data_ty = args.data.unwrap_or_else(|| syn::parse_quote!(()));
-    let component_ty = args.component;
-    let is_layout = args.is_layout.map(|b| b.value).unwrap_or(false);
-    let is_index = args.is_index.map(|b| b.value).unwrap_or(false);
-    let parent = args.parent.map(|s| s.value());
-
-    let (has_loader, loader_factory_impl) = if let Some(ref loader_closure) = args.loader {
-        let loader_closure = loader_closure.clone();
-        let stale_time_expr = args
-            .stale_time
-            .clone()
-            .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
-        let gc_time_expr = args
-            .gc_time
-            .clone()
-            .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
+    let (has_loader, loader_factory_impl) = if let Some(loader_closure) = loader_closure {
+        let stale_time_expr = stale_time.unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
+        let gc_time_expr = gc_time.unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
         let factory = quote! {
             pub fn loader_factory(executor: ::gpui::BackgroundExecutor) -> std::sync::Arc<
                 dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::AnyData>
@@ -151,7 +212,7 @@ fn expand_define_route(name: Ident, args: RouteDefArgs) -> proc_macro2::TokenStr
         quote! { None }
     };
 
-    quote! {
+    let expanded = quote! {
         pub struct #name;
 
         impl navi_router::RouteDef for #name {
@@ -191,5 +252,7 @@ fn expand_define_route(name: Ident, args: RouteDefArgs) -> proc_macro2::TokenStr
                 #register_loader_call
             }
         }
-    }
+    };
+
+    TokenStream::from(expanded)
 }

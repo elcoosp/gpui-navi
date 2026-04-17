@@ -1,10 +1,11 @@
 // navi-codegen/src/scanner.rs
 use crate::config::NaviConfig;
 use anyhow::Result;
+use regex::Regex;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use syn::{Item, Macro, parse_file};
 
 #[derive(Debug, Clone)]
 pub struct RouteInfo {
@@ -46,17 +47,13 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
             None => continue,
         };
 
-        // Skip if starts with ignore prefix
         if file_name.starts_with(ignore_prefix) {
             continue;
         }
 
         let relative = path.strip_prefix(routes_dir).unwrap_or(path);
-
-        // Check if the file actually contains a route definition
         let content = fs::read_to_string(path).unwrap_or_default();
         if !content.contains("define_route!") {
-            // Skip files without route definitions (e.g., pure module files)
             continue;
         }
 
@@ -64,11 +61,9 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
         routes.push(route_info);
     }
 
-    // Deduplicate by route_id
     let mut seen = std::collections::HashSet::new();
     routes.retain(|r| seen.insert(r.route_id.clone()));
 
-    // Ensure __root__ exists (if not found, create virtual)
     let has_root = routes.iter().any(|r| r.is_root);
     if !has_root {
         routes.push(RouteInfo {
@@ -88,7 +83,6 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
 
     assign_parents(&mut routes);
 
-    // Sort by depth (parents before children)
     routes.sort_by(|a, b| {
         let a_depth = a.relative_path.components().count();
         let b_depth = b.relative_path.components().count();
@@ -113,24 +107,22 @@ fn parse_route_file(
                 .unwrap_or(false));
     let has_dynamic_segment = file_name.contains('$');
 
-    let (effective_file_name, _route_id_base) = if file_name == "mod" {
-        let dir_name = relative_path
+    let effective_file_name = if file_name == "mod" {
+        relative_path
             .parent()
             .and_then(|p| p.file_name())
             .and_then(|n| n.to_str())
-            .unwrap_or("");
-        (dir_name, dir_name.to_string())
+            .unwrap_or("")
     } else {
-        (file_name, file_name.to_string())
+        file_name
     };
 
     let route_pattern = file_name_to_pattern(effective_file_name, relative_path);
     let module_name = build_module_path(relative_path, file_name == "mod");
-    let route_type_name = extract_route_type_from_ast(content)
-        .unwrap_or_else(|| infer_route_type_name(effective_file_name, relative_path));
-    let route_id = route_type_name.clone(); // 👈 Node ID = route type name
+    let route_type_name = extract_route_type_name(content, relative_path)?;
+    let route_id = route_type_name.clone();
     let is_layout = infer_layout(effective_file_name, relative_path);
-    let cfg_feature = extract_cfg_feature_from_ast(content);
+    let cfg_feature = extract_cfg_feature(content);
 
     Ok(RouteInfo {
         relative_path: relative_path.to_path_buf(),
@@ -147,72 +139,31 @@ fn parse_route_file(
     })
 }
 
-/// Use syn to extract the first identifier inside define_route! macro.
-fn extract_route_type_from_ast(content: &str) -> Option<String> {
-    let file = parse_file(content).ok()?;
-    visit_items_for_define_route(&file.items)
+fn extract_route_type_name(content: &str, relative_path: &Path) -> Result<String> {
+    // Regex to capture the identifier immediately after "define_route!("
+    // Handles optional whitespace, commas, and nested parentheses in loader closures.
+    let re = Regex::new(r"define_route!\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]").unwrap();
+    re.captures(content)
+        .and_then(|caps| caps.get(1).map(|m| m.as_str().to_string()))
+        .ok_or_else(|| anyhow::anyhow!("No define_route! found in {:?}", relative_path))
 }
 
-fn visit_items_for_define_route(items: &[Item]) -> Option<String> {
-    for item in items {
-        match item {
-            Item::Macro(m) if macro_is_define_route(&m.mac) => {
-                return first_ident_in_macro(&m.mac);
-            }
-            Item::Mod(m) => {
-                if let Some((_, content)) = &m.content {
-                    if let Some(name) = visit_items_for_define_route(content) {
-                        return Some(name);
-                    }
-                }
-            }
-            _ => {}
+fn extract_cfg_feature(content: &str) -> Option<String> {
+    let re = Regex::new(r#"#\[cfg\(feature\s*=\s*"([^"]+)"\)\]"#).unwrap();
+    let define_re = Regex::new(r"define_route!").unwrap();
+    let mut last_cfg: Option<String> = None;
+    for line in content.lines() {
+        let line = line.trim();
+        if let Some(caps) = re.captures(line) {
+            last_cfg = Some(caps[1].to_string());
+        }
+        if define_re.is_match(line) {
+            return last_cfg;
         }
     }
     None
 }
 
-fn macro_is_define_route(mac: &Macro) -> bool {
-    mac.path.segments.last().map(|s| s.ident == "define_route").unwrap_or(false)
-}
-
-fn first_ident_in_macro(mac: &Macro) -> Option<String> {
-    use syn::parse::Parser;
-    use syn::punctuated::Punctuated;
-    use syn::{Ident, Token};
-    let parser = Punctuated::<Ident, Token![,]>::parse_terminated;
-    let idents = parser.parse2(mac.tokens.clone()).ok()?;
-    idents.first().map(|i| i.to_string())
-}
-
-/// Use syn to extract cfg(feature = "...") attribute from the macro invocation.
-fn extract_cfg_feature_from_ast(content: &str) -> Option<String> {
-    let file = parse_file(content).ok()?;
-    for item in &file.items {
-        if let Item::Macro(m) = item {
-            if macro_is_define_route(&m.mac) {
-                for attr in &m.attrs {
-                    if attr.path().is_ident("cfg") {
-                        if let Ok(meta) = attr.parse_args::<syn::Meta>() {
-                            if let syn::Meta::NameValue(nv) = meta {
-                                if nv.path.is_ident("feature") {
-                                    if let syn::Expr::Lit(lit) = nv.value {
-                                        if let syn::Lit::Str(s) = lit.lit {
-                                            return Some(s.value());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Converts a filesystem name (like "$id", "$", "about") to a valid Rust module identifier.
 fn file_stem_to_module_ident(stem: &str) -> String {
     let s = stem.replace('-', "_").replace('.', "_");
     let ident = if s == "$" {
@@ -246,26 +197,22 @@ fn build_module_path(relative_path: &Path, is_mod_rs: bool) -> String {
         .collect();
 
     if !is_mod_rs {
-        // For regular files, add the file stem as the last component.
         let file_stem = relative_path.file_stem().unwrap().to_str().unwrap();
         components.push(file_stem_to_module_ident(file_stem));
     }
-    // For mod.rs, the module is the parent directory itself, so no extra component.
 
     components.join("::")
 }
 
-/// Returns the URL segment contributed by a file or directory name,
-/// or `None` if it contributes nothing (root, index, layout, group).
 fn file_stem_to_url_segment(name: &str) -> Option<String> {
     if matches!(name, "__root" | "index") {
         return None;
     }
     if name.starts_with('_') {
-        return None; // layout files
+        return None;
     }
     if name.starts_with('(') && name.ends_with(')') {
-        return None; // pathless groups
+        return None;
     }
     Some(name.to_string())
 }
@@ -311,25 +258,10 @@ fn infer_layout(file_name: &str, relative_path: &Path) -> bool {
     }
 }
 
-fn infer_route_type_name(file_stem: &str, relative_path: &Path) -> String {
-    let base = to_pascal_case(file_stem);
-    if let Some(parent) = relative_path.parent() {
-        if let Some(parent_name) = parent.file_name().and_then(|n| n.to_str()) {
-            if parent_name != "routes" && !parent_name.is_empty() {
-                let parent_pascal = to_pascal_case(parent_name);
-                return format!("{}{}Route", parent_pascal, base);
-            }
-        }
-    }
-    format!("{}Route", base)
-}
-
-/// Pure in-memory parent assignment using directory-to-layout mapping.
 fn assign_parents(routes: &mut Vec<RouteInfo>) {
     use std::collections::HashMap;
     use std::path::PathBuf;
 
-    // Map from directory path to the route ID of the layout that owns it
     let mut dir_to_layout: HashMap<PathBuf, String> = HashMap::new();
 
     for route in routes.iter() {
@@ -352,25 +284,10 @@ fn assign_parents(routes: &mut Vec<RouteInfo>) {
             continue;
         }
         let search = route.relative_path.parent().unwrap_or(Path::new("")).to_path_buf();
-        while let Some(layout_id) = dir_to_layout.get(&search) {
+        if let Some(layout_id) = dir_to_layout.get(&search) {
             route.parent = Some(layout_id.clone());
-            break;
-        }
-        if route.parent.is_none() {
+        } else {
             route.parent = root_id.clone();
         }
     }
-}
-
-fn to_pascal_case(s: &str) -> String {
-    s.split(|c: char| !c.is_alphanumeric())
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-            }
-        })
-        .collect()
 }

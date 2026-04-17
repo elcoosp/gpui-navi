@@ -13,6 +13,7 @@ pub enum PreloadType {
     Render,
 }
 
+#[derive(IntoElement)]
 pub struct Link {
     href: String,
     search: Option<serde_json::Value>,

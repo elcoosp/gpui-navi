@@ -1,4 +1,3 @@
-use navi_router::RouteDef;
 #[cfg(feature = "valico")]
 use gpui::prelude::*;
 #[cfg(feature = "valico")]

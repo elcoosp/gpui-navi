@@ -670,7 +670,7 @@ impl DevtoolsState {
         let state = RouterState::try_global(cx);
         let mut container = div().gap_3().flex().flex_col();
 
-        let window_handle_for_tree: AnyWindowHandle = window.window_handle().into();
+        let window_handle_for_tree: AnyWindowHandle = window.window_handle();
         let tree_search_entity = self.tree_search.clone().unwrap();
         let route_test_entity = self.route_test_params.clone().unwrap();
 
@@ -776,7 +776,7 @@ impl DevtoolsState {
                                             .map(|i| i.read(cx).value().to_string())
                                             .unwrap_or_default();
                                         if !val.trim().is_empty() {
-                                            let nav = Navigator::new(window.window_handle().into());
+                                            let nav = Navigator::new(window.window_handle());
                                             nav.push(&val, cx);
                                         }
                                     })),
@@ -929,7 +929,7 @@ impl DevtoolsState {
                 }
 
                 let pattern_clone = pattern.clone();
-                let window_handle_clone = window_handle.clone();
+                let window_handle_clone = window_handle;
                 row = row
                     .child(
                         div()
@@ -949,7 +949,7 @@ impl DevtoolsState {
                             })
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, move |_ev, _window, cx| {
-                                let nav = Navigator::new(window_handle_clone.clone());
+                                let nav = Navigator::new(window_handle_clone);
                                 nav.push(&pattern_clone, cx);
                             })
                             .child(id.to_string()),
@@ -962,9 +962,9 @@ impl DevtoolsState {
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, {
                                 let pattern = pattern.clone();
-                                let wh = window_handle.clone();
+                                let wh = window_handle;
                                 move |_ev, _window, cx| {
-                                    let nav = Navigator::new(wh.clone());
+                                    let nav = Navigator::new(wh);
                                     nav.push(&pattern, cx);
                                 }
                             })
@@ -994,8 +994,8 @@ impl DevtoolsState {
 
                 rows.push(row);
 
-                if !is_collapsed {
-                    if let Some(children) = children_map.get(id) {
+                if !is_collapsed
+                    && let Some(children) = children_map.get(id) {
                         let mut sorted_children = children.clone();
                         sorted_children.sort();
                         for child_id in sorted_children {
@@ -1007,13 +1007,12 @@ impl DevtoolsState {
                                 collapsed,
                                 matched_chain,
                                 matched_leaf_id,
-                                window_handle.clone(),
+                                window_handle,
                                 cx,
                                 window,
                             ));
                         }
                     }
-                }
 
                 rows
             }
@@ -1057,7 +1056,7 @@ impl DevtoolsState {
                                 &self.collapsed_route_nodes,
                                 &matched_chain,
                                 matched_leaf_id.as_deref(),
-                                window_handle_for_tree.clone(),
+                                window_handle_for_tree,
                                 cx,
                                 window,
                             )
@@ -1156,7 +1155,7 @@ impl DevtoolsState {
         let weak_self = cx.entity().downgrade();
         let has_detail = selected_detail.is_some();
 
-        let window_handle_for_jump: AnyWindowHandle = window.window_handle().into();
+        let window_handle_for_jump: AnyWindowHandle = window.window_handle();
 
         let json_log = serde_json::to_string_pretty(&self.event_log)
             .unwrap_or_else(|_| "Failed to serialize log".to_string());
@@ -1505,7 +1504,7 @@ impl DevtoolsState {
                                                     .when(is_rendered, |d| {
                                                         let path = jump_path.clone().unwrap();
                                                         let window_handle =
-                                                            window_handle_for_jump.clone();
+                                                            window_handle_for_jump;
                                                         d.child(
                                                             Button::new(format!("jump-btn-{}", ix))
                                                                 .icon(IconName::Play)

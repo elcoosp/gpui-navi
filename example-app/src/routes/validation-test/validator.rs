@@ -1,4 +1,3 @@
-use navi_router::RouteDef;
 
 #[cfg(feature = "validator")]
 use gpui::prelude::*;

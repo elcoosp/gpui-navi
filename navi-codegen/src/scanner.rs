@@ -2,7 +2,6 @@
 use crate::config::NaviConfig;
 use anyhow::Result;
 use regex::Regex;
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -165,7 +164,7 @@ fn extract_cfg_feature(content: &str) -> Option<String> {
 }
 
 fn file_stem_to_module_ident(stem: &str) -> String {
-    let s = stem.replace('-', "_").replace('.', "_");
+    let s = stem.replace(['-', '.'], "_");
     let ident = if s == "$" {
         "splat".to_string()
     } else if s.starts_with('$') {

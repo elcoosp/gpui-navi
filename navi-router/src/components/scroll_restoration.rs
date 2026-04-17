@@ -9,6 +9,12 @@ static SCROLL_POSITIONS: Lazy<Mutex<HashMap<String, f32>>> =
 
 pub struct ScrollRestoration;
 
+impl Default for ScrollRestoration {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScrollRestoration {
     pub fn new() -> Self {
         Self

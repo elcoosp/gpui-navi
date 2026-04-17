@@ -182,9 +182,9 @@ impl RouterState {
 
     /// Preload a location without navigating (runs loaders in background).
     pub fn preload_location(&mut self, loc: Location, cx: &mut App) {
-        if let Some((params, node)) = self.route_tree.match_path(&loc.pathname) {
-            if node.has_loader {
-                if let Some(factory) = self.loader_factories.get(&node.id) {
+        if let Some((params, node)) = self.route_tree.match_path(&loc.pathname)
+            && node.has_loader
+                && let Some(factory) = self.loader_factories.get(&node.id) {
                     let query = factory(&params);
                     let key = query.key.clone();
                     let client = self.query_client.clone();
@@ -206,8 +206,6 @@ impl RouterState {
                     })
                     .detach();
                 }
-            }
-        }
     }
 
     pub fn current_location(&self) -> Location {
@@ -302,7 +300,7 @@ impl RouterState {
                             match (fetch_fn)().await {
                                 Ok(data) => {
                                     client.set_query_data(&key, data, options);
-                                    let _ = cx.update(|cx| {
+                                    cx.update(|cx| {
                                         push_event(
                                             RouterEvent::Load {
                                                 from: from_clone.clone(),
@@ -330,7 +328,7 @@ impl RouterState {
                                 }
                                 Err(e) => {
                                     log::error!("Loader error for {}: {:?}", route_id, e);
-                                    let _ = cx.update(|cx| {
+                                    cx.update(|cx| {
                                         push_event(
                                             RouterEvent::Load {
                                                 from: from_clone.clone(),

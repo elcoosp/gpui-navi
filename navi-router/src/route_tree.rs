@@ -102,16 +102,14 @@ impl RoutePattern {
                         return None;
                     }
                     let part = path_segments[path_idx];
-                    if let Some(pre) = prefix {
-                        if !part.starts_with(pre) {
+                    if let Some(pre) = prefix
+                        && !part.starts_with(pre) {
                             return None;
                         }
-                    }
-                    if let Some(suf) = suffix {
-                        if !part.ends_with(suf) {
+                    if let Some(suf) = suffix
+                        && !part.ends_with(suf) {
                             return None;
                         }
-                    }
                     // Extract the value between prefix and suffix
                     let start = prefix.as_ref().map_or(0, |p| p.len());
                     let end = suffix.as_ref().map_or(part.len(), |s| part.len() - s.len());

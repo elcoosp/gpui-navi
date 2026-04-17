@@ -1,8 +1,10 @@
 //! Suspense primitives for handling async data loading states.
 
 /// Represents a pending async operation that may resolve to a value or error.
+#[derive(Default)]
 pub enum SuspenseState<T> {
     /// No data has been requested yet.
+    #[default]
     Idle,
     /// Data is currently being loaded.
     Pending,
@@ -12,11 +14,6 @@ pub enum SuspenseState<T> {
     Error(String),
 }
 
-impl<T> Default for SuspenseState<T> {
-    fn default() -> Self {
-        Self::Idle
-    }
-}
 
 impl<T: Clone> Clone for SuspenseState<T> {
     fn clone(&self) -> Self {

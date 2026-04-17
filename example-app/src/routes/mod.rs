@@ -1,4 +1,3 @@
-use navi_router::RouteDef;
 pub mod __root;
 pub mod about;
 pub mod docs;

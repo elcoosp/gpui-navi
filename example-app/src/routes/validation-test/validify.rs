@@ -1,4 +1,3 @@
-use navi_router::RouteDef;
 #[cfg(feature = "validify")]
 use gpui::prelude::*;
 #[cfg(feature = "validify")]

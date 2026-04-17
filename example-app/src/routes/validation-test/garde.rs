@@ -1,4 +1,3 @@
-use navi_router::RouteDef;
 #[cfg(feature = "garde")]
 use gpui::prelude::*;
 #[cfg(feature = "garde")]

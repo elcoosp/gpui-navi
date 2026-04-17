@@ -229,7 +229,7 @@ fn assign_parents(routes: &mut Vec<RouteInfo>) {
             // Find parent route: a file that is the immediate parent directory's index or layout
             if let Some(parent_dir) = parent_path.file_name().and_then(|n| n.to_str()) {
                 // Try to find a layout file with the same name as the directory
-                let parent_file = parent_path.join("mod").with_extension("rs");
+                let _parent_file = parent_path.join("mod").with_extension("rs");
                 let parent_layout_file = parent_path
                     .join(format!("_{}", parent_dir))
                     .with_extension("rs");

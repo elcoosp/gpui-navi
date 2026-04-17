@@ -1,3 +1,4 @@
+// example-app/src/main.rs
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;
@@ -6,8 +7,8 @@ use gpui_component_assets::Assets;
 use navi_devtools::DevtoolsState;
 use navi_macros::{define_route, use_loader_data, use_search};
 use navi_router::{
-    Blocker, Location, Navigator, RouteNode, RoutePattern, RouteTree, RouterState, ValidateSearch,
-    ValidationError, ValidationResult,
+    Blocker, Location, Navigator, RouteDef, RouteNode, RoutePattern, RouteTree, RouterState,
+    ValidateSearch, ValidationError, ValidationResult,
     components::{Link, Outlet, RouterProvider, register_route_component},
 };
 use serde::Deserialize;
@@ -702,18 +703,14 @@ fn main() {
     env_logger::init();
     log::info!("Starting Navi example app");
 
+    // The `define_route!` macro now automatically registers components via the `register` method.
+    // We only need to manually register non-route components (like RootLayout, AboutPage, etc.)
     register_route_component("__root__", |_| {
         Component::new(RootLayout).into_any_element()
     });
     register_route_component("index", |_| Component::new(HomePage).into_any_element());
     register_route_component("about", |_| Component::new(AboutPage).into_any_element());
     register_route_component("users", |_| Component::new(UsersLayout).into_any_element());
-    register_route_component("UsersIndexRoute", |_| {
-        Component::new(UsersIndexPage).into_any_element()
-    });
-    register_route_component("UserDetailRoute", |_| {
-        Component::new(UserDetailPage).into_any_element()
-    });
     register_route_component("settings", |_| {
         Component::new(SettingsPage).into_any_element()
     });
@@ -727,22 +724,8 @@ fn main() {
         Component::new(ValidationTestIndex).into_any_element()
     });
 
-    #[cfg(feature = "validator")]
-    register_route_component("ValidatorTestRoute", |_| {
-        Component::new(validator_test::ValidatorTestPage).into_any_element()
-    });
-    #[cfg(feature = "garde")]
-    register_route_component("GardeTestRoute", |_| {
-        Component::new(garde_test::GardeTestPage).into_any_element()
-    });
-    #[cfg(feature = "validify")]
-    register_route_component("ValidifyTestRoute", |_| {
-        Component::new(validify_test::ValidifyTestPage).into_any_element()
-    });
-    #[cfg(feature = "valico")]
-    register_route_component("ValicoTestRoute", |_| {
-        Component::new(valico_test::ValicoTestPage).into_any_element()
-    });
+    // For routes defined with `define_route!`, we'll call their `register` method later.
+    // Validation test routes are conditionally compiled, we'll register them similarly.
 
     gpui_platform::application()
         .with_assets(Assets)
@@ -856,24 +839,28 @@ fn main() {
                 let mut node = validator_test::ValidatorTestRoute::build_node();
                 node.parent = Some("__root__".to_string());
                 tree.add_route(node);
+                validator_test::ValidatorTestRoute::register(cx);
             }
             #[cfg(feature = "garde")]
             {
                 let mut node = garde_test::GardeTestRoute::build_node();
                 node.parent = Some("__root__".to_string());
                 tree.add_route(node);
+                garde_test::GardeTestRoute::register(cx);
             }
             #[cfg(feature = "validify")]
             {
                 let mut node = validify_test::ValidifyTestRoute::build_node();
                 node.parent = Some("__root__".to_string());
                 tree.add_route(node);
+                validify_test::ValidifyTestRoute::register(cx);
             }
             #[cfg(feature = "valico")]
             {
                 let mut node = valico_test::ValicoTestRoute::build_node();
                 node.parent = Some("__root__".to_string());
                 tree.add_route(node);
+                valico_test::ValicoTestRoute::register(cx);
             }
 
             let devtools = cx.new(|cx| DevtoolsState::new(cx));
@@ -896,7 +883,9 @@ fn main() {
                     let router_provider =
                         RouterProvider::new(window_id, window_handle, initial, tree, cx);
 
-                    UserDetailRoute::register_loader(cx);
+                    // Register routes that use `define_route!` with the new `register` method
+                    UserDetailRoute::register(cx);
+                    UsersIndexRoute::register(cx);
 
                     let root_view = cx.new(|_cx| AppView {
                         router_provider,

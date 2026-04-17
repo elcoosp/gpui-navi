@@ -12,8 +12,11 @@ struct RouteDefInput {
     data_ty: Option<Type>,
     loader_closure: Option<ExprClosure>,
     component_ty: Option<Type>,
+    #[allow(dead_code)]
     stale_time: Option<syn::Expr>,
+    #[allow(dead_code)]
     gc_time: Option<syn::Expr>,
+    #[allow(dead_code)]
     preload_stale_time: Option<syn::Expr>,
     is_layout: Option<LitBool>,
     is_index: Option<LitBool>,

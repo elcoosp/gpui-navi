@@ -16,7 +16,7 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
 
     for route in &routes {
         let module_path = &route.module_name;
-        let route_id = &route.route_id;
+        let _route_id = &route.route_id;
         let pascal_name = &route.pascal_name;
 
         // Generate a stub params struct if the route has dynamic segments

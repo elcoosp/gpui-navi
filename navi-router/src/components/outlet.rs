@@ -4,7 +4,6 @@ use gpui::{
     AnyElement, App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, Window,
     div,
 };
-use navi_core::context;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -24,9 +23,14 @@ where
         .insert(route_id.to_string(), Arc::new(constructor));
 }
 
+/// Context value used to track outlet nesting depth.
+#[derive(Clone, Copy)]
+pub struct OutletDepth(pub usize);
+
+/// Renders the matched route at the current nesting depth.
+/// Depth is automatically inferred from the context and incremented for children.
 #[derive(IntoElement, Default)]
 pub struct Outlet {
-    depth: Option<usize>,
     children: Vec<AnyElement>,
 }
 
@@ -35,8 +39,8 @@ impl Outlet {
         Self::default()
     }
 
-    pub fn depth(mut self, depth: usize) -> Self {
-        self.depth = Some(depth);
+    pub fn child(mut self, child: impl IntoElement) -> Self {
+        self.children.push(child.into_any_element());
         self
     }
 }
@@ -48,7 +52,7 @@ impl ParentElement for Outlet {
 }
 
 impl RenderOnce for Outlet {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = RouterState::try_global(cx);
         if state.is_none() {
             log::error!("Outlet: RouterState not found in global context");
@@ -56,14 +60,10 @@ impl RenderOnce for Outlet {
         }
         let state = state.unwrap();
 
-        // Determine the outlet depth: use explicit depth or read from context
-        let depth = self.depth.unwrap_or_else(|| {
-            context::consume::<OutletDepth>(window.window_handle().window_id())
-                .map(|d| d.0)
-                .unwrap_or(0)
-        });
+        // Determine current depth from GPUI context (default 0)
+        let depth = cx.consume::<OutletDepth>().map(|d| d.0).unwrap_or(0);
 
-        // Extract the node id and the constructor *before* releasing the immutable borrow on state.
+        // Extract the node id and constructor
         let (node_id, constructor_opt) = {
             if let Some((_params, leaf_node)) = state.current_match.as_ref() {
                 let ancestors = state.route_tree.ancestors(&leaf_node.id);
@@ -79,14 +79,7 @@ impl RenderOnce for Outlet {
                         ancestors.len(),
                         leaf_node.id
                     );
-                    // Fallback: render leaf node if depth out of bounds?
-                    return div()
-                        .child(format!(
-                            "No matching route at depth {} (ancestors: {:?})",
-                            depth,
-                            ancestors.iter().map(|n| &n.id).collect::<Vec<_>>()
-                        ))
-                        .into_any_element();
+                    return div().into_any_element();
                 }
                 let node = ancestors[depth];
                 log::debug!("Outlet (depth {}) rendering route: {}", depth, node.id);
@@ -98,13 +91,10 @@ impl RenderOnce for Outlet {
                 return div().child("404 Not Found").into_any_element();
             }
         };
-        // `state` borrow is now released; we can mutate `cx` safely.
-
-        // Provide the next depth for child outlets
-        let window_id = window.window_handle().window_id();
-        context::provide(window_id, OutletDepth(depth + 1));
 
         if let Some(constructor) = constructor_opt {
+            // Provide incremented depth for child outlets
+            cx.provide(OutletDepth(depth + 1));
             let element = constructor(cx);
             div()
                 .id(ElementId::Name(
@@ -115,6 +105,7 @@ impl RenderOnce for Outlet {
                 .into_any_element()
         } else {
             log::warn!("No component registered for route: {}", node_id);
+            cx.provide(OutletDepth(depth + 1));
             div()
                 .child(format!("No component for route: {}", node_id))
                 .children(self.children)
@@ -122,7 +113,3 @@ impl RenderOnce for Outlet {
         }
     }
 }
-
-/// Context value used to track outlet nesting depth.
-#[derive(Clone, Copy)]
-struct OutletDepth(usize);

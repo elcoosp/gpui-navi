@@ -1,3 +1,5 @@
+// navi-router/src/components/router_provider.rs
+use crate::components::outlet::OutletDepth;
 use crate::{Location, RouteTree, RouterState};
 use gpui::{
     AnyElement, AnyWindowHandle, App, IntoElement, ParentElement, RenderOnce, Window, WindowId, div,
@@ -82,6 +84,8 @@ impl RenderOnce for RouterProviderWithChildren {
             );
             cx.set_global(state);
         }
+        // Provide initial depth 0 for the root outlet
+        cx.provide(OutletDepth(0));
         div().child(self.provider).children(self.children)
     }
 }

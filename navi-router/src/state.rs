@@ -25,12 +25,10 @@ pub enum RouterEvent {
     Rendered { from: Option<Location>, to: Location },
 }
 
-/// Trait for route definitions.
 pub trait RouteDef: 'static {
     type Params: Clone + std::fmt::Debug + DeserializeOwned + 'static;
     type Search: Clone + std::fmt::Debug + 'static;
     type LoaderData: Clone + std::fmt::Debug + Send + Sync + 'static;
-
     fn path() -> &'static str;
     fn name() -> &'static str;
 }
@@ -195,7 +193,7 @@ impl RouterState {
     }
 
     fn trigger_loader_with_locations(&mut self, from: Option<Location>, to: Location, cx: &mut App) {
-        if let Some((params, leaf_node)) = &self.current_match {
+        if let Some((_params, leaf_node)) = &self.current_match {
             let ancestors = self.route_tree.ancestors(&leaf_node.id);
             let mut loader_futures = Vec::new();
             let mut loader_count = 0;

@@ -1,6 +1,5 @@
 use crate::RouterState;
 use gpui::{AnyElement, App, IntoElement, RenderOnce, Window};
-use navi_core::context;
 
 /// Suspense boundary that shows a fallback while loaders are pending.
 pub struct SuspenseBoundary {

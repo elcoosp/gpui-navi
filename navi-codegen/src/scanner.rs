@@ -1,11 +1,10 @@
 // navi-codegen/src/scanner.rs
 use crate::config::NaviConfig;
 use anyhow::Result;
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use syn::{File, Item, Macro, parse_file};
+use syn::{Item, Macro, parse_file};
 
 #[derive(Debug, Clone)]
 pub struct RouteInfo {
@@ -352,7 +351,7 @@ fn assign_parents(routes: &mut Vec<RouteInfo>) {
         if route.is_root {
             continue;
         }
-        let mut search = route.relative_path.parent().unwrap_or(Path::new("")).to_path_buf();
+        let search = route.relative_path.parent().unwrap_or(Path::new("")).to_path_buf();
         while let Some(layout_id) = dir_to_layout.get(&search) {
             route.parent = Some(layout_id.clone());
             break;

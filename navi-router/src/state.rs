@@ -405,7 +405,7 @@ impl RouterState {
 
     /// Get the loader state for a specific route type.
     pub fn get_loader_state<R: crate::RouteDef>(&self) -> LoaderState {
-        let (params, node) = match self.current_match.as_ref() {
+        let (params, node) = match &self.current_match {
             Some(m) => m,
             None => return LoaderState::Idle,
         };
@@ -416,11 +416,12 @@ impl RouterState {
             .with("route", node.id.as_str())
             .with("params", serde_json::to_string(params).unwrap_or_default());
 
-        match self.query_client.get_query_state(&key) {
-            rs_query::QueryState::Idle => LoaderState::Idle,
-            rs_query::QueryState::Loading => LoaderState::Loading,
-            rs_query::QueryState::Success => LoaderState::Ready,
-            rs_query::QueryState::Error(e) => LoaderState::Error(e.to_string()),
+        if self.query_client.is_in_flight(&key) {
+            LoaderState::Loading
+        } else if self.query_client.get_query_data::<AnyData>(&key).is_some() {
+            LoaderState::Ready
+        } else {
+            LoaderState::Idle
         }
     }
 

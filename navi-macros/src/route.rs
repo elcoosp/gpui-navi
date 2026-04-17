@@ -3,7 +3,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use darling::{FromMeta, ast::NestedMeta};
-use syn::{Ident, LitBool, LitStr, parse_macro_input};
+use syn::{Ident, LitBool, LitStr};
 
 #[derive(Debug, FromMeta)]
 struct RouteDefArgs {

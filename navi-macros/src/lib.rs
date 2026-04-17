@@ -1,5 +1,5 @@
-mod route;
 mod hooks;
+mod route;
 mod router;
 
 use proc_macro::TokenStream;

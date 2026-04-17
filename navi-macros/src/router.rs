@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
-use syn::{Ident, Token, Result as SynResult};
+use syn::{Ident, Result as SynResult, Token};
 
 /// Parsed router definition input.
 struct RouterDefInput {

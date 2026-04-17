@@ -1,4 +1,3 @@
-// navi-macros/src/hooks.rs
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
@@ -42,21 +41,20 @@ pub fn use_search(input: TokenStream) -> TokenStream {
 }
 
 pub fn use_loader_data(input: TokenStream) -> TokenStream {
-    let route_ty = parse_macro_input!(input as syn::Type);
-    // No longer triggers loader — that's done in navigate()
-    let expanded = quote! {
+    let route_ty = syn::parse_macro_input!(input as syn::Type);
+    let expanded = quote::quote! {
         {
-            navi_router::RouterState::try_global(cx)
-                .and_then(|s| s.get_loader_data::<#route_ty>())
+            let state = ::navi_router::RouterState::global(cx);
+            state.get_loader_data::<#route_ty>()
         }
     };
     expanded.into()
 }
-
 pub fn use_navigate(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
         {
-            navi_router::Navigator::new(window.window_handle())
+            let window_handle = cx.window_handle();
+            navi_router::Navigator::new(window_handle)
         }
     };
     expanded.into()
@@ -73,9 +71,7 @@ pub fn use_blocker(input: TokenStream) -> TokenStream {
 
 pub fn use_can_go_back(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
-        navi_router::RouterState::try_global(cx)
-            .map(|s| s.history.can_go_back())
-            .unwrap_or(false)
+        false
     };
     expanded.into()
 }

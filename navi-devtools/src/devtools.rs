@@ -1,3 +1,5 @@
+//! Developer tools for Navi router.
+
 use gpui::{
     AnyWindowHandle, App, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight, Hsla,
     KeyBinding, MouseButton, Render, Size, StyledText, Subscription, TextStyle, Window, actions,
@@ -17,13 +19,14 @@ use navi_router::{
     Navigator, RouterEvent, RouterState,
     event_bus::{self, TimedEvent},
 };
+use rs_query::QueryClient;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 actions!(
     devtools,
     [
-        ToggleDevtools,
+        ToggleNaviDevtools,
         SwitchToTab1,
         SwitchToTab2,
         SwitchToTab3,
@@ -279,30 +282,31 @@ pub struct DevtoolsState {
     collapsed_route_nodes: HashSet<String>,
     timeline_path_filter: Option<Entity<InputState>>,
     route_test_params: Option<Entity<InputState>>,
+    query_client: QueryClient,
 }
 
 impl EventEmitter<()> for DevtoolsState {}
 
 impl DevtoolsState {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(query_client: QueryClient, cx: &mut Context<Self>) -> Self {
         cx.bind_keys([KeyBinding::new(
             "cmd-shift-d",
-            ToggleDevtools,
+            ToggleNaviDevtools,
             Some("Devtools"),
         )]);
         cx.bind_keys([KeyBinding::new(
             "ctrl-shift-d",
-            ToggleDevtools,
+            ToggleNaviDevtools,
             Some("Devtools"),
         )]);
         cx.bind_keys([KeyBinding::new(
             "cmd-shift-tab",
-            ToggleDevtools,
+            ToggleNaviDevtools,
             Some("Devtools"),
         )]);
         cx.bind_keys([KeyBinding::new(
             "ctrl-shift-tab",
-            ToggleDevtools,
+            ToggleNaviDevtools,
             Some("Devtools"),
         )]);
         cx.bind_keys([KeyBinding::new("cmd-1", SwitchToTab1, Some("Devtools"))]);
@@ -345,6 +349,7 @@ impl DevtoolsState {
             collapsed_route_nodes: HashSet::new(),
             timeline_path_filter: None,
             route_test_params: None,
+            query_client,
         };
         this.refresh_log(cx);
         this
@@ -1576,95 +1581,162 @@ impl DevtoolsState {
     }
 
     // -----------------------------------------------------------------------
-    // Cache tab
+    // Cache tab - manual display of rs-query cache
     // -----------------------------------------------------------------------
 
-    fn render_cache_tab(&self, cx: &Context<Self>) -> impl IntoElement {
+    fn render_cache_tab(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let state = RouterState::try_global(cx);
-        let mut container = div().gap_3().flex().flex_col();
+        let mut entries: Vec<_> = self.query_client.cache.iter().collect();
+        entries.sort_by(|a, b| a.key().cmp(b.key()));
 
-        container = container.child(
-            div()
-                .flex()
-                .items_center()
-                .gap_1()
-                .text_color(theme.info)
-                .font_weight(FontWeight::MEDIUM)
-                .child(Icon::new(IconName::Inbox))
-                .child("Cache Inspection"),
-        );
+        // Create a weak handle to the view entity
+        let weak_self = cx.entity().downgrade();
 
-        if let Some(state) = state {
-            let cache_keys: Vec<String> = state.loader_cache.keys().cloned().collect();
-
-            if cache_keys.is_empty() {
-                container =
-                    container.child(
-                        div()
-                            .p_3()
-                            .bg(theme.secondary)
-                            .rounded(px(6.0))
-                            .border_1()
-                            .border_color(theme.border)
-                            .child(div().text_color(theme.muted_foreground).child(
-                                "Cache is empty. Navigate to routes with loaders to populate.",
-                            )),
-                    );
-            } else {
-                container = container.child(
-                    div()
-                        .p_3()
-                        .bg(theme.secondary)
-                        .rounded(px(6.0))
-                        .border_1()
-                        .border_color(theme.border)
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap_2()
-                                .child(
-                                    div()
-                                        .text_color(theme.muted_foreground)
-                                        .text_size(px(11.0))
-                                        .child(format!("{} cached item(s)", cache_keys.len())),
-                                )
-                                .children(cache_keys.into_iter().map(|key| {
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .pl_2()
-                                        .child(
-                                            div()
-                                                .w(px(8.0))
-                                                .h(px(8.0))
-                                                .rounded_full()
-                                                .bg(theme.success.opacity(0.5)),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_color(theme.foreground)
-                                                .text_size(px(11.0))
-                                                .font_family("monospace")
-                                                .child(key),
-                                        )
-                                })),
-                        ),
-                );
-            }
-        } else {
-            container = container.child(
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .size_full()
+            .child(
                 div()
-                    .text_color(theme.warning)
-                    .child("No router state found"),
-            );
-        }
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .text_color(theme.info)
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(Icon::new(IconName::Inbox))
+                    .child(format!("rs-query Cache ({} entries)", entries.len())),
+            )
+            .child(if entries.is_empty() {
+                div()
+                    .p_3()
+                    .bg(theme.secondary)
+                    .rounded(px(6.0))
+                    .border_1()
+                    .border_color(theme.border)
+                    .child(
+                        div()
+                            .text_color(theme.muted_foreground)
+                            .child("Cache is empty. No queries have been executed."),
+                    )
+                    .into_any_element()
+            } else {
+                div()
+                    .flex_1()
+                    .overflow_y_scrollbar()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .children(entries.into_iter().map(|entry| {
+                                let key = entry.key().clone();
+                                let cached = entry.value();
+                                let age = cached.fetched_at.elapsed();
+                                let age_str = format!("{:.1}s ago", age.as_secs_f32());
+                                let stale = if cached.is_stale { " (stale)" } else { "" };
 
-        container
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .bg(theme.secondary.opacity(0.5))
+                                    .rounded(px(4.0))
+                                    .hover(|s| s.bg(theme.secondary))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .flex_col()
+                                            .gap_0()
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .items_center()
+                                                    .gap_2()
+                                                    .child(
+                                                        div()
+                                                            .font_weight(FontWeight::MEDIUM)
+                                                            .child(key.clone()),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(if cached.is_stale {
+                                                                theme.warning
+                                                            } else {
+                                                                theme.muted_foreground
+                                                            })
+                                                            .child(format!("cached{}", stale)),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(theme.muted_foreground)
+                                                            .child(age_str),
+                                                    ),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(theme.muted_foreground)
+                                                    .font_family("monospace")
+                                                    .child(format!(
+                                                        "type_id: {:?}",
+                                                        cached.type_id
+                                                    )),
+                                            )
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .gap_2()
+                                                    .mt_1()
+                                                    .child(
+                                                        Button::new(format!("invalidate-{}", key))
+                                                            .label("Invalidate")
+                                                            .xsmall()
+                                                            .ghost()
+                                                            .on_click({
+                                                                let key = key.clone();
+                                                                let weak = weak_self.clone();
+                                                                move |_, _window, cx| {
+                                                                    weak.update(cx, |this, cx| {
+                                                                        this.query_client
+                                                                        .invalidate_queries(
+                                                                        &rs_query::QueryKey::new(
+                                                                            &key,
+                                                                        ),
+                                                                    );
+                                                                        cx.notify();
+                                                                    })
+                                                                    .ok();
+                                                                }
+                                                            }),
+                                                    )
+                                                    .child(
+                                                        Button::new(format!("remove-{}", key))
+                                                            .label("Remove")
+                                                            .xsmall()
+                                                            .ghost()
+                                                            .on_click({
+                                                                let key = key.clone();
+                                                                let weak = weak_self.clone();
+                                                                move |_, _window, cx| {
+                                                                    weak.update(cx, |this, cx| {
+                                                                        this.query_client
+                                                                            .cache
+                                                                            .remove(&key);
+                                                                        cx.notify();
+                                                                    })
+                                                                    .ok();
+                                                                }
+                                                            }),
+                                                    ),
+                                            ),
+                                    )
+                            })),
+                    )
+                    .into_any_element()
+            })
     }
-
     // -----------------------------------------------------------------------
     // State tab
     // -----------------------------------------------------------------------
@@ -2011,7 +2083,7 @@ impl Render for DevtoolsState {
                 .right_3()
                 .track_focus(&self.focus_handle)
                 .key_context("Devtools")
-                .on_action(cx.listener(|this, _: &ToggleDevtools, window, cx| {
+                .on_action(cx.listener(|this, _: &ToggleNaviDevtools, window, cx| {
                     this.toggle_expanded(window, cx);
                 }))
                 .child(
@@ -2050,7 +2122,7 @@ impl Render for DevtoolsState {
             .overflow_hidden()
             .track_focus(&self.focus_handle)
             .key_context("Devtools")
-            .on_action(cx.listener(|this, _: &ToggleDevtools, window, cx| {
+            .on_action(cx.listener(|this, _: &ToggleNaviDevtools, window, cx| {
                 this.toggle_expanded(window, cx);
             }))
             .on_action(cx.listener(|this, _: &SwitchToTab1, _window, cx| {

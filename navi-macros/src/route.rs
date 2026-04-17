@@ -1,4 +1,5 @@
 // navi-macros/src/route.rs
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
@@ -12,9 +13,7 @@ struct RouteDefInput {
     data_ty: Option<Type>,
     loader_closure: Option<ExprClosure>,
     component_ty: Option<Type>,
-    #[allow(dead_code)]
     stale_time: Option<syn::Expr>,
-    #[allow(dead_code)]
     gc_time: Option<syn::Expr>,
     #[allow(dead_code)]
     preload_stale_time: Option<syn::Expr>,
@@ -103,37 +102,61 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let is_index = input.is_index.map(|b| b.value).unwrap_or(false);
     let parent = input.parent.map(|s| s.value());
 
-    let (has_loader, loader_registration) = if let Some(ref loader_closure) = input.loader_closure {
+    let (has_loader, loader_factory_impl) = if let Some(ref loader_closure) = input.loader_closure {
         let loader_closure = loader_closure.clone();
-        let register = quote! {
-            {
-                use std::sync::Arc;
-                use navi_router::LoaderError;
-
-                log::debug!("Registering loader for route: {}", stringify!(#name));
-                navi_router::RouterState::update(cx, |state, _cx| {
-                    state.register_loader(
-                        <#name as navi_router::RouteDef>::name(),
-                        Box::new(|params_map: &std::collections::HashMap<String, String>, executor: gpui::BackgroundExecutor, _cx: &mut gpui::App| {
-                            log::debug!("Loader function invoked for {}", stringify!(#name));
-                            let params: #params_ty = serde_json::from_value(
-                                serde_json::to_value(params_map).unwrap()
-                            ).unwrap();
-                            let loader = #loader_closure;
-                            let fut = loader(params, executor);
-                            _cx.spawn(async move |_cx| {
-                                fut.await
-                                    .map(|data| Arc::new(data) as Arc<dyn std::any::Any + Send + Sync>)
-                                    .map_err(|e| e)
-                            })
-                        }),
-                    );
-                });
+        let stale_time_expr = input
+            .stale_time
+            .clone()
+            .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
+        let gc_time_expr = input
+            .gc_time
+            .clone()
+            .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
+        let factory = quote! {
+            pub fn loader_factory(executor: ::gpui::BackgroundExecutor) -> std::sync::Arc<
+                dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::AnyData>
+                + Send + Sync
+            > {
+                std::sync::Arc::new(move |params_map: &std::collections::HashMap<String, String>| {
+                    let params: #params_ty = serde_json::from_value(
+                        serde_json::to_value(params_map).unwrap()
+                    ).expect("Failed to deserialize route params");
+                    let params_clone = params.clone();
+                    let loader = #loader_closure;
+                    let executor = executor.clone();
+                    let key = ::rs_query::QueryKey::new("navi_loader")
+                        .with("route", stringify!(#name))
+                        .with("params", serde_json::to_string(&params).unwrap());
+                    ::rs_query::Query::new(key, move || {
+                        let params = params_clone.clone();
+                        let loader = loader.clone();
+                        let executor = executor.clone();
+                        async move {
+                            let data = loader(params, executor).await
+                                .map_err(|e| ::rs_query::QueryError::custom(e.to_string()))?;
+                            Ok(::navi_router::AnyData(std::sync::Arc::new(data) as std::sync::Arc<dyn std::any::Any + Send + Sync>))
+                        }
+                    })
+                    .stale_time(#stale_time_expr)
+                    .gc_time(#gc_time_expr)
+                    .structural_sharing(true)
+                })
             }
         };
-        (true, register)
+        (true, factory)
     } else {
         (false, quote! {})
+    };
+
+    let register_loader_call = if has_loader {
+        quote! {
+            let executor = cx.background_executor().clone();
+            navi_router::RouterState::update(cx, |state, _cx| {
+                state.register_loader_factory(Self::name(), Self::loader_factory(executor));
+            });
+        }
+    } else {
+        quote! {}
     };
 
     let component_registration = if let Some(comp_ty) = component_ty {
@@ -185,9 +208,11 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                 }
             }
 
+            #loader_factory_impl
+
             pub fn register(cx: &mut gpui::App) {
                 #component_registration
-                #loader_registration
+                #register_loader_call
             }
         }
     };

@@ -11,7 +11,7 @@ use navi_router::{
     ValidateSearch, ValidationError, ValidationResult,
     components::{Link, Outlet, RouterProvider, register_route_component},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -138,12 +138,12 @@ impl RenderOnce for UsersLayout {
 // ----------------------------------------------------------------------------
 // User Detail Route – Declarative Loader
 // ----------------------------------------------------------------------------
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UserParams {
     pub id: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UserData {
     pub id: String,
     pub name: String,
@@ -878,9 +878,6 @@ fn main() {
                 tree.add_route(node);
                 valico_test::ValicoTestRoute::register(cx);
             }
-
-            let devtools = cx.new(|cx| DevtoolsState::new(cx));
-
             log::info!("Opening window");
             cx.open_window(
                 WindowOptions {
@@ -899,7 +896,11 @@ fn main() {
                     let router_provider =
                         RouterProvider::new(window_id, window_handle, initial, tree, cx);
 
-                    // Register routes that use `define_route!` with the new `register` method
+                    // ✅ Now RouterState exists – get the query client safely
+                    let query_client = RouterState::global(cx).query_client.clone();
+                    let devtools = cx.new(|cx| DevtoolsState::new(query_client, cx));
+
+                    // Register routes...
                     UserDetailRoute::register(cx);
                     UsersIndexRoute::register(cx);
 
@@ -909,7 +910,6 @@ fn main() {
                     });
 
                     RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
-
                     cx.new(|cx| Root::new(root_view, window, cx))
                 },
             )

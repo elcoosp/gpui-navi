@@ -8,6 +8,7 @@ build = "build.rs"
 gpui = { workspace = true }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+rs-query = { git = "https://github.com/elcoosp/rs-query" }
 
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
 navi-core = { path = "../navi-core" }

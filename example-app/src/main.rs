@@ -688,7 +688,7 @@ impl Render for AppView {
         div()
             .size_full()
             .relative()
-            .child(self.router_provider.clone().child(RootLayout))
+            .child(self.router_provider.clone().child(Outlet::new()))
             .child(self.devtools.clone())
             .children(Root::render_dialog_layer(window, cx))
             .children(Root::render_sheet_layer(window, cx))

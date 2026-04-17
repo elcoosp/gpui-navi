@@ -9,7 +9,7 @@ use navi_router::{
     components::{Outlet, RouterProvider},
 };
 
-// Import the routes module
+// Import the routes module (if any manual routes still needed, but we'll rely on generated)
 mod routes;
 
 // Include the generated route tree builder
@@ -68,8 +68,8 @@ fn main() {
                     let router_provider =
                         RouterProvider::new(window_id, window_handle, initial, tree, cx);
 
-                    // 2. Now that the global is set, register all routes.
-                    register_routes(cx);
+                    // 2. Now that the global is set, register all routes via generated function.
+                    route_tree::register_routes(cx);
 
                     let query_client = RouterState::global(cx).query_client.clone();
                     let devtools = cx.new(|cx| DevtoolsState::new(query_client, cx));
@@ -88,31 +88,4 @@ fn main() {
             cx.activate(true);
             log::info!("Application running");
         });
-}
-
-/// Register all routes. Must be called after RouterState global is initialized.
-fn register_routes(cx: &mut App) {
-    // Core routes
-    crate::routes::__root::RootRoute::register(cx);
-    crate::routes::index::IndexRoute::register(cx);
-    crate::routes::about::AboutRoute::register(cx);
-    crate::routes::users::UsersRoute::register(cx);
-    crate::routes::users::index::UsersIndexRoute::register(cx);
-    crate::routes::users::param_id::UsersParamIdRoute::register(cx);
-    crate::routes::settings::SettingsRoute::register(cx);
-    crate::routes::docs::param_::DocsRoute::register(cx);
-    crate::routes::validation_test::index::ValidationTestIndexRoute::register(cx);
-
-    // Validation test routes (conditionally compiled)
-    #[cfg(feature = "validator")]
-    crate::routes::validation_test::validator::ValidatorTestRoute::register(cx);
-
-    #[cfg(feature = "garde")]
-    crate::routes::validation_test::garde::GardeTestRoute::register(cx);
-
-    #[cfg(feature = "validify")]
-    crate::routes::validation_test::validify::ValidifyTestRoute::register(cx);
-
-    #[cfg(feature = "valico")]
-    crate::routes::validation_test::valico::ValicoTestRoute::register(cx);
 }

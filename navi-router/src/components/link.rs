@@ -1,7 +1,7 @@
 use crate::{Navigator, RouterState};
 use gpui::{
-    AnyElement, App, InteractiveElement, IntoElement, MouseButton, MouseUpEvent, ParentElement,
-    RenderOnce, Styled, Window, div, FontWeight,
+    AnyElement, App, ElementId, InteractiveElement, IntoElement, MouseButton, MouseUpEvent,
+    ParentElement, RenderOnce, Styled, Window, div, FontWeight, StatefulInteractiveElement,
 };
 use std::time::Duration;
 
@@ -22,9 +22,6 @@ pub struct Link {
     replace: bool,
     preload: Option<PreloadType>,
     #[allow(dead_code)]
-
-    #[allow(dead_code)]
-
     preload_delay: Option<Duration>,
     disabled: bool,
     exact: bool,
@@ -120,6 +117,7 @@ impl RenderOnce for Link {
         let hash = self.hash.clone();
         let state = self.state.clone();
         let exact = self.exact;
+        let preload = self.preload;
 
         let is_active = RouterState::try_global(cx)
             .map(|router_state: &RouterState| {
@@ -134,18 +132,34 @@ impl RenderOnce for Link {
 
         let navigator = Navigator::new(window.window_handle());
 
-        let mut element = div().cursor_pointer().children(self.children);
+        // 构建基础 Div 并应用样式
+        let mut div_element = div().cursor_pointer().children(self.children);
 
         if is_active {
             if let Some(f) = self.active_style {
-                element = f(element);
+                div_element = f(div_element);
             } else {
-                element = element.font_weight(FontWeight::BOLD);
+                div_element = div_element.font_weight(FontWeight::BOLD);
             }
         } else if let Some(f) = self.inactive_style {
-            element = f(element);
+            div_element = f(div_element);
         }
 
+        // 转换为 Stateful<Div> 以支持 on_hover
+        let mut element = div_element.id(ElementId::Name(format!("navi-link-{}", href).into()));
+
+        // 绑定悬停预加载
+        if let Some(PreloadType::Intent) = preload {
+            let href_clone = href.clone();
+            let navigator_clone = navigator.clone();
+            element = element.on_hover(move |hovered: &bool, _window, cx| {
+                if *hovered {
+                    navigator_clone.preload(href_clone.clone(), cx);
+                }
+            });
+        }
+
+        // 绑定点击导航
         element.on_mouse_up(
             MouseButton::Left,
             move |_event: &MouseUpEvent, _window, cx| {

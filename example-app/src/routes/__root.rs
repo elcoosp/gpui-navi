@@ -1,7 +1,7 @@
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
-use navi_router::components::{Link, Outlet, SuspenseBoundary};
+use navi_router::components::{Link, Outlet, SuspenseBoundary, PreloadType};
 
 #[derive(Clone, IntoElement)]
 struct RootLayout;
@@ -23,7 +23,11 @@ impl RenderOnce for RootLayout {
                     .child(Link::new("/").child("🏠 Home"))
                     .child(Link::new("/about").child("ℹ️ About"))
                     .child(Link::new("/users").child("👥 Users"))
-                    .child(Link::new("/dashboard").child("📊 Dashboard"))
+                    .child(
+                        Link::new("/dashboard")
+                            .preload(PreloadType::Intent)
+                            .child("📊 Dashboard")
+                    )
                     .child(Link::new("/settings").child("⚙️ Settings"))
                     .child(Link::new("/docs/getting-started").child("📄 Docs"))
                     .child(Link::new("/validation-test").child("🧪 Validation")),
@@ -31,12 +35,9 @@ impl RenderOnce for RootLayout {
             .child(
                 SuspenseBoundary::new(|| {
                     div()
-                        .p_2()
-                        .bg(rgb(0x2563eb))
-                        .text_color(gpui::white())
                         .w_full()
-                        .text_center()
-                        .child("⏳ Loading...")
+                        .h(px(3.0))
+                        .bg(rgb(0x2563eb))
                         .into_any_element()
                 })
                 .with_child(div().flex_1().p_4().child(Outlet::new()))

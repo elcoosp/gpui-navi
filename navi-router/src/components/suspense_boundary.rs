@@ -1,6 +1,6 @@
 use crate::RouterState;
-use gpui::div;
-use gpui::{AnyElement, App, IntoElement, RenderOnce, Window};
+use gpui::{AnyElement, App, IntoElement, RenderOnce, Window, div};
+
 #[derive(IntoElement)]
 pub struct SuspenseBoundary {
     fallback: Box<dyn Fn() -> AnyElement>,

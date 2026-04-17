@@ -4188,6 +4188,7 @@ dependencies = [
  "navi-core",
  "navi-router",
  "once_cell",
+ "rs-query",
  "serde",
  "serde_json",
 ]

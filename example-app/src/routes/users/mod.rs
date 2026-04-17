@@ -1,6 +1,5 @@
 use navi_router::RouteDef;
 pub mod index;
-pub mod param_id;
 
 use gpui::prelude::*;
 use gpui::*;

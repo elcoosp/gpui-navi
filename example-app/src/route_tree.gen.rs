@@ -3,12 +3,12 @@
 // Module declarations for discovered routes
 #[path = "routes/__root.rs"] pub mod __root;
 #[path = "routes/about.rs"] pub mod about;
-#[path = "routes/docs/param_.rs"] pub mod docs_param_;
+#[path = "routes/docs/$.rs"] pub mod docs_splat;
 #[path = "routes/index.rs"] pub mod index;
 #[path = "routes/settings.rs"] pub mod settings;
+#[path = "routes/users/$id.rs"] pub mod users_param_id;
 #[path = "routes/users/index.rs"] pub mod users_index;
 #[path = "routes/users/mod.rs"] pub mod users;
-#[path = "routes/users/param_id.rs"] pub mod users_param_id;
 #[path = "routes/validation-test/garde.rs"] pub mod validation_test_garde;
 #[path = "routes/validation-test/index.rs"] pub mod validation_test_index;
 #[path = "routes/validation-test/valico.rs"] pub mod validation_test_valico;
@@ -82,13 +82,7 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
-        let mut node = docs_param_::DocsRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
-        let mut node = users_param_id::UsersParamIdRoute::build_node();
+        let mut node = docs_splat::DocsRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -101,6 +95,12 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 
     {
         let mut node = users::UsersRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = users_param_id::UsersParamIdRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -119,9 +119,9 @@ settings::SettingsRoute::register(cx);
 validation_test_index::ValidationTestIndexRoute::register(cx);
 #[cfg(feature = "validator")] validation_test_validator::ValidatorTestRoute::register(cx);
 #[cfg(feature = "valico")] validation_test_valico::ValicoTestRoute::register(cx);
-docs_param_::DocsRoute::register(cx);
-users_param_id::UsersParamIdRoute::register(cx);
+docs_splat::DocsRoute::register(cx);
 users_index::UsersIndexRoute::register(cx);
 users::UsersRoute::register(cx);
+users_param_id::UsersParamIdRoute::register(cx);
 
 }

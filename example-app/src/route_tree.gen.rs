@@ -3,6 +3,10 @@
 // Module declarations for discovered routes
 #[path = "routes/__root.rs"] pub mod __root;
 #[path = "routes/about.rs"] pub mod about;
+#[path = "routes/dashboard/analytics.rs"] pub mod dashboard_analytics;
+#[path = "routes/dashboard/index.rs"] pub mod dashboard_index;
+#[path = "routes/dashboard/mod.rs"] pub mod dashboard;
+#[path = "routes/dashboard/settings.rs"] pub mod dashboard_settings;
 #[path = "routes/docs/$.rs"] pub mod docs_splat;
 #[path = "routes/index.rs"] pub mod index;
 #[path = "routes/settings.rs"] pub mod settings;
@@ -87,6 +91,30 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
+        let mut node = dashboard_index::DashboardIndexRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = dashboard::DashboardRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = dashboard_analytics::DashboardAnalyticsRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = dashboard_settings::DashboardSettingsRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
         let mut node = users_index::UsersIndexRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
@@ -113,6 +141,10 @@ validation_test_index::ValidationTestIndexRoute::register(cx);
 #[cfg(feature = "validator")] validation_test_validator::ValidatorTestRoute::register(cx);
 #[cfg(feature = "valico")] validation_test_valico::ValicoTestRoute::register(cx);
 docs_splat::DocsRoute::register(cx);
+dashboard_index::DashboardIndexRoute::register(cx);
+dashboard::DashboardRoute::register(cx);
+dashboard_analytics::DashboardAnalyticsRoute::register(cx);
+dashboard_settings::DashboardSettingsRoute::register(cx);
 users_index::UsersIndexRoute::register(cx);
 users_param_id::UsersParamIdRoute::register(cx);
 

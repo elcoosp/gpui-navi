@@ -1,6 +1,6 @@
 use gpui::prelude::*;
 use gpui::*;
-use navi_macros::define_route;
+use navi_macros::{define_route, use_loader_data};
 use std::time::Duration;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -13,8 +13,10 @@ define_route!(
     path: "/dashboard",
     is_index: true,
     data: OverviewData,
-    loader: |_params: (), executor: gpui::BackgroundExecutor| async move {
+    loader: |_: (), executor: gpui::BackgroundExecutor| async move {
+        log::info!("[Overview] Loader started");
         executor.timer(Duration::from_millis(600)).await;
+        log::info!("[Overview] Loader completed");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(OverviewData {
             stats: vec![
                 "Users: 1,234".to_string(),
@@ -31,13 +33,13 @@ struct DashboardOverview;
 
 impl RenderOnce for DashboardOverview {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        use navi_macros::use_loader_data;
         let data = use_loader_data!(DashboardIndexRoute);
+        let stats = data
+            .map(|d| d.stats.clone())
+            .unwrap_or_else(|| vec!["⏳ Loading overview...".to_string()]);
         div()
             .p_4()
             .child("📈 Overview")
-            .children(data.map(|d| {
-                d.stats.iter().map(|s| div().child(s.clone())).collect::<Vec<_>>()
-            }).unwrap_or_default())
+            .children(stats.into_iter().map(|s| div().child(s)))
     }
 }

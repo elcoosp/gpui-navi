@@ -163,6 +163,12 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                 ).expect("Failed to deserialize route params");
             }
         };
+        // Use "{}" for unit params key to match retrieval key
+        let params_key_expr = if is_unit_params {
+            quote! { "{}" }
+        } else {
+            quote! { serde_json::to_string(&params).unwrap() }
+        };
         let factory = quote! {
             pub fn loader_factory(executor: ::gpui::BackgroundExecutor) -> std::sync::Arc<
                 dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::AnyData>
@@ -175,7 +181,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                     let executor = executor.clone();
                     let key = ::rs_query::QueryKey::new("navi_loader")
                         .with("route", #name_str)
-                        .with("params", serde_json::to_string(&params).unwrap());
+                        .with("params", #params_key_expr);
                     ::rs_query::Query::new(key, move || {
                         let params = params_clone.clone();
                         let loader = loader.clone();

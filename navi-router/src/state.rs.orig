@@ -189,7 +189,6 @@ impl RouterState {
 
     pub fn register_loader_factory(&mut self, route_id: &str, factory: LoaderFactory) {
         log::debug!("Registering rs-query loader factory for route: {}", route_id);
-        eprintln!("[DEBUG] Registering loader factory for route: {}", route_id);
         self.loader_factories.insert(route_id.to_string(), factory);
     }
 
@@ -202,7 +201,6 @@ impl RouterState {
             for ancestor in &ancestors {
                 if ancestor.has_loader {
                     if let Some(factory) = self.loader_factories.get(&ancestor.id) {
-                        eprintln!("[DEBUG] Found factory for ancestor: {}", ancestor.id);
                         if let Some((ancestor_params, _)) = self.route_tree.match_path(&to.pathname) {
                             let query = factory(&ancestor_params);
                             let key = query.key.clone();
@@ -212,7 +210,6 @@ impl RouterState {
                             let ancestor_id = ancestor.id.clone();
 
                             loader_futures.push(async move {
-                                eprintln!("[DEBUG] Starting loader for {}", ancestor_id);
                                 match (fetch_fn)().await {
                                     Ok(data) => {
                                         client.set_query_data(&key, data, options);
@@ -224,9 +221,6 @@ impl RouterState {
                             loader_count += 1;
                         }
                     }
-                }
-                else if ancestor.has_loader {
-                    eprintln!("[DEBUG] Ancestor {} has loader but no factory found", ancestor.id);
                 }
             }
 
@@ -269,22 +263,13 @@ impl RouterState {
 
     pub fn get_loader_data<R: crate::RouteDef>(&self) -> Option<R::LoaderData> {
         let (params, node) = self.current_match.as_ref()?;
-        eprintln!("[DEBUG] get_loader_data called for {}", std::any::type_name::<R>());
-        eprintln!("[DEBUG] get_loader_data: node.id = {}, params = {:?}", node.id, params);
         if node.id != R::name() { return None; }
         let key = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
             .with("params", serde_json::to_string(params).ok()?);
-        eprintln!("[DEBUG] get_loader_data key: {}", key.cache_key());
-        let any_data: AnyData = match self.query_client.get_query_data(&key) {
-            Some(d) => d,
-            None => {
-                eprintln!("[DEBUG] No data in cache for key {}", key.cache_key());
-                return None;
-            }
-        };
-        let arc_data = any_data.0.downcast_ref::<Arc<R::LoaderData>>()?;
-        Some((**arc_data).clone())
+        let any_data: AnyData = self.query_client.get_query_data(&key)?;
+        let arc_data = any_data.0.downcast_ref::<Arc<R::LoaderData>>()?.clone();
+        Some((*arc_data).clone())
     }
 
     pub fn get_loader_state<R: crate::RouteDef>(&self) -> LoaderState {

@@ -1,7 +1,7 @@
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
-use navi_router::components::{Link, Outlet};
+use navi_router::components::{Link, Outlet, SuspenseBoundary};
 
 #[derive(Clone, IntoElement)]
 struct RootLayout;
@@ -28,7 +28,19 @@ impl RenderOnce for RootLayout {
                     .child(Link::new("/docs/getting-started").child("📄 Docs"))
                     .child(Link::new("/validation-test").child("🧪 Validation")),
             )
-            .child(div().flex_1().p_4().child(Outlet::new()))
+            .child(
+                SuspenseBoundary::new(|| {
+                    div()
+                        .p_2()
+                        .bg(rgb(0x2563eb))
+                        .text_color(gpui::white())
+                        .w_full()
+                        .text_center()
+                        .child("⏳ Loading...")
+                        .into_any_element()
+                })
+                .with_child(div().flex_1().p_4().child(Outlet::new()))
+            )
     }
 }
 

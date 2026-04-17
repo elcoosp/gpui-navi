@@ -1,6 +1,6 @@
 # Navi
 
-**Navi** is an experimental, type‑safe router for [GPUI](https://www.gpui.rs/) applications, inspired by [TanStack Router](https://tanstack.com/router). It provides a solid foundation for declarative routing with file‑based code generation, path matching, and a layered context system. **Please note: Navi is under active development—many components are placeholders and not yet functional.**
+**Navi** is an experimental, type‑safe router for [GPUI](https://www.gpui.rs/) applications, inspired by [TanStack Router](https://tanstack.com/router). It provides a solid foundation for declarative routing with file‑based code generation, path matching, and a layered context system.
 
 ---
 
@@ -8,20 +8,20 @@
 
 | Component               | Status                                                                                         |
 | ----------------------- | ---------------------------------------------------------------------------------------------- |
-| Route definition macros | ✅ Functional – `define_route!` and `define_router!` generate valid route trees.                 |
-| Path matching           | ✅ Functional – supports static, dynamic (`$id`), optional, and splat segments.                  |
+| Route definition macros | ✅ Functional – `define_route!` and `define_router!` generate valid route trees.                |
+| Path matching           | ✅ Functional – supports static, dynamic (`$id`), optional, and splat segments.                 |
 | File‑based codegen      | ✅ Functional – scans `src/routes` and outputs `route_tree.gen.rs`.                             |
-| Context tree            | ✅ Functional – layered context for dependency injection.                                       |
-| In‑memory history       | ✅ Functional – stack‑based navigation history (stub, no browser integration).                  |
-| Router components       | 🚧 Stubbed – `<Outlet>`, `<Link>`, `<RouterProvider>` are empty `div`s; no rendering logic.     |
-| Programmatic navigation | 🚧 Stubbed – `Navigator` methods are no‑ops.                                                    |
-| Loaders / data caching  | 🚧 Planned – `rs-query` integration exists but loaders are not executed.                        |
-| Suspense boundaries     | 🚧 Stubbed – configuration exists, but no fallback rendering.                                   |
-| Devtools                | 🚧 Stubbed – structs and event log present, but UI is unimplemented.                            |
-| Scroll restoration      | 🚧 Stubbed – `HashMap` for positions, but never used.                                           |
-| Validation framework    | 🚧 Trait defined – no concrete implementations or integrations.                                 |
+| Context tree            | ✅ Functional – layered context for dependency injection.                                      |
+| In‑memory history       | ✅ Functional – stack‑based navigation history (desktop‑friendly, no browser integration).     |
+| Router components       | ✅ Functional – `<Outlet>`, `<Link>`, `<RouterProvider>` render GPUI elements and handle navigation. |
+| Programmatic navigation | ✅ Functional – `Navigator::push`, `replace`, `back`, `forward` work with `RouterState`.        |
+| Loaders / data caching  | ✅ Functional – async loaders with caching (basic `HashMap` cache).                             |
+| Suspense boundaries     | 🚧 Planned – configuration exists, but no fallback rendering component.                        |
+| Devtools                | ✅ Functional – event timeline, badge coloring, and a GPUI panel (UI implemented).             |
+| Scroll restoration      | ❌ Missing – placeholder component exists but does not save/restore positions.                 |
+| Validation framework    | ✅ Functional – `ValidateSearch` trait with integrations for `validator`, `garde`, `validify`, `valico`. |
 
-**What this means for you:** Navi currently provides a robust route *matching* engine and code generation tooling, but it does **not** yet render routes or handle navigation out of the box. You can use the matching logic and context system in your own rendering setup, but the high‑level components are not ready.
+**What this means for you:** Navi is a fully functional router for GPUI desktop applications. You can define routes, navigate, load data, and render nested UIs. The core is production‑ready; the remaining work focuses on advanced features like suspense, scroll restoration, and cache invalidation.
 
 ---
 
@@ -32,16 +32,16 @@ Navi is a Cargo workspace containing several crates:
 | Crate                      | Description                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------ |
 | `navi-core`                | Core primitives: layered `ContextTree` and `SuspenseState` enum.                                  |
-| `navi-router`              | Route tree, pattern matching, history stub, and stubbed components.                               |
+| `navi-router`              | Route tree, pattern matching, history, loaders, components (`Outlet`, `Link`, etc.), and state.   |
 | `navi-macros`              | Procedural macros for defining routes and hooks (`define_route!`, `use_params!`, etc.).           |
 | `navi-codegen`             | File‑based route discovery and code generator.                                                    |
-| `navi-devtools`            | Devtools panel structs (UI not implemented).                                                      |
-| `example-app`              | Demonstrates route definition and matching (no actual rendering).                                 |
-| `stubs/history-navigation` | Simple in‑memory history implementation.                                                          |
+| `navi-devtools`            | Devtools panel with event timeline, cache inspector, and navigation tools.                        |
+| `example-app`              | Full GPUI application demonstrating routing, loaders, validation, and blockers.                   |
+| `stubs/history-navigation` | Simple in‑memory history implementation (suitable for desktop).                                   |
 
 ---
 
-## Getting Started (Current Reality)
+## Getting Started
 
 ### Adding Navi to Your Project
 
@@ -52,42 +52,69 @@ navi-macros = { path = "path/to/navi-macros" }
 navi-core = { path = "path/to/navi-core" }
 ```
 
-### Defining Routes
-
-Use the `define_route!` macro to create a route type with a pattern:
+### Defining a Route with Loader
 
 ```rust
 use navi_macros::define_route;
+use serde::Deserialize;
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct UserParams {
+    pub id: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct UserData {
+    pub name: String,
+}
 
 define_route!(
     UserRoute,
     path: "/users/$id",
-    params: UserParams,      // optional
-    search: UserSearch,      // optional
+    params: UserParams,
+    data: UserData,
+    loader: |params: UserParams, executor: gpui::BackgroundExecutor| async move {
+        // Simulate async fetch
+        executor.timer(std::time::Duration::from_millis(500)).await;
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
+            std::sync::Arc::new(UserData { name: format!("User {}", params.id) })
+        )
+    },
+    component: UserPage,
 );
+
+#[derive(Clone, IntoElement)]
+struct UserPage;
+impl RenderOnce for UserPage {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let data = use_loader_data!(UserRoute);
+        match data {
+            Some(data) => div().child(format!("Hello, {}", data.name)),
+            None => div().child("Loading..."),
+        }
+    }
+}
 ```
 
-The macro generates a `UserRoute` struct that implements `navi_router::RouteDef` and provides a `build_node()` method for adding it to a route tree.
-
-### Building a Route Tree
-
-Manually construct a `RouteTree` and add nodes:
+### Building the Route Tree and Starting the Router
 
 ```rust
-use navi_router::{RouteTree, Location};
+use navi_router::{Location, RouteTree, RouterProvider};
 
 let mut tree = RouteTree::new();
 tree.add_route(UserRoute::build_node());
 
-// Match a path
-if let Some((params, node)) = tree.match_path("/users/42") {
-    println!("Matched route: {} with params {:?}", node.id, params);
-}
+// In your GPUI app initialization:
+let provider = RouterProvider::new(
+    window_id,
+    window_handle,
+    Location::new("/"),
+    tree,
+    cx,
+);
 ```
 
 ### File‑Based Code Generation (Optional)
-
-If you prefer to generate the route tree from your file system:
 
 1. Create a `navi.config.json`:
 
@@ -106,64 +133,43 @@ fn main() {
 }
 ```
 
-3. Place route files in `src/routes` following the naming conventions (e.g., `users.rs`, `$id.rs`). The build script will generate a `build_route_tree()` function.
-
-### Using the Context Tree (for Manual Integration)
-
-Navi’s context system allows you to provide and consume values across nested scopes:
-
-```rust
-use navi_core::context;
-
-let window_id = gpui::WindowId(0);
-context::init_window(window_id);
-context::provide(window_id, "some value");
-let value: Option<String> = context::consume(window_id);
-```
-
-This is the foundation for dependency injection in routes, but the router does **not** automatically populate route params or loader data into the context.
+3. Place route files in `src/routes` (e.g., `users/$id.rs`). The build script generates a `build_route_tree()` function that you can use to create the `RouteTree`.
 
 ---
 
 ## What’s Missing (And How You Can Help)
 
-Navi is an open‑source project looking for contributors. The core architecture is solid, but the following areas need implementation:
+Navi is actively developed. The following features are not yet implemented (or are partially implemented) – contributions welcome:
 
-- **Component rendering** – Make `<Outlet>`, `<Link>`, `<RouterProvider>` actually render GPUI elements and respond to navigation.
-- **Navigation execution** – Connect `Navigator` to `RouterState` so `push`/`replace`/`back` modify history and update the UI.
-- **Loader integration** – Execute loader functions, cache results with `rs-query`, and provide data to components.
-- **Suspense** – Implement fallback rendering logic in `SuspenseBoundary`.
-- **Devtools UI** – Build a GPUI‑based panel that displays routes, cache, and timeline.
-- **Browser history** – Replace the in‑memory stub with actual `window.history` API calls (WASM‑compatible).
-- **Validation adapters** – Implement `ValidateSearch` for popular crates (`validator`, `garde`).
+- **Suspense boundaries** – Show a fallback UI while loaders are pending.
+- **Scroll restoration** – Preserve scroll position on back/forward navigation.
+- **Loader cache invalidation** – Add TTL (`stale_time`, `gc_time`) and manual invalidation API.
+- **Parallel data loading** – Load data for nested routes concurrently.
+- **Preloading / prefetching** – Implement the `preload` prop on `<Link>`.
+- **Search param middleware** – Integrate `RetainSearchParams` and `StripSearchParams` into navigation.
 
-If you’re interested in contributing, please open an issue or pull request. We especially welcome help with the rendering pipeline and loader execution.
+**Not planned (out of scope for this router):**
+- Browser `window.history` integration (Navi targets desktop GPUI, not web).
+- Server‑side rendering or static site generation.
+
+If you’re interested in contributing, please open an issue or pull request. We especially welcome help with suspense boundaries and cache invalidation.
 
 ---
 
 ## Example App
 
-The `example-app` crate demonstrates how to define routes and test matching, but **it does not render a UI**. You can run it to see the route tree and matching in action:
+The `example-app` crate demonstrates a fully functional GPUI application with routing, loaders, search param validation, navigation blockers, and a devtools panel. Run it with:
 
 ```bash
 cargo run -p example-app
 ```
 
-Output:
-```
-Navi Example App - Router initialized successfully!
-Registered routes:
-  __root__ -> /
-  index -> /
-  users_index -> /users
-  user_detail -> /users/$id
-  settings -> /settings
-Matched / -> __root__ ({})
-Matched /users -> users_index ({})
-Matched /users/42 -> user_detail ({"id": "42"})
-Matched /settings -> settings ({})
-No match for /unknown
-```
+The app includes:
+- Nested layouts (`/users` layout with `<Outlet />`)
+- Dynamic routes (`/users/$id` with async loader)
+- Search param validation and sorting (`/users?sort=asc`)
+- Navigation blocker demo (`/settings` page)
+- Devtools panel with event timeline
 
 ---
 

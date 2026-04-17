@@ -734,7 +734,9 @@ fn main() {
             gpui_component::init(cx);
             log::info!("Building route tree");
             let mut tree = RouteTree::new();
+            // --- Build route tree with proper parent relationships ---
 
+            // Root
             tree.add_route(RouteNode {
                 id: "__root__".to_string(),
                 pattern: RoutePattern::parse("/"),
@@ -747,6 +749,7 @@ fn main() {
                 preload_stale_time: None,
             });
 
+            // Index (home)
             tree.add_route(RouteNode {
                 id: "index".to_string(),
                 pattern: RoutePattern::parse("/"),
@@ -759,6 +762,7 @@ fn main() {
                 preload_stale_time: None,
             });
 
+            // About
             tree.add_route(RouteNode {
                 id: "about".to_string(),
                 pattern: RoutePattern::parse("/about"),
@@ -771,6 +775,7 @@ fn main() {
                 preload_stale_time: None,
             });
 
+            // Users layout
             tree.add_route(RouteNode {
                 id: "users".to_string(),
                 pattern: RoutePattern::parse("/users"),
@@ -783,9 +788,17 @@ fn main() {
                 preload_stale_time: None,
             });
 
-            tree.add_route(UsersIndexRoute::build_node());
-            tree.add_route(UserDetailRoute::build_node());
+            // Users index route
+            let mut users_index_node = UsersIndexRoute::build_node();
+            users_index_node.parent = Some("users".to_string());
+            tree.add_route(users_index_node);
 
+            // User detail route
+            let mut user_detail_node = UserDetailRoute::build_node();
+            user_detail_node.parent = Some("users".to_string());
+            tree.add_route(user_detail_node);
+
+            // Settings
             tree.add_route(RouteNode {
                 id: "settings".to_string(),
                 pattern: RoutePattern::parse("/settings"),
@@ -798,6 +811,7 @@ fn main() {
                 preload_stale_time: None,
             });
 
+            // Docs splat
             tree.add_route(RouteNode {
                 id: "docs_splat".to_string(),
                 pattern: RoutePattern::parse("/docs/$"),
@@ -810,6 +824,7 @@ fn main() {
                 preload_stale_time: None,
             });
 
+            // Not found
             tree.add_route(RouteNode {
                 id: "not_found".to_string(),
                 pattern: RoutePattern::parse("/*"),
@@ -822,6 +837,7 @@ fn main() {
                 preload_stale_time: None,
             });
 
+            // Validation index
             tree.add_route(RouteNode {
                 id: "validation_index".to_string(),
                 pattern: RoutePattern::parse("/validation-test"),

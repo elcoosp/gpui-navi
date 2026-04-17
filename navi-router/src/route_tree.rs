@@ -297,16 +297,20 @@ impl RouteTree {
     }
     pub fn ancestors(&self, route_id: &str) -> Vec<&RouteNode> {
         let mut chain = Vec::new();
-        let mut current = Some(route_id);
-        while let Some(id) = current {
-            if let Some(node) = self.get_node(id) {
+        let mut current_id = Some(route_id.to_string());
+        while let Some(id) = current_id {
+            if let Some(node) = self.nodes.get(&id) {
                 chain.push(node);
-                current = node.parent.as_deref();
+                current_id = node.parent.clone();
             } else {
+                log::warn!("RouteTree::ancestors: node '{}' not found", id);
                 break;
             }
         }
         chain.reverse();
+        if chain.is_empty() {
+            log::error!("ancestors: empty chain for route '{}'", route_id);
+        }
         chain
     }
     pub fn add_route(&mut self, node: RouteNode) {

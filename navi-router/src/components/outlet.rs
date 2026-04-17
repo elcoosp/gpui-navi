@@ -67,20 +67,31 @@ impl RenderOnce for Outlet {
         let (node_id, constructor_opt) = {
             if let Some((_params, leaf_node)) = state.current_match.as_ref() {
                 let ancestors = state.route_tree.ancestors(&leaf_node.id);
+                log::debug!(
+                    "Outlet ancestors for {}: {:?}",
+                    leaf_node.id,
+                    ancestors.iter().map(|n| &n.id).collect::<Vec<_>>()
+                );
                 if depth >= ancestors.len() {
                     log::warn!(
-                        "Outlet depth {} exceeds ancestors length {}",
+                        "Outlet depth {} exceeds ancestors length {} for route {}",
                         depth,
-                        ancestors.len()
+                        ancestors.len(),
+                        leaf_node.id
                     );
+                    // Fallback: render leaf node if depth out of bounds?
                     return div()
-                        .child("No matching route at this depth")
+                        .child(format!(
+                            "No matching route at depth {} (ancestors: {:?})",
+                            depth,
+                            ancestors.iter().map(|n| &n.id).collect::<Vec<_>>()
+                        ))
                         .into_any_element();
                 }
                 let node = ancestors[depth];
                 log::debug!("Outlet (depth {}) rendering route: {}", depth, node.id);
 
-                let constructor = REGISTRY.lock().unwrap().get(&node.id).cloned(); // Arc is Clone
+                let constructor = REGISTRY.lock().unwrap().get(&node.id).cloned();
                 (node.id.clone(), constructor)
             } else {
                 log::warn!("Outlet: no matching route");

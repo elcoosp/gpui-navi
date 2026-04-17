@@ -19,7 +19,7 @@ impl Parse for RouterDefInput {
     }
 }
 
-/// Generate a Route enum and route tree builder from a list of route types.
+/// Generate a Route enum, route tree builder, and register_routes function from a list of route types.
 pub fn define_router(input: TokenStream) -> TokenStream {
     let input = match syn::parse::<RouterDefInput>(input) {
         Ok(input) => input,
@@ -34,6 +34,16 @@ pub fn define_router(input: TokenStream) -> TokenStream {
         .map(|route| {
             quote! {
                 tree.add_route(#route::build_node());
+            }
+        })
+        .collect();
+
+    let register_calls: Vec<_> = input
+        .routes
+        .iter()
+        .map(|route| {
+            quote! {
+                #route::register(cx);
             }
         })
         .collect();
@@ -54,6 +64,13 @@ pub fn define_router(input: TokenStream) -> TokenStream {
                 #add_route_calls
             )*
             tree
+        }
+
+        /// Register all route components and loaders.
+        pub fn register_routes(cx: &mut gpui::App) {
+            #(
+                #register_calls
+            )*
         }
 
         /// Build the full router state with an initial location.

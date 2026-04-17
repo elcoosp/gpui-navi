@@ -2,8 +2,8 @@ use gpui::prelude::*;
 use gpui::*;
 use gpui_component::scroll::ScrollableElement;
 use navi_macros::define_route;
-use navi_router::components::{Link, Outlet, SuspenseBoundary, PreloadType};
 use navi_router::RouterState;
+use navi_router::components::{Link, Outlet, PreloadType, SuspenseBoundary};
 
 #[derive(Clone, IntoElement)]
 struct RootLayout;
@@ -30,7 +30,7 @@ impl RenderOnce for RootLayout {
                     .child(
                         Link::new("/dashboard")
                             .preload(PreloadType::Intent)
-                            .child("📊 Dashboard")
+                            .child("📊 Dashboard"),
                     )
                     .child(Link::new("/settings").child("⚙️ Settings"))
                     .child(Link::new("/docs/getting-started").child("📄 Docs"))
@@ -51,8 +51,8 @@ impl RenderOnce for RootLayout {
                         .p_4()
                         .track_scroll(&scroll_handle)
                         .overflow_y_scrollbar()
-                        .child(Outlet::new())
-                )
+                        .child(Outlet::new()),
+                ),
             )
     }
 }

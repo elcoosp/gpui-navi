@@ -1,9 +1,6 @@
 // navi-router/src/components/outlet.rs
 use crate::RouterState;
-use gpui::{
-    AnyElement, App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, Window,
-    div,
-};
+use gpui::{AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, Window, div};
 use navi_core::context;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -63,47 +60,51 @@ impl RenderOnce for Outlet {
                 .unwrap_or(0)
         });
 
-        let current_match = state.current_match.as_ref();
-        if let Some((_params, leaf_node)) = current_match {
-            // Get ancestor chain for the matched leaf route
-            let ancestors = state.route_tree.ancestors(&leaf_node.id);
-            if depth >= ancestors.len() {
-                log::warn!(
-                    "Outlet depth {} exceeds ancestors length {}",
-                    depth,
-                    ancestors.len()
-                );
-                return div()
-                    .child("No matching route at this depth")
-                    .into_any_element();
-            }
+        // Extract the node id and the constructor *before* releasing the immutable borrow on state.
+        let (node_id, constructor_opt) = {
+            if let Some((_params, leaf_node)) = state.current_match.as_ref() {
+                let ancestors = state.route_tree.ancestors(&leaf_node.id);
+                if depth >= ancestors.len() {
+                    log::warn!(
+                        "Outlet depth {} exceeds ancestors length {}",
+                        depth,
+                        ancestors.len()
+                    );
+                    return div()
+                        .child("No matching route at this depth")
+                        .into_any_element();
+                }
+                let node = ancestors[depth];
+                log::debug!("Outlet (depth {}) rendering route: {}", depth, node.id);
 
-            let node = ancestors[depth];
-            log::debug!("Outlet (depth {}) rendering route: {}", depth, node.id);
-
-            // Provide the next depth for child outlets
-            let window_id = window.window_handle().window_id();
-            context::provide(window_id, OutletDepth(depth + 1));
-
-            if let Some(constructor) = REGISTRY.lock().unwrap().get(&node.id) {
-                let element = constructor(cx);
-                div()
-                    .id(ElementId::Name(
-                        format!("outlet-{}-{}", node.id, depth).into(),
-                    ))
-                    .child(element)
-                    .children(self.children)
-                    .into_any_element()
+                let constructor = REGISTRY.lock().unwrap().get(&node.id).cloned();
+                (node.id.clone(), constructor)
             } else {
-                log::warn!("No component registered for route: {}", node.id);
-                div()
-                    .child(format!("No component for route: {}", node.id))
-                    .children(self.children)
-                    .into_any_element()
+                log::warn!("Outlet: no matching route");
+                return div().child("404 Not Found").into_any_element();
             }
+        };
+        // `state` borrow is now released; we can mutate `cx` safely.
+
+        // Provide the next depth for child outlets
+        let window_id = window.window_handle().window_id();
+        context::provide(window_id, OutletDepth(depth + 1));
+
+        if let Some(constructor) = constructor_opt {
+            let element = constructor(cx);
+            div()
+                .id(ElementId::Name(
+                    format!("outlet-{}-{}", node_id, depth).into(),
+                ))
+                .child(element)
+                .children(self.children)
+                .into_any_element()
         } else {
-            log::warn!("Outlet: no matching route");
-            div().child("404 Not Found").into_any_element()
+            log::warn!("No component registered for route: {}", node_id);
+            div()
+                .child(format!("No component for route: {}", node_id))
+                .children(self.children)
+                .into_any_element()
         }
     }
 }

@@ -2,17 +2,19 @@
 
 use gpui::{
     AnyWindowHandle, App, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight, Hsla,
-    KeyBinding, MouseButton, Render, Size, StyledText, Subscription, TextStyle, Window, actions,
-    div, prelude::*, px,
+    KeyBinding, MouseButton, Render, Size, StyledText, Subscription, TextStyle, WeakEntity, Window,
+    actions, div, prelude::*, px,
 };
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable, VirtualListScrollHandle,
+    ActiveTheme, Icon, IconName, Sizable, Size as ComponentSize, VirtualListScrollHandle,
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
+    h_flex,
     input::{Input, InputState},
     menu::{DropdownMenu, PopupMenuItem},
     scroll::ScrollableElement,
     tab::{Tab, TabBar},
+    table::{Column, ColumnSort, DataTable, TableDelegate, TableState},
     v_virtual_list,
 };
 use navi_router::{
@@ -22,6 +24,7 @@ use navi_router::{
 use rs_query::QueryClient;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use std::time::Duration;
 
 actions!(
     devtools,
@@ -262,6 +265,189 @@ struct EventColors {
 }
 
 // ---------------------------------------------------------------------------
+// Cache Table Delegate
+// ---------------------------------------------------------------------------
+
+#[derive(Clone)]
+struct CacheEntryRow {
+    key: String,
+    age: Duration,
+    is_stale: bool,
+    #[allow(dead_code)]
+    type_id: std::any::TypeId,
+}
+
+struct CacheTableDelegate {
+    entries: Vec<CacheEntryRow>,
+    columns: Vec<Column>,
+    query_client: QueryClient,
+    view: WeakEntity<DevtoolsState>,
+}
+
+impl CacheTableDelegate {
+    fn new(
+        entries: Vec<CacheEntryRow>,
+        query_client: QueryClient,
+        view: WeakEntity<DevtoolsState>,
+    ) -> Self {
+        let columns = vec![
+            Column::new("key", "Key").width(px(200.)).resizable(true),
+            Column::new("age", "Age").width(px(80.)).resizable(true),
+            Column::new("stale", "Stale")
+                .width(px(60.))
+                .resizable(false),
+            Column::new("actions", "")
+                .width(px(80.))
+                .resizable(false)
+                .selectable(false),
+        ];
+        Self {
+            entries,
+            columns,
+            query_client,
+            view,
+        }
+    }
+}
+
+impl TableDelegate for CacheTableDelegate {
+    fn columns_count(&self, _: &App) -> usize {
+        self.columns.len()
+    }
+
+    fn rows_count(&self, _: &App) -> usize {
+        self.entries.len()
+    }
+
+    fn column(&self, col_ix: usize, _cx: &App) -> Column {
+        let mut col = self.columns[col_ix].clone();
+        if col.key == "key" || col.key == "age" {
+            col = col.sortable();
+        }
+        col
+    }
+
+    fn perform_sort(
+        &mut self,
+        col_ix: usize,
+        sort: ColumnSort,
+        _: &mut Window,
+        _: &mut Context<TableState<Self>>,
+    ) {
+        let col = &self.columns[col_ix];
+        match col.key.as_ref() {
+            "key" => {
+                self.entries.sort_by(|a, b| {
+                    if sort == ColumnSort::Ascending {
+                        a.key.cmp(&b.key)
+                    } else {
+                        b.key.cmp(&a.key)
+                    }
+                });
+            }
+            "age" => {
+                self.entries.sort_by(|a, b| {
+                    if sort == ColumnSort::Ascending {
+                        a.age.cmp(&b.age)
+                    } else {
+                        b.age.cmp(&a.age)
+                    }
+                });
+            }
+            _ => {}
+        }
+    }
+
+    fn render_td(
+        &mut self,
+        row_ix: usize,
+        col_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        let entry = &self.entries[row_ix];
+        let col_key = &self.columns[col_ix].key;
+
+        match col_key.as_ref() {
+            "key" => div()
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(entry.key.clone())
+                .into_any_element(),
+            "age" => {
+                let age_secs = entry.age.as_secs_f32();
+                div()
+                    .text_color(if age_secs > 60.0 {
+                        cx.theme().warning
+                    } else {
+                        cx.theme().foreground
+                    })
+                    .child(format!("{:.1}s", age_secs))
+                    .into_any_element()
+            }
+            "stale" => {
+                if entry.is_stale {
+                    div()
+                        .text_color(cx.theme().warning)
+                        .child("⚠ Stale")
+                        .into_any_element()
+                } else {
+                    div()
+                        .text_color(cx.theme().muted_foreground)
+                        .child("✓")
+                        .into_any_element()
+                }
+            }
+            "actions" => {
+                let key = entry.key.clone();
+                let query_client = self.query_client.clone();
+                let weak_view = self.view.clone();
+                h_flex()
+                    .gap_1()
+                    .child(
+                        Button::new(format!("invalidate-{}", key))
+                            .icon(IconName::Loader)
+                            .ghost()
+                            .xsmall()
+                            .tooltip("Invalidate")
+                            .on_click({
+                                let key = key.clone();
+                                let query_client = query_client.clone();
+                                let weak_view = weak_view.clone();
+                                move |_, _, cx| {
+                                    query_client.invalidate_queries(&rs_query::QueryKey::new(&key));
+                                    if let Some(view) = weak_view.upgrade() {
+                                        view.update(cx, |_: &mut DevtoolsState, cx| cx.notify());
+                                    }
+                                }
+                            }),
+                    )
+                    .child(
+                        Button::new(format!("remove-{}", key))
+                            .icon(IconName::Delete)
+                            .ghost()
+                            .xsmall()
+                            .tooltip("Remove")
+                            .on_click({
+                                let key = key.clone();
+                                let query_client = query_client.clone();
+                                let weak_view = weak_view.clone();
+                                move |_, _, cx| {
+                                    query_client.cache.remove(&key);
+                                    if let Some(view) = weak_view.upgrade() {
+                                        view.update(cx, |_: &mut DevtoolsState, cx| cx.notify());
+                                    }
+                                }
+                            }),
+                    )
+                    .into_any_element()
+            }
+            _ => div().into_any_element(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // DevtoolsState
 // ---------------------------------------------------------------------------
 
@@ -276,13 +462,12 @@ pub struct DevtoolsState {
     highlight_new_count: usize,
     filter_event_types: HashSet<RouterEventType>,
     focus_handle: FocusHandle,
-    nav_input: Option<Entity<InputState>>,
     tree_search: Option<Entity<InputState>>,
     selected_event_detail: Option<EventDetail>,
     collapsed_route_nodes: HashSet<String>,
-    timeline_path_filter: Option<Entity<InputState>>,
     route_test_params: Option<Entity<InputState>>,
     query_client: QueryClient,
+    cache_table_state: Option<Entity<TableState<CacheTableDelegate>>>,
 }
 
 impl EventEmitter<()> for DevtoolsState {}
@@ -343,13 +528,12 @@ impl DevtoolsState {
             highlight_new_count: 0,
             filter_event_types: HashSet::new(),
             focus_handle: cx.focus_handle(),
-            nav_input: None,
             tree_search: None,
             selected_event_detail: None,
             collapsed_route_nodes: HashSet::new(),
-            timeline_path_filter: None,
             route_test_params: None,
             query_client,
+            cache_table_state: None,
         };
         this.refresh_log(cx);
         this
@@ -363,28 +547,6 @@ impl DevtoolsState {
                 s
             });
             self.timeline_search = Some(state);
-        }
-    }
-
-    fn ensure_timeline_path_filter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.timeline_path_filter.is_none() {
-            let state = cx.new(|cx| {
-                let mut s = InputState::new(window, cx);
-                s.set_placeholder("Filter by path (e.g. /users/42)...", window, cx);
-                s
-            });
-            self.timeline_path_filter = Some(state);
-        }
-    }
-
-    fn ensure_nav_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.nav_input.is_none() {
-            let state = cx.new(|cx| {
-                let mut s = InputState::new(window, cx);
-                s.set_placeholder("Navigate to path (e.g. /users/42)...", window, cx);
-                s
-            });
-            self.nav_input = Some(state);
         }
     }
 
@@ -427,12 +589,6 @@ impl DevtoolsState {
             .map(|s| s.read(cx).value().to_lowercase())
             .unwrap_or_default();
 
-        let path_filter = self
-            .timeline_path_filter
-            .as_ref()
-            .map(|s| s.read(cx).value().to_lowercase())
-            .unwrap_or_default();
-
         self.event_log
             .iter()
             .filter(|e| {
@@ -441,24 +597,7 @@ impl DevtoolsState {
                     || self.filter_event_types.contains(&event_type);
                 let text_ok =
                     query.is_empty() || format_event_text(&e.event).to_lowercase().contains(&query);
-                let path_ok = path_filter.is_empty() || {
-                    let (from, to) = match &e.event {
-                        RouterEvent::BeforeNavigate { from, to } => (from.as_ref(), Some(to)),
-                        RouterEvent::BeforeLoad { from, to } => (from.as_ref(), Some(to)),
-                        RouterEvent::Load { from, to } => (from.as_ref(), Some(to)),
-                        RouterEvent::BeforeRouteMount { from, to } => (from.as_ref(), Some(to)),
-                        RouterEvent::Resolved { from, to } => (from.as_ref(), Some(to)),
-                        RouterEvent::Rendered { from, to } => (from.as_ref(), Some(to)),
-                    };
-                    let from_match = from
-                        .map(|l| l.pathname.to_lowercase().contains(&path_filter))
-                        .unwrap_or(false);
-                    let to_match = to
-                        .map(|l| l.pathname.to_lowercase().contains(&path_filter))
-                        .unwrap_or(false);
-                    from_match || to_match
-                };
-                type_ok && text_ok && path_ok
+                type_ok && text_ok
             })
             .cloned()
             .collect()
@@ -524,7 +663,6 @@ impl DevtoolsState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        self.ensure_nav_input(window, cx);
         self.ensure_tree_search(window, cx);
         self.ensure_route_test_params(window, cx);
 
@@ -588,62 +726,6 @@ impl DevtoolsState {
                                     search_str
                                 }
                             )),
-                    ),
-            );
-
-            let nav_input_entity = self.nav_input.clone().unwrap();
-            container = container.child(
-                div()
-                    .p_3()
-                    .bg(theme.secondary)
-                    .rounded(px(6.0))
-                    .border_1()
-                    .border_color(theme.border)
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap_1()
-                                    .text_color(theme.info)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(Icon::new(IconName::ArrowRight))
-                                    .child("Navigate to Path"),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        Input::new(&nav_input_entity)
-                                            .prefix(Icon::new(IconName::Search))
-                                            .cleanable(true)
-                                            .small(),
-                                    )
-                                    .child(
-                                        Button::new("nav-go-btn").label("Go").compact().on_click(
-                                            cx.listener(|this, _, window, cx| {
-                                                let val = this
-                                                    .nav_input
-                                                    .as_ref()
-                                                    .map(|i| i.read(cx).value().to_string())
-                                                    .unwrap_or_default();
-                                                let trimmed = val.trim();
-                                                if !trimmed.is_empty() && trimmed.starts_with('/') {
-                                                    let nav = Navigator::new(
-                                                        window.window_handle().into(),
-                                                    );
-                                                    nav.push(trimmed, cx);
-                                                }
-                                            }),
-                                        ),
-                                    ),
-                            ),
                     ),
             );
 
@@ -1002,7 +1084,6 @@ impl DevtoolsState {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         self.ensure_timeline_search(window, cx);
-        self.ensure_timeline_path_filter(window, cx);
 
         let theme = cx.theme();
         let colors = EventColors {
@@ -1041,7 +1122,6 @@ impl DevtoolsState {
         let item_sizes = Rc::new(vec![Size::new(row_width, row_height); item_count]);
 
         let search_entity = self.timeline_search.clone().unwrap();
-        let path_filter_entity = self.timeline_path_filter.clone().unwrap();
         let scroll_handle = self.timeline_scroll_handle.clone();
 
         let bg_color = theme.background;
@@ -1215,12 +1295,6 @@ impl DevtoolsState {
             )
             .child(
                 Input::new(&search_entity)
-                    .prefix(Icon::new(IconName::Search))
-                    .cleanable(true)
-                    .small(),
-            )
-            .child(
-                Input::new(&path_filter_entity)
                     .prefix(Icon::new(IconName::Search))
                     .cleanable(true)
                     .small(),
@@ -1581,16 +1655,53 @@ impl DevtoolsState {
     }
 
     // -----------------------------------------------------------------------
-    // Cache tab - manual display of rs-query cache
+    // Cache tab - structured table display
     // -----------------------------------------------------------------------
 
-    fn render_cache_tab(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_cache_tab(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        // Extract theme colors early to avoid borrow conflicts
         let theme = cx.theme();
-        let mut entries: Vec<_> = self.query_client.cache.iter().collect();
-        entries.sort_by(|a, b| a.key().cmp(b.key()));
+        let info_color = theme.info;
+        let muted_fg = theme.muted_foreground;
+        let border_color = theme.border;
+        let secondary_bg = theme.secondary;
+        // Drop theme reference to allow mutable borrows later
+        drop(theme);
 
-        // Create a weak handle to the view entity
-        let weak_self = cx.entity().downgrade();
+        let entries: Vec<_> = self.query_client.cache.iter().collect();
+
+        // Build rows for the table
+        let rows: Vec<CacheEntryRow> = entries
+            .into_iter()
+            .map(|entry| {
+                let cached = entry.value();
+                CacheEntryRow {
+                    key: entry.key().clone(),
+                    age: cached.fetched_at.elapsed(),
+                    is_stale: cached.is_stale,
+                    type_id: cached.type_id,
+                }
+            })
+            .collect();
+
+        let row_count = rows.len();
+
+        // Create or update table state
+        if self.cache_table_state.is_none() && !rows.is_empty() {
+            let delegate =
+                CacheTableDelegate::new(rows, self.query_client.clone(), cx.entity().downgrade());
+            let state = cx.new(|cx| TableState::new(delegate, window, cx));
+            self.cache_table_state = Some(state);
+        } else if let Some(state) = self.cache_table_state.as_ref() {
+            state.update(cx, |state, _| {
+                let delegate = state.delegate_mut();
+                delegate.entries = rows;
+            });
+        }
 
         div()
             .flex()
@@ -1601,140 +1712,65 @@ impl DevtoolsState {
                 div()
                     .flex()
                     .items_center()
-                    .gap_1()
-                    .text_color(theme.info)
-                    .font_weight(FontWeight::MEDIUM)
-                    .child(Icon::new(IconName::Inbox))
-                    .child(format!("rs-query Cache ({} entries)", entries.len())),
-            )
-            .child(if entries.is_empty() {
-                div()
-                    .p_3()
-                    .bg(theme.secondary)
-                    .rounded(px(6.0))
-                    .border_1()
-                    .border_color(theme.border)
-                    .child(
-                        div()
-                            .text_color(theme.muted_foreground)
-                            .child("Cache is empty. No queries have been executed."),
-                    )
-                    .into_any_element()
-            } else {
-                div()
-                    .flex_1()
-                    .overflow_y_scrollbar()
+                    .justify_between()
                     .child(
                         div()
                             .flex()
-                            .flex_col()
+                            .items_center()
                             .gap_1()
-                            .children(entries.into_iter().map(|entry| {
-                                let key = entry.key().clone();
-                                let cached = entry.value();
-                                let age = cached.fetched_at.elapsed();
-                                let age_str = format!("{:.1}s ago", age.as_secs_f32());
-                                let stale = if cached.is_stale { " (stale)" } else { "" };
-
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .bg(theme.secondary.opacity(0.5))
-                                    .rounded(px(4.0))
-                                    .hover(|s| s.bg(theme.secondary))
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .flex_col()
-                                            .gap_0()
-                                            .child(
-                                                div()
-                                                    .flex()
-                                                    .items_center()
-                                                    .gap_2()
-                                                    .child(
-                                                        div()
-                                                            .font_weight(FontWeight::MEDIUM)
-                                                            .child(key.clone()),
-                                                    )
-                                                    .child(
-                                                        div()
-                                                            .text_xs()
-                                                            .text_color(if cached.is_stale {
-                                                                theme.warning
-                                                            } else {
-                                                                theme.muted_foreground
-                                                            })
-                                                            .child(format!("cached{}", stale)),
-                                                    )
-                                                    .child(
-                                                        div()
-                                                            .text_xs()
-                                                            .text_color(theme.muted_foreground)
-                                                            .child(age_str),
-                                                    ),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(theme.muted_foreground)
-                                                    .font_family("monospace")
-                                                    .child(format!(
-                                                        "type_id: {:?}",
-                                                        cached.type_id
-                                                    )),
-                                            )
-                                            .child(
-                                                div()
-                                                    .flex()
-                                                    .gap_2()
-                                                    .mt_1()
-                                                    .child(
-                                                        Button::new(format!("invalidate-{}", key))
-                                                            .label("Invalidate")
-                                                            .xsmall()
-                                                            .ghost()
-                                                            .on_click({
-                                                                let key = key.clone();
-                                                                let weak = weak_self.clone();
-                                                                move |_, _window, cx| {
-                                                                    weak.update(cx, |this, cx| {
-                                                                        this.query_client
-                                                                        .invalidate_queries(
-                                                                        &rs_query::QueryKey::new(
-                                                                            &key,
-                                                                        ),
-                                                                    );
-                                                                        cx.notify();
-                                                                    })
-                                                                    .ok();
-                                                                }
-                                                            }),
-                                                    )
-                                                    .child(
-                                                        Button::new(format!("remove-{}", key))
-                                                            .label("Remove")
-                                                            .xsmall()
-                                                            .ghost()
-                                                            .on_click({
-                                                                let key = key.clone();
-                                                                let weak = weak_self.clone();
-                                                                move |_, _window, cx| {
-                                                                    weak.update(cx, |this, cx| {
-                                                                        this.query_client
-                                                                            .cache
-                                                                            .remove(&key);
-                                                                        cx.notify();
-                                                                    })
-                                                                    .ok();
-                                                                }
-                                                            }),
-                                                    ),
-                                            ),
-                                    )
-                            })),
+                            .text_color(info_color)
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(Icon::new(IconName::Inbox))
+                            .child(format!("rs-query Cache ({} entries)", row_count)),
+                    )
+                    .child(
+                        Button::new("clear-cache")
+                            .label("Clear All")
+                            .ghost()
+                            .small()
+                            .on_click({
+                                let query_client = self.query_client.clone();
+                                let weak_self = cx.entity().downgrade();
+                                move |_, _, cx| {
+                                    query_client.cache.clear();
+                                    if let Some(this) = weak_self.upgrade() {
+                                        this.update(cx, |state, cx| {
+                                            state.cache_table_state = None;
+                                            cx.notify();
+                                        });
+                                    }
+                                }
+                            }),
+                    ),
+            )
+            .child(if row_count == 0 {
+                div()
+                    .flex_1()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        div()
+                            .text_color(muted_fg)
+                            .child("Cache is empty. No queries have been executed."),
                     )
                     .into_any_element()
+            } else if let Some(state) = &self.cache_table_state {
+                div()
+                    .flex_1()
+                    .border_1()
+                    .border_color(border_color)
+                    .rounded(px(6.0))
+                    .overflow_hidden()
+                    .child(
+                        DataTable::new(state)
+                            .bordered(false)
+                            .stripe(true)
+                            .with_size(ComponentSize::Small),
+                    )
+                    .into_any_element()
+            } else {
+                div().into_any_element()
             })
     }
     // -----------------------------------------------------------------------
@@ -2215,7 +2251,7 @@ impl Render for DevtoolsState {
                         DevtoolsTab::Routes => {
                             self.render_routes_tab(window, cx).into_any_element()
                         }
-                        DevtoolsTab::Cache => self.render_cache_tab(cx).into_any_element(),
+                        DevtoolsTab::Cache => self.render_cache_tab(window, cx).into_any_element(),
                         DevtoolsTab::Timeline => {
                             self.render_timeline_tab(window, cx).into_any_element()
                         }

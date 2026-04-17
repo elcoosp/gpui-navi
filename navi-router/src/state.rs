@@ -1,17 +1,17 @@
-// navi-router/src/state.rs
 use crate::blocker::{Blocker, BlockerId};
 use crate::event_bus::push_event;
 use crate::history::History;
-use crate::loader::{CacheEntry, LoaderRegistry, LoaderState, LoaderTask};
+use crate::loader::LoaderRegistry;
 use crate::location::{Location, NavigateOptions, ViewTransitionOptions};
 use crate::route_tree::{RouteNode, RouteTree};
 use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId};
+use rs_query::{QueryClient, QueryKey, QueryOptions};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::Duration;
 
 /// Events emitted by the router during navigation lifecycle.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -67,9 +67,9 @@ pub struct RouterState {
     loading: bool,
     loader_registry: LoaderRegistry,
 
-    pub loader_cache: HashMap<String, CacheEntry>,
-    pending_loaders: HashMap<String, LoaderTask>,
-    pub loader_state: LoaderState,
+    // Replaced old cache with rs-query client
+    pub query_client: QueryClient,
+
     /// The window handle, used to refresh the UI after loader updates.
     window_handle: AnyWindowHandle,
     /// The EntityId of the root view, used to notify it after loader data changes.
@@ -101,9 +101,7 @@ impl RouterState {
             next_blocker_id: 0,
             loading: false,
             loader_registry: LoaderRegistry::new(),
-            loader_cache: HashMap::new(),
-            pending_loaders: HashMap::new(),
-            loader_state: LoaderState::Idle,
+            query_client: QueryClient::new(),
             window_handle,
             root_view: None,
         }
@@ -200,63 +198,49 @@ impl RouterState {
                     }
                 };
                 let key = format!("{}:{}", node.id, params_json);
+                let query_key = QueryKey::new(&key);
 
-                // Only preload if not already cached or stale
-                let should_load = if let Some(entry) = self.loader_cache.get(&key) {
-                    let stale_time = node.loader_stale_time;
-                    entry.is_stale(stale_time)
-                } else {
-                    true
-                };
+                // Check rs-query cache and staleness
+                let should_load =
+                    if let Some(entry) = self.query_client.cache.get(query_key.cache_key()) {
+                        let stale_time = node.loader_stale_time.unwrap_or(Duration::ZERO);
+                        entry.fetched_at.elapsed() > stale_time
+                    } else {
+                        true
+                    };
 
-                if should_load && !self.pending_loaders.contains_key(&key) {
+                if should_load && !self.query_client.is_in_flight(&query_key) {
                     if let Some(loader_fn) = self.loader_registry.get(&node.id) {
                         let executor = cx.background_executor().clone();
-                        let task = loader_fn(&params, executor, cx);
-                        self.pending_loaders.insert(key.clone(), task);
-                        self.loading = true;
-                        self.loader_state = LoaderState::Loading {
-                            route_id: node.id.clone(),
+                        let params_clone = params.clone();
+                        let node_clone = node.clone();
+                        let client = self.query_client.clone();
+
+                        // Build rs-query query
+                        let query: rs_query::Query<Arc<dyn std::any::Any + Send + Sync>> = {
+                            let key = query_key.clone();
+                            let stale_time = node_clone.loader_stale_time.unwrap_or(Duration::ZERO);
+                            let gc_time = node_clone
+                                .loader_gc_time
+                                .unwrap_or(Duration::from_secs(300));
+                            let options = QueryOptions {
+                                stale_time,
+                                gc_time,
+                                ..Default::default()
+                            };
+                            let fetch_fn = move || {
+                                let loader = loader_fn.clone();
+                                let params = params_clone.clone();
+                                let exec = executor.clone();
+                                async move { loader(&params, exec, &mut App::default()).await }
+                            };
+                            rs_query::Query::new(key, fetch_fn).options(options)
                         };
 
-                        let key_clone = key.clone();
-                        let node_id = node.id.clone();
-                        let _stale_time = node.loader_stale_time;
-
-                        cx.spawn(async move |cx| {
-                            let task = cx.update_global::<RouterState, _>(|state, _| {
-                                state.pending_loaders.remove(&key_clone)
-                            });
-                            if let Some(task) = task {
-                                match task.await {
-                                    Ok(data) => {
-                                        let _ = cx.update_global::<RouterState, _>(|state, cx| {
-                                            state.loader_cache.insert(
-                                                key_clone,
-                                                CacheEntry {
-                                                    data,
-                                                    inserted_at: Instant::now(),
-                                                },
-                                            );
-                                            state.loading = state.pending_loaders.is_empty();
-                                            state.loader_state = LoaderState::Idle;
-                                            cx.refresh_windows();
-                                        });
-                                    }
-                                    Err(e) => {
-                                        let _ = cx.update_global::<RouterState, _>(|state, cx| {
-                                            state.loading = state.pending_loaders.is_empty();
-                                            state.loader_state = LoaderState::Error {
-                                                route_id: node_id,
-                                                message: e.to_string(),
-                                            };
-                                            cx.refresh_windows();
-                                        });
-                                    }
-                                }
-                            }
-                        })
-                        .detach();
+                        // Spawn the query in background (no UI update needed for preload)
+                        let _ = cx.foreground_executor().spawn(async move {
+                            let _ = rs_query::execute_query(&client, &query).await;
+                        });
                     }
                 }
             }
@@ -319,7 +303,8 @@ impl RouterState {
 
     /// Check if any route loader is currently in progress.
     pub fn is_loading(&self) -> bool {
-        self.loading || !self.pending_loaders.is_empty()
+        // rs-query tracks its own fetching state; we can also check manually
+        self.loading || self.query_client.is_fetching()
     }
 
     /// Register a loader function for a route.
@@ -358,65 +343,71 @@ impl RouterState {
                     }
                 };
                 let key = format!("{}:{}", node.id, params_json);
+                let query_key = QueryKey::new(&key);
                 log::debug!("Loader cache key: {}", key);
 
-                // Check cache with staleness
-                if let Some(entry) = self.loader_cache.get(&key) {
-                    let stale_time = node.loader_stale_time;
-                    if !entry.is_stale(stale_time) {
-                        log::debug!("Loader cache hit (fresh) for key: {}", key);
-                        push_event(
-                            RouterEvent::Load {
-                                from: from.clone(),
-                                to: to.clone(),
-                            },
-                            cx,
-                        );
-                        push_event(
-                            RouterEvent::BeforeRouteMount {
-                                from: from.clone(),
-                                to: to.clone(),
-                            },
-                            cx,
-                        );
-                        if let Some(view_id) = self.root_view {
-                            cx.notify(view_id);
-                        }
-                        push_event(RouterEvent::Rendered { from, to }, cx);
-                        return;
+                // Check rs-query cache with staleness
+                let stale_time = node.loader_stale_time.unwrap_or(Duration::ZERO);
+                let is_fresh =
+                    if let Some(entry) = self.query_client.cache.get(query_key.cache_key()) {
+                        entry.fetched_at.elapsed() <= stale_time
                     } else {
-                        log::debug!("Loader cache hit but stale for key: {}, revalidating", key);
-                        // Emit events immediately using stale data
-                        push_event(
-                            RouterEvent::Load {
-                                from: from.clone(),
-                                to: to.clone(),
-                            },
-                            cx,
-                        );
-                        push_event(
-                            RouterEvent::BeforeRouteMount {
-                                from: from.clone(),
-                                to: to.clone(),
-                            },
-                            cx,
-                        );
-                        if let Some(view_id) = self.root_view {
-                            cx.notify(view_id);
-                        }
-                        push_event(
-                            RouterEvent::Rendered {
-                                from: from.clone(),
-                                to: to.clone(),
-                            },
-                            cx,
-                        );
-                        // Fall through to load fresh data in background
+                        false
+                    };
+
+                if is_fresh {
+                    log::debug!("Loader cache hit (fresh) for key: {}", key);
+                    push_event(
+                        RouterEvent::Load {
+                            from: from.clone(),
+                            to: to.clone(),
+                        },
+                        cx,
+                    );
+                    push_event(
+                        RouterEvent::BeforeRouteMount {
+                            from: from.clone(),
+                            to: to.clone(),
+                        },
+                        cx,
+                    );
+                    if let Some(view_id) = self.root_view {
+                        cx.notify(view_id);
                     }
+                    push_event(RouterEvent::Rendered { from, to }, cx);
+                    return;
+                } else if self.query_client.cache.contains_key(query_key.cache_key()) {
+                    // Stale cache exists: render immediately with stale data, then refetch in background
+                    log::debug!("Loader cache hit but stale for key: {}, revalidating", key);
+                    push_event(
+                        RouterEvent::Load {
+                            from: from.clone(),
+                            to: to.clone(),
+                        },
+                        cx,
+                    );
+                    push_event(
+                        RouterEvent::BeforeRouteMount {
+                            from: from.clone(),
+                            to: to.clone(),
+                        },
+                        cx,
+                    );
+                    if let Some(view_id) = self.root_view {
+                        cx.notify(view_id);
+                    }
+                    push_event(
+                        RouterEvent::Rendered {
+                            from: from.clone(),
+                            to: to.clone(),
+                        },
+                        cx,
+                    );
+                    // Continue to background fetch
                 }
 
                 // Already pending – avoid duplicate
-                if self.pending_loaders.contains_key(&key) {
+                if self.query_client.is_in_flight(&query_key) {
                     log::debug!("Loader already pending for key: {}", key);
                     return;
                 }
@@ -433,107 +424,74 @@ impl RouterState {
                 if let Some(loader_fn) = self.loader_registry.get(&node.id) {
                     log::debug!("Executing loader for route: {}", node.id);
                     let executor = cx.background_executor().clone();
-                    let task = loader_fn(params, executor, cx);
-                    self.pending_loaders.insert(key.clone(), task);
-                    self.loading = true;
-                    self.loader_state = LoaderState::Loading {
-                        route_id: node.id.clone(),
-                    };
-
-                    let key_clone = key.clone();
+                    let params_clone = params.clone();
+                    let node_clone = node.clone();
+                    let client = self.query_client.clone();
                     let window_handle = self.window_handle;
                     let from_clone = from.clone();
                     let to_clone = to.clone();
-                    let node_id = node.id.clone();
-                    let _stale_time = node.loader_stale_time;
                     let root_view = self.root_view;
 
+                    // Build rs-query Query
+                    let query: rs_query::Query<Arc<dyn std::any::Any + Send + Sync>> = {
+                        let key = query_key.clone();
+                        let stale_time = node_clone.loader_stale_time.unwrap_or(Duration::ZERO);
+                        let gc_time = node_clone
+                            .loader_gc_time
+                            .unwrap_or(Duration::from_secs(300));
+                        let options = QueryOptions {
+                            stale_time,
+                            gc_time,
+                            ..Default::default()
+                        };
+                        let fetch_fn = move || {
+                            let loader = loader_fn.clone();
+                            let params = params_clone.clone();
+                            let exec = executor.clone();
+                            async move { loader(&params, exec, &mut App::default()).await }
+                        };
+                        rs_query::Query::new(key, fetch_fn).options(options)
+                    };
+
+                    self.loading = true;
+
+                    let key_clone = key.clone();
                     cx.spawn(async move |cx| {
-                        let task = cx.update_global::<RouterState, _>(|state, _| {
-                            state.pending_loaders.remove(&key_clone)
-                        });
-
-                        if let Some(task) = task {
-                            match task.await {
-                                Ok(data) => {
-                                    log::debug!("Loader succeeded for key: {}", key_clone);
-                                    let _ = cx.update_global::<RouterState, _>(|state, cx| {
-                                        state.loader_cache.insert(
-                                            key_clone,
-                                            CacheEntry {
-                                                data,
-                                                inserted_at: Instant::now(),
-                                            },
-                                        );
-                                        state.loading = state.pending_loaders.is_empty();
-                                        state.loader_state = LoaderState::Idle;
-
-                                        push_event(
-                                            RouterEvent::Load {
-                                                from: from_clone.clone(),
-                                                to: to_clone.clone(),
-                                            },
-                                            cx,
-                                        );
-                                        push_event(
-                                            RouterEvent::BeforeRouteMount {
-                                                from: from_clone.clone(),
-                                                to: to_clone.clone(),
-                                            },
-                                            cx,
-                                        );
-                                        if let Some(view_id) = root_view {
-                                            cx.notify(view_id);
-                                        }
-                                        push_event(
-                                            RouterEvent::Rendered {
-                                                from: from_clone,
-                                                to: to_clone,
-                                            },
-                                            cx,
-                                        );
-                                        cx.refresh_windows();
-                                    });
-                                    _ = window_handle.update(cx, |_, window, _| window.refresh());
-                                }
-                                Err(e) => {
-                                    log::error!("Loader error for key {}: {}", key_clone, e);
-                                    let _ = cx.update_global::<RouterState, _>(|state, cx| {
-                                        state.loading = state.pending_loaders.is_empty();
-                                        state.loader_state = LoaderState::Error {
-                                            route_id: node_id,
-                                            message: e.to_string(),
-                                        };
-                                        push_event(
-                                            RouterEvent::Load {
-                                                from: from_clone.clone(),
-                                                to: to_clone.clone(),
-                                            },
-                                            cx,
-                                        );
-                                        push_event(
-                                            RouterEvent::BeforeRouteMount {
-                                                from: from_clone.clone(),
-                                                to: to_clone.clone(),
-                                            },
-                                            cx,
-                                        );
-                                        if let Some(view_id) = root_view {
-                                            cx.notify(view_id);
-                                        }
-                                        push_event(
-                                            RouterEvent::Rendered {
-                                                from: from_clone,
-                                                to: to_clone,
-                                            },
-                                            cx,
-                                        );
-                                        cx.refresh_windows();
-                                    });
-                                    _ = window_handle.update(cx, |_, window, _| window.refresh());
-                                }
+                        // Execute the query via rs-query
+                        let state = rs_query::execute_query(&client, &query).await;
+                        let _ = cx.update_global::<RouterState, _>(|state, cx| {
+                            state.loading = false;
+                            if state.is_loading() {
+                                // If still loading elsewhere, keep true
                             }
-                        }
+                            // Notify UI after query completes (success or error)
+                            push_event(
+                                RouterEvent::Load {
+                                    from: from_clone.clone(),
+                                    to: to_clone.clone(),
+                                },
+                                cx,
+                            );
+                            push_event(
+                                RouterEvent::BeforeRouteMount {
+                                    from: from_clone.clone(),
+                                    to: to_clone.clone(),
+                                },
+                                cx,
+                            );
+                            if let Some(view_id) = root_view {
+                                cx.notify(view_id);
+                            }
+                            push_event(
+                                RouterEvent::Rendered {
+                                    from: from_clone,
+                                    to: to_clone,
+                                },
+                                cx,
+                            );
+                            cx.refresh_windows();
+                        });
+                        let _ = window_handle.update(cx, |_, window, _| window.refresh());
                     })
                     .detach();
                 } else {
@@ -543,7 +501,7 @@ impl RouterState {
         }
     }
 
-    /// Get loader data for a specific route type.
+    /// Get loader data for a specific route type using rs-query cache.
     pub fn get_loader_data<R: crate::RouteDef>(&self) -> Option<R::LoaderData> {
         let (params, node) = self.current_match.as_ref()?;
         if node.id != R::name() {
@@ -556,17 +514,13 @@ impl RouterState {
         }
         let params_json = serde_json::to_string(params).ok()?;
         let key = format!("{}:{}", node.id, params_json);
+        let query_key = QueryKey::new(&key);
         log::debug!("Looking up loader data with key: {}", key);
-        let entry = self.loader_cache.get(&key)?;
-        let arc_data = entry.data.downcast_ref::<Arc<R::LoaderData>>()?.clone();
-        let data = (*arc_data).clone();
-        log::debug!("Loader data found for key: {}", key);
-        Some(data)
-    }
-
-    /// Returns the current loader state.
-    pub fn loader_state(&self) -> &LoaderState {
-        &self.loader_state
+        let arc_any: Option<Arc<dyn std::any::Any + Send + Sync>> =
+            self.query_client.get_query_data(&query_key);
+        arc_any
+            .and_then(|arc| arc.downcast_ref::<Arc<R::LoaderData>>().cloned())
+            .map(|arc| (*arc).clone())
     }
 
     // --- Global access helpers ---

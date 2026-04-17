@@ -146,6 +146,7 @@ fn parse_route_file(
         cfg_feature,
     })
 }
+
 fn extract_cfg_feature(content: &str) -> Option<String> {
     let re = Regex::new(r#"#\[cfg\(feature\s*=\s*"([^"]+)"\)\]"#).unwrap();
     let define_re = Regex::new(r"define_route!").unwrap();
@@ -171,37 +172,62 @@ fn extract_route_type_name(content: &str, file_stem: &str, relative_path: &Path)
     infer_route_type_name(file_stem, relative_path)
 }
 
+/// Converts a filesystem name (like "$id", "$", "about") to a valid Rust module identifier.
+fn file_stem_to_module_ident(stem: &str) -> String {
+    let s = stem.replace('-', "_").replace('.', "_");
+    let ident = if s == "$" {
+        "splat".to_string()
+    } else if s.starts_with('$') {
+        format!("param_{}", &s[1..])
+    } else {
+        s
+    };
+    escape_rust_keyword(ident)
+}
+
+fn escape_rust_keyword(s: String) -> String {
+    match s.as_str() {
+        "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern"
+        | "false" | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match"
+        | "mod" | "move" | "mut" | "pub" | "ref" | "return" | "self" | "Self"
+        | "static" | "struct" | "super" | "trait" | "true" | "type" | "unsafe"
+        | "use" | "where" | "while" | "async" | "await" | "dyn" | "union"
+        => format!("r#{}", s),
+        _ => s,
+    }
+}
+
 fn build_module_path(relative_path: &Path, is_mod_rs: bool) -> String {
     let mut components: Vec<String> = relative_path
         .parent()
         .into_iter()
         .flat_map(|p| p.iter())
-        .map(|c| sanitize_module_ident(c.to_str().unwrap_or("")))
+        .map(|c| file_stem_to_module_ident(c.to_str().unwrap_or("")))
         .collect();
 
     if !is_mod_rs {
         // For regular files, add the file stem as the last component.
         let file_stem = relative_path.file_stem().unwrap().to_str().unwrap();
-        components.push(sanitize_module_ident(file_stem));
+        components.push(file_stem_to_module_ident(file_stem));
     }
     // For mod.rs, the module is the parent directory itself, so no extra component.
 
     components.join("::")
 }
-fn sanitize_module_ident(name: &str) -> String {
-    let name = name.replace('-', "_").replace('.', "_");
-    if name.starts_with('$') {
-        format!("param_{}", &name[1..])
-    } else {
-        match name.as_str() {
-            "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern"
-            | "false" | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod"
-            | "move" | "mut" | "pub" | "ref" | "return" | "self" | "Self" | "static" | "struct"
-            | "super" | "trait" | "true" | "type" | "unsafe" | "use" | "where" | "while"
-            | "async" | "await" | "dyn" | "union" => format!("r#{}", name),
-            _ => name.to_string(),
-        }
+
+/// Returns the URL segment contributed by a file or directory name,
+/// or `None` if it contributes nothing (root, index, layout, group).
+fn file_stem_to_url_segment(name: &str) -> Option<String> {
+    if matches!(name, "__root" | "index") {
+        return None;
     }
+    if name.starts_with('_') {
+        return None; // layout files
+    }
+    if name.starts_with('(') && name.ends_with(')') {
+        return None; // pathless groups
+    }
+    Some(name.to_string())
 }
 
 fn file_name_to_pattern(file_name: &str, relative_path: &Path) -> String {
@@ -214,11 +240,13 @@ fn file_name_to_pattern(file_name: &str, relative_path: &Path) -> String {
             if comp.starts_with('-') {
                 continue;
             }
-            segments.push(component_name_to_segment(comp));
+            if let Some(seg) = file_stem_to_url_segment(comp) {
+                segments.push(seg);
+            }
         }
     }
-    if file_name != "__root" && file_name != "index" && !file_name.starts_with('_') {
-        segments.push(component_name_to_segment(file_name));
+    if let Some(seg) = file_stem_to_url_segment(file_name) {
+        segments.push(seg);
     }
     if segments.is_empty() {
         "/".to_string()
@@ -227,36 +255,14 @@ fn file_name_to_pattern(file_name: &str, relative_path: &Path) -> String {
     }
 }
 
-fn component_name_to_segment(name: &str) -> String {
-    let escaped_re = Regex::new(r"^\[(.+)\]$").unwrap();
-    if let Some(caps) = escaped_re.captures(name) {
-        return caps[1].to_string();
-    }
-    let optional_re = Regex::new(r"^\{-\$(.+)\}$").unwrap();
-    if let Some(caps) = optional_re.captures(name) {
-        return format!("{{-${}}}", &caps[1]);
-    }
-    let prefix_suffix_re = Regex::new(r"^\{\$(.+?)\}(.+)$").unwrap();
-    if let Some(caps) = prefix_suffix_re.captures(name) {
-        return format!("{{${}}}.{}", &caps[1], &caps[2]);
-    }
-    if name == "$" {
-        return "$".to_string();
-    }
-    if name.starts_with('$') {
-        return format!("${}", &name[1..]);
-    }
-    name.to_string()
-}
-
 fn generate_route_id(file_name: &str, relative_path: &Path) -> String {
     let mut parts: Vec<String> = relative_path
         .parent()
         .into_iter()
         .flat_map(|p| p.iter())
-        .map(|c| sanitize_module_ident(c.to_str().unwrap()))
+        .map(|c| file_stem_to_module_ident(c.to_str().unwrap()))
         .collect();
-    parts.push(sanitize_module_ident(file_name));
+    parts.push(file_stem_to_module_ident(file_name));
     parts.join("/")
 }
 
@@ -351,6 +357,7 @@ fn extract_route_type_name_from_content(content: &str) -> Option<String> {
     let re = Regex::new(r"define_route!\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[),]").unwrap();
     re.captures(content).map(|caps| caps[1].to_string())
 }
+
 fn to_pascal_case(s: &str) -> String {
     s.split(|c: char| !c.is_alphanumeric())
         .filter(|part| !part.is_empty())

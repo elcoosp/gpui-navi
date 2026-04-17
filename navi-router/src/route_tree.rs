@@ -232,19 +232,20 @@ impl RoutePattern {
     }
 
     /// Compute specificity rank: higher = more specific.
-    /// Index routes rank highest, splat lowest.
+    /// Depth is the most important factor, then static count, etc.
     fn compute_rank(segments: &[Segment]) -> usize {
+        let depth = segments.len();
         let static_count = segments.iter().filter(|s| s.is_static()).count();
         let dynamic_count = segments.iter().filter(|s| s.is_dynamic()).count();
         let optional_count = segments.iter().filter(|s| s.is_optional()).count();
         let has_splat = segments.iter().any(|s| s.is_splat());
 
-        // Ranking: more static = higher, fewer dynamic = higher, fewer optional = higher, no splat = higher
-        let mut rank = static_count * 100;
-        rank += (10 - dynamic_count.min(10)) * 10;
-        rank += (10 - optional_count.min(10)) * 5;
-        if !has_splat {
-            rank += 50;
+        let mut rank = depth * 10_000;
+        rank += static_count * 100;
+        rank += dynamic_count * 10;
+        rank += optional_count * 5;
+        if has_splat {
+            rank = rank.saturating_sub(5_000);
         }
         rank
     }
@@ -295,6 +296,7 @@ impl RouteTree {
             matcher: crate::matcher::RouteMatcher::new(),
         }
     }
+
     pub fn ancestors(&self, route_id: &str) -> Vec<&RouteNode> {
         let mut chain = Vec::new();
         let mut current_id = Some(route_id.to_string());
@@ -313,6 +315,7 @@ impl RouteTree {
         }
         chain
     }
+
     pub fn add_route(&mut self, node: RouteNode) {
         let id = node.id.clone();
         let pattern = node.pattern.clone();

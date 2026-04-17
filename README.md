@@ -1,5 +1,11 @@
 # Navi
 
+<p align="center">
+  <a href="https://raw.githubusercontent.com/elcoosp/gpui-navi/main/assets/logos/horizontal.svg">
+      <img src="https://raw.githubusercontent.com/elcoosp/rs-query/main/assets/logos/horizontal.svg" alt="rs-query horizontal logo" width="500">
+  </a>
+</p>
+
 **Navi** is an experimental, type‑safe router for [GPUI](https://www.gpui.rs/) applications, inspired by [TanStack Router](https://tanstack.com/router). It provides a solid foundation for declarative routing with file‑based code generation, path matching, and a layered context system.
 
 ---

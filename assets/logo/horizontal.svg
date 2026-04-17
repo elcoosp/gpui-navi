@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" role="img" aria-labelledby="navi-title navi-desc">
+  <title id="navi-title">Navi Logo</title>
+  <desc id="navi-desc">A compass with a Rust orange gradient ring and the word Navi with a gradient N.</desc>
+
+  <defs>
+    <linearGradient id="gradRust" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B2B" />
+      <stop offset="100%" stop-color="#C23B0A" />
+    </linearGradient>
+    <style>
+      .compass-circle { fill: none; stroke: url(#gradRust); stroke-width: 4.5; }
+      .arrow { fill: #1E293B; }
+      .compass-center { fill: #1E293B; }
+      .text-navi { font-family: system-ui, -apple-system, sans-serif; font-weight: 800; font-size: 48px; }
+      .text-n { fill: url(#gradRust); }
+      .text-avi { fill: #1E293B; }
+    </style>
+  </defs>
+
+  <!-- Compass icon moved closer -->
+  <g transform="translate(20, 15)">
+    <circle cx="45" cy="45" r="34" class="compass-circle" />
+    <polygon points="45,15 39,28 51,28" class="arrow" />
+    <polygon points="45,75 39,62 51,62" class="arrow" />
+    <polygon points="75,45 62,39 62,51" class="arrow" />
+    <polygon points="15,45 28,39 28,51" class="arrow" />
+    <circle cx="45" cy="45" r="4.5" class="compass-center" />
+  </g>
+
+  <!-- Wordmark closer to icon -->
+  <text class="text-navi" x="125" y="78">
+    <tspan class="text-n">N</tspan><tspan class="text-avi">avi</tspan>
+  </text>
+  <path d="M 222 62 L 232 52 L 232 72 Z" fill="#C23B0A" opacity="0.9" />
+</svg>

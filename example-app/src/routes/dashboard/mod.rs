@@ -2,11 +2,7 @@ use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
 use navi_router::components::Outlet;
-use serde::{Deserialize, Serialize};
 use std::time::Duration;
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct DashboardParams;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DashboardData {
@@ -17,9 +13,8 @@ define_route!(
     DashboardRoute,
     path: "/dashboard",
     is_layout: true,
-    params: DashboardParams,
     data: DashboardData,
-    loader: |_params: DashboardParams, executor: gpui::BackgroundExecutor| async move {
+    loader: |_params: (), executor: gpui::BackgroundExecutor| async move {
         executor.timer(Duration::from_millis(400)).await;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(DashboardData {
             message: "Dashboard layout loaded".to_string(),

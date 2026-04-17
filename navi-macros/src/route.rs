@@ -145,18 +145,31 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let is_index = is_index.map(|b| b.value).unwrap_or(false);
     let parent = parent.map(|s| s.value());
 
+    // Detect if params type is unit `()` to skip deserialization
+    let is_unit_params = {
+        let type_str = quote!(#params_ty).to_string();
+        type_str == "()" || type_str == "(  )"
+    };
+
     let (has_loader, loader_factory_impl) = if let Some(loader_closure) = loader_closure {
         let stale_time_expr = stale_time.unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
         let gc_time_expr = gc_time.unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
+        let params_deser = if is_unit_params {
+            quote! { let params = (); }
+        } else {
+            quote! {
+                let params: #params_ty = serde_json::from_value(
+                    serde_json::to_value(params_map).unwrap()
+                ).expect("Failed to deserialize route params");
+            }
+        };
         let factory = quote! {
             pub fn loader_factory(executor: ::gpui::BackgroundExecutor) -> std::sync::Arc<
                 dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::AnyData>
                 + Send + Sync
             > {
                 std::sync::Arc::new(move |params_map: &std::collections::HashMap<String, String>| {
-                    let params: #params_ty = serde_json::from_value(
-                        serde_json::to_value(params_map).unwrap()
-                    ).expect("Failed to deserialize route params");
+                    #params_deser
                     let params_clone = params.clone();
                     let loader = #loader_closure;
                     let executor = executor.clone();
@@ -188,7 +201,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
         quote! {
             let executor = cx.background_executor().clone();
             ::navi_router::RouterState::update(cx, |state, _cx| {
-                state.register_loader_factory(#name_str, Self::loader_factory(executor));
+                state.register_loader_factory(<Self as ::navi_router::RouteDef>::name(), Self::loader_factory(executor));
             });
         }
     } else {
@@ -197,7 +210,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
 
     let component_registration = if let Some(comp_ty) = component_ty {
         quote! {
-            ::navi_router::components::register_route_component(#name_str, |_cx| {
+            ::navi_router::components::register_route_component(<Self as ::navi_router::RouteDef>::name(), |_cx| {
                 ::gpui::Component::new(#comp_ty).into_any_element()
             });
         }

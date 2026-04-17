@@ -1,11 +1,7 @@
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
-use serde::{Deserialize, Serialize};
 use std::time::Duration;
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct AnalyticsParams;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnalyticsData {
@@ -15,9 +11,8 @@ pub struct AnalyticsData {
 define_route!(
     DashboardAnalyticsRoute,
     path: "/dashboard/analytics",
-    params: AnalyticsParams,
     data: AnalyticsData,
-    loader: |_params: AnalyticsParams, executor: gpui::BackgroundExecutor| async move {
+    loader: |_params: (), executor: gpui::BackgroundExecutor| async move {
         executor.timer(Duration::from_millis(800)).await;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(AnalyticsData {
             chart_data: vec![10, 25, 15, 30, 20],

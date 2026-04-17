@@ -1,11 +1,11 @@
 // navi-codegen/src/scanner.rs
 use crate::config::NaviConfig;
 use anyhow::Result;
-use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+use syn::{File, Item, Macro, parse_file};
 
 #[derive(Debug, Clone)]
 pub struct RouteInfo {
@@ -114,7 +114,7 @@ fn parse_route_file(
                 .unwrap_or(false));
     let has_dynamic_segment = file_name.contains('$');
 
-    let (effective_file_name, route_id_base) = if file_name == "mod" {
+    let (effective_file_name, _route_id_base) = if file_name == "mod" {
         let dir_name = relative_path
             .parent()
             .and_then(|p| p.file_name())
@@ -127,10 +127,11 @@ fn parse_route_file(
 
     let route_pattern = file_name_to_pattern(effective_file_name, relative_path);
     let module_name = build_module_path(relative_path, file_name == "mod");
-    let route_type_name = extract_route_type_name(content, effective_file_name, relative_path);
+    let route_type_name = extract_route_type_from_ast(content)
+        .unwrap_or_else(|| infer_route_type_name(effective_file_name, relative_path));
     let route_id = route_type_name.clone(); // 👈 Node ID = route type name
     let is_layout = infer_layout(effective_file_name, relative_path);
-    let cfg_feature = extract_cfg_feature(content);
+    let cfg_feature = extract_cfg_feature_from_ast(content);
 
     Ok(RouteInfo {
         relative_path: relative_path.to_path_buf(),
@@ -147,29 +148,69 @@ fn parse_route_file(
     })
 }
 
-fn extract_cfg_feature(content: &str) -> Option<String> {
-    let re = Regex::new(r#"#\[cfg\(feature\s*=\s*"([^"]+)"\)\]"#).unwrap();
-    let define_re = Regex::new(r"define_route!").unwrap();
+/// Use syn to extract the first identifier inside define_route! macro.
+fn extract_route_type_from_ast(content: &str) -> Option<String> {
+    let file = parse_file(content).ok()?;
+    visit_items_for_define_route(&file.items)
+}
 
-    let mut last_cfg: Option<String> = None;
-    for line in content.lines() {
-        let line = line.trim();
-        if let Some(caps) = re.captures(line) {
-            last_cfg = Some(caps[1].to_string());
-        }
-        if define_re.is_match(line) {
-            return last_cfg;
+fn visit_items_for_define_route(items: &[Item]) -> Option<String> {
+    for item in items {
+        match item {
+            Item::Macro(m) if macro_is_define_route(&m.mac) => {
+                return first_ident_in_macro(&m.mac);
+            }
+            Item::Mod(m) => {
+                if let Some((_, content)) = &m.content {
+                    if let Some(name) = visit_items_for_define_route(content) {
+                        return Some(name);
+                    }
+                }
+            }
+            _ => {}
         }
     }
     None
 }
 
-fn extract_route_type_name(content: &str, file_stem: &str, relative_path: &Path) -> String {
-    let re = Regex::new(r"define_route!\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[),]").unwrap();
-    if let Some(caps) = re.captures(content) {
-        return caps[1].to_string();
+fn macro_is_define_route(mac: &Macro) -> bool {
+    mac.path.segments.last().map(|s| s.ident == "define_route").unwrap_or(false)
+}
+
+fn first_ident_in_macro(mac: &Macro) -> Option<String> {
+    use syn::parse::Parser;
+    use syn::punctuated::Punctuated;
+    use syn::{Ident, Token};
+    let parser = Punctuated::<Ident, Token![,]>::parse_terminated;
+    let idents = parser.parse2(mac.tokens.clone()).ok()?;
+    idents.first().map(|i| i.to_string())
+}
+
+/// Use syn to extract cfg(feature = "...") attribute from the macro invocation.
+fn extract_cfg_feature_from_ast(content: &str) -> Option<String> {
+    let file = parse_file(content).ok()?;
+    for item in &file.items {
+        if let Item::Macro(m) = item {
+            if macro_is_define_route(&m.mac) {
+                for attr in &m.attrs {
+                    if attr.path().is_ident("cfg") {
+                        if let Ok(meta) = attr.parse_args::<syn::Meta>() {
+                            if let syn::Meta::NameValue(nv) = meta {
+                                if nv.path.is_ident("feature") {
+                                    if let syn::Expr::Lit(lit) = nv.value {
+                                        if let syn::Lit::Str(s) = lit.lit {
+                                            return Some(s.value());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
-    infer_route_type_name(file_stem, relative_path)
+    None
 }
 
 /// Converts a filesystem name (like "$id", "$", "about") to a valid Rust module identifier.
@@ -255,17 +296,6 @@ fn file_name_to_pattern(file_name: &str, relative_path: &Path) -> String {
     }
 }
 
-fn generate_route_id(file_name: &str, relative_path: &Path) -> String {
-    let mut parts: Vec<String> = relative_path
-        .parent()
-        .into_iter()
-        .flat_map(|p| p.iter())
-        .map(|c| file_stem_to_module_ident(c.to_str().unwrap()))
-        .collect();
-    parts.push(file_stem_to_module_ident(file_name));
-    parts.join("/")
-}
-
 fn infer_layout(file_name: &str, relative_path: &Path) -> bool {
     if file_name == "__root" {
         return true;
@@ -334,7 +364,7 @@ fn assign_parents(routes: &mut Vec<RouteInfo>, _config: &NaviConfig) {
         let mut found_parent = None;
         for candidate in candidates {
             if let Ok(content) = fs::read_to_string(&candidate) {
-                if let Some(type_name) = extract_route_type_name_from_content(&content) {
+                if let Some(type_name) = extract_route_type_from_ast(&content) {
                     if let Some(&parent_idx) = type_to_index.get(&type_name) {
                         found_parent = Some(routes[parent_idx].route_id.clone());
                         break;
@@ -350,12 +380,6 @@ fn assign_parents(routes: &mut Vec<RouteInfo>, _config: &NaviConfig) {
             routes[i].parent = Some(routes[root_idx].route_id.clone());
         }
     }
-}
-
-// Helper to extract route type name from file content without full parsing
-fn extract_route_type_name_from_content(content: &str) -> Option<String> {
-    let re = Regex::new(r"define_route!\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[),]").unwrap();
-    re.captures(content).map(|caps| caps[1].to_string())
 }
 
 fn to_pascal_case(s: &str) -> String {

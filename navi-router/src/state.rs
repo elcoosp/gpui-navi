@@ -2,6 +2,7 @@ use crate::blocker::{Blocker, BlockerId};
 use crate::event_bus::push_event;
 use crate::history::History;
 use crate::loader::LoaderRegistry;
+use crate::loader_query::create_loader_query;
 use crate::location::{Location, NavigateOptions, ViewTransitionOptions};
 use crate::route_tree::{RouteNode, RouteTree};
 use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId};
@@ -423,47 +424,24 @@ impl RouterState {
 
                 if let Some(loader_fn) = self.loader_registry.get(&node.id) {
                     log::debug!("Executing loader for route: {}", node.id);
-                    let executor = cx.background_executor().clone();
-                    let params_clone = params.clone();
-                    let node_clone = node.clone();
+
+                    // Use the helper to create the rs-query Query
+                    let query =
+                        create_loader_query(&node.id, &params_json, node, loader_fn.clone(), cx);
+
                     let client = self.query_client.clone();
                     let window_handle = self.window_handle;
                     let from_clone = from.clone();
                     let to_clone = to.clone();
                     let root_view = self.root_view;
 
-                    // Build rs-query Query
-                    let query: rs_query::Query<Arc<dyn std::any::Any + Send + Sync>> = {
-                        let key = query_key.clone();
-                        let stale_time = node_clone.loader_stale_time.unwrap_or(Duration::ZERO);
-                        let gc_time = node_clone
-                            .loader_gc_time
-                            .unwrap_or(Duration::from_secs(300));
-                        let options = QueryOptions {
-                            stale_time,
-                            gc_time,
-                            ..Default::default()
-                        };
-                        let fetch_fn = move || {
-                            let loader = loader_fn.clone();
-                            let params = params_clone.clone();
-                            let exec = executor.clone();
-                            async move { loader(&params, exec, &mut App::default()).await }
-                        };
-                        rs_query::Query::new(key, fetch_fn).options(options)
-                    };
-
                     self.loading = true;
 
-                    let key_clone = key.clone();
                     cx.spawn(async move |cx| {
                         // Execute the query via rs-query
-                        let state = rs_query::execute_query(&client, &query).await;
+                        let _state = rs_query::execute_query(&client, &query).await;
                         let _ = cx.update_global::<RouterState, _>(|state, cx| {
                             state.loading = false;
-                            if state.is_loading() {
-                                // If still loading elsewhere, keep true
-                            }
                             // Notify UI after query completes (success or error)
                             push_event(
                                 RouterEvent::Load {

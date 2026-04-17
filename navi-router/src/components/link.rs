@@ -21,6 +21,10 @@ pub struct Link {
     state: Option<serde_json::Value>,
     replace: bool,
     preload: Option<PreloadType>,
+    #[allow(dead_code)]
+
+    #[allow(dead_code)]
+
     preload_delay: Option<Duration>,
     disabled: bool,
     exact: bool,

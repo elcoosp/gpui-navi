@@ -51,10 +51,8 @@ impl Parse for FieldValue {
         } else if input.peek(LitBool) {
             Ok(FieldValue::LitBool(input.parse()?))
         } else if input.peek(Ident) && (input.peek2(Token![<]) || input.peek2(Token![::]) || input.peek2(Token![,]) || input.is_empty()) {
-            // Heuristic: if it looks like a type (path with optional generics) or followed by comma/end
             Ok(FieldValue::Type(input.parse()?))
         } else {
-            // Fallback to expression
             Ok(FieldValue::Expr(input.parse()?))
         }
     }
@@ -63,6 +61,7 @@ impl Parse for FieldValue {
 pub fn define_route(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as RouteDefInput);
     let name = input.name;
+    let name_str = name.to_string();
     let mut path = None;
     let mut params_ty = None;
     let mut search_ty = None;
@@ -162,7 +161,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                     let loader = #loader_closure;
                     let executor = executor.clone();
                     let key = ::rs_query::QueryKey::new("navi_loader")
-                        .with("route", stringify!(#name))
+                        .with("route", #name_str)
                         .with("params", serde_json::to_string(&params).unwrap());
                     ::rs_query::Query::new(key, move || {
                         let params = params_clone.clone();
@@ -188,8 +187,8 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let register_loader_call = if has_loader {
         quote! {
             let executor = cx.background_executor().clone();
-            navi_router::RouterState::update(cx, |state, _cx| {
-                state.register_loader_factory(Self::name(), Self::loader_factory(executor));
+            ::navi_router::RouterState::update(cx, |state, _cx| {
+                state.register_loader_factory(#name_str, Self::loader_factory(executor));
             });
         }
     } else {
@@ -198,8 +197,8 @@ pub fn define_route(input: TokenStream) -> TokenStream {
 
     let component_registration = if let Some(comp_ty) = component_ty {
         quote! {
-            navi_router::components::register_route_component(Self::name(), |_cx| {
-                gpui::Component::new(#comp_ty).into_any_element()
+            ::navi_router::components::register_route_component(#name_str, |_cx| {
+                ::gpui::Component::new(#comp_ty).into_any_element()
             });
         }
     } else {
@@ -215,7 +214,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         pub struct #name;
 
-        impl navi_router::RouteDef for #name {
+        impl ::navi_router::RouteDef for #name {
             type Params = #params_ty;
             type Search = #search_ty;
             type LoaderData = #data_ty;
@@ -225,15 +224,15 @@ pub fn define_route(input: TokenStream) -> TokenStream {
             }
 
             fn name() -> &'static str {
-                stringify!(#name)
+                #name_str
             }
         }
 
         impl #name {
-            pub fn build_node() -> navi_router::RouteNode {
-                let pattern = navi_router::RoutePattern::parse(#path);
-                navi_router::RouteNode {
-                    id: stringify!(#name).to_string(),
+            pub fn build_node() -> ::navi_router::RouteNode {
+                let pattern = ::navi_router::RoutePattern::parse(#path);
+                ::navi_router::RouteNode {
+                    id: #name_str.to_string(),
                     pattern,
                     parent: #parent_field,
                     is_layout: #is_layout,
@@ -247,7 +246,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
 
             #loader_factory_impl
 
-            pub fn register(cx: &mut gpui::App) {
+            pub fn register(cx: &mut ::gpui::App) {
                 #component_registration
                 #register_loader_call
             }

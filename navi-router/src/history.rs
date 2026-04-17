@@ -8,7 +8,7 @@ use std::sync::Arc;
 pub struct History {
     inner: Arc<Mutex<BrowserHistory<Location>>>,
     window_id: WindowId,
-    listeners: Vec<Box<dyn Fn(&Location) + Send + Sync>>,
+    listeners: Vec<LocationListener>,
 }
 
 impl History {
@@ -85,3 +85,5 @@ impl History {
         self.notify_listeners(&loc);
     }
 }
+
+type LocationListener = Box<dyn Fn(&crate::Location) + Send + Sync>;

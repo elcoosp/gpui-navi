@@ -6,7 +6,7 @@ pub type BlockerId = usize;
 /// A navigation blocker that can prevent route changes.
 pub struct Blocker {
     /// Function that returns true if navigation should be blocked.
-    pub should_block_fn: Box<dyn Fn(&Location, &Location) -> bool + Send + Sync>,
+    pub should_block_fn: ShouldBlockFn,
     /// Whether to enable before-unload handling.
     pub enable_before_unload: bool,
 }
@@ -31,3 +31,5 @@ impl Blocker {
         self
     }
 }
+
+type ShouldBlockFn = Box<dyn Fn(&crate::Location, &crate::Location) -> bool + Send + Sync>;

@@ -212,8 +212,8 @@ impl RoutePattern {
             }
 
             // Handle dynamic segments $param
-            if part.starts_with('$') {
-                let name = part[1..].to_string();
+            if let Some(stripped) = part.strip_prefix('$') {
+                let name = stripped.to_string();
                 segments.push(Segment::Dynamic {
                     name,
                     prefix: None,

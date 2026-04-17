@@ -1,4 +1,3 @@
-use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::scroll::ScrollableElement;

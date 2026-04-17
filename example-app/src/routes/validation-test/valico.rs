@@ -7,9 +7,9 @@ use navi_macros::{define_route, use_search};
 #[cfg(feature = "valico")]
 use navi_router::components::Link;
 #[cfg(feature = "valico")]
-use serde::Deserialize;
-#[cfg(feature = "valico")]
 use schemars::JsonSchema;
+#[cfg(feature = "valico")]
+use serde::Deserialize;
 
 #[cfg(feature = "valico")]
 #[derive(Debug, Deserialize, Default, Clone, JsonSchema)]
@@ -55,9 +55,14 @@ impl RenderOnce for ValicoTestPage {
         div()
             .p_4()
             .child("Valico Test Page")
-            .child(format!("Page: {:?}, Sort: {:?}", validated.page, validated.sort))
+            .child(format!(
+                "Page: {:?}, Sort: {:?}",
+                validated.page, validated.sort
+            ))
             .child(Link::new("/validation-test/valico?page=50&sort=desc").child("Valid params"))
-            .child(Link::new("/validation-test/valico?page=999&sort=invalid").child("Invalid params"))
+            .child(
+                Link::new("/validation-test/valico?page=999&sort=invalid").child("Invalid params"),
+            )
             .child(Link::new("/validation-test").child("Back"))
     }
 }

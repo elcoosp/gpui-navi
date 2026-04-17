@@ -139,8 +139,6 @@ fn parse_route_file(
 }
 
 fn extract_route_type_name(content: &str, relative_path: &Path) -> Result<String> {
-    // Regex to capture the identifier immediately after "define_route!("
-    // Handles optional whitespace, commas, and nested parentheses in loader closures.
     let re = Regex::new(r"define_route!\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]").unwrap();
     re.captures(content)
         .and_then(|caps| caps.get(1).map(|m| m.as_str().to_string()))
@@ -167,8 +165,8 @@ fn file_stem_to_module_ident(stem: &str) -> String {
     let s = stem.replace(['-', '.'], "_");
     let ident = if s == "$" {
         "splat".to_string()
-    } else if s.starts_with('$') {
-        format!("param_{}", &s[1..])
+    } else if let Some(stripped) = s.strip_prefix('$') {
+        format!("param_{}", stripped)
     } else {
         s
     };

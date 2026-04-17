@@ -1,4 +1,3 @@
-// example-app/src/main.rs
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;
@@ -9,16 +8,12 @@ use navi_router::{
     components::{Outlet, RouterProvider},
 };
 
-// Import the routes module (if any manual routes still needed, but we'll rely on generated)
 mod routes;
-
-// Include the generated route tree builder
 mod route_tree {
     include!("route_tree.gen.rs");
 }
 use route_tree::build_route_tree;
 
-// Root view
 struct AppView {
     router_provider: RouterProvider,
     devtools: Entity<DevtoolsState>,
@@ -63,12 +58,17 @@ fn main() {
                     let window_id = window.window_handle().window_id();
                     let window_handle = window.window_handle();
                     let initial = Location::new("/");
+                    let main_scroll_handle = ScrollHandle::new();
 
-                    // 1. Create RouterProvider first — this sets the RouterState global.
-                    let router_provider =
-                        RouterProvider::new(window_id, window_handle, initial, tree, cx);
+                    let router_provider = RouterProvider::new(
+                        window_id,
+                        window_handle,
+                        initial,
+                        tree,
+                        main_scroll_handle,
+                        cx,
+                    );
 
-                    // 2. Now that the global is set, register all routes via generated function.
                     route_tree::register_routes(cx);
 
                     let query_client = RouterState::global(cx).query_client.clone();

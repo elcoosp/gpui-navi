@@ -1,13 +1,17 @@
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::scroll::ScrollableElement;
 use navi_macros::define_route;
 use navi_router::components::{Link, Outlet, SuspenseBoundary, PreloadType};
+use navi_router::RouterState;
 
 #[derive(Clone, IntoElement)]
 struct RootLayout;
 
 impl RenderOnce for RootLayout {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let scroll_handle = RouterState::global(cx).main_scroll_handle();
+
         div()
             .size_full()
             .flex()
@@ -40,7 +44,15 @@ impl RenderOnce for RootLayout {
                         .bg(rgb(0x2563eb))
                         .into_any_element()
                 })
-                .with_child(div().flex_1().p_4().child(Outlet::new()))
+                .with_child(
+                    div()
+                        .id("main-scroll-container")
+                        .flex_1()
+                        .p_4()
+                        .track_scroll(&scroll_handle)
+                        .overflow_y_scrollbar()
+                        .child(Outlet::new())
+                )
             )
     }
 }

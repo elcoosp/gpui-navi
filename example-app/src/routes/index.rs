@@ -35,7 +35,21 @@ impl RenderOnce for HomePage {
                     .flex_col()
                     .gap_4()
                     .text_color(rgb(0xbac2de))
-                    .child("Lorem ipsum dolor sit amet...")
+                    .child("Scroll down to see the long list. Then navigate to another page and come back – your scroll position will be restored!")
+            )
+            .child(
+                div()
+                    .max_w(px(600.0))
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .children((0..100).map(|i| {
+                        div()
+                            .p_2()
+                            .bg(if i % 2 == 0 { rgb(0x2a2a3e) } else { rgb(0x1e1e2e) })
+                            .rounded_md()
+                            .child(format!("Item #{}: Lorem ipsum dolor sit amet, consectetur adipiscing elit.", i + 1))
+                    }))
             )
     }
 }

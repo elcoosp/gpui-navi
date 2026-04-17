@@ -1,10 +1,9 @@
-// navi-router/src/state.rs
 use crate::blocker::{Blocker, BlockerId};
 use crate::event_bus::push_event;
 use crate::history::History;
 use crate::location::{Location, NavigateOptions, ViewTransitionOptions};
 use crate::route_tree::{RouteNode, RouteTree};
-use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId};
+use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId, Point, Pixels, ScrollHandle};
 use rs_query::{Query, QueryClient, QueryKey};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -14,7 +13,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use futures::future::join_all;
 
-/// Events emitted by the router during navigation lifecycle.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum RouterEvent {
     BeforeNavigate { from: Option<Location>, to: Location },
@@ -72,6 +70,8 @@ pub struct RouterState {
     window_handle: AnyWindowHandle,
     root_view: Option<EntityId>,
     pending_loaders: Arc<AtomicUsize>,
+    scroll_positions: HashMap<String, Point<Pixels>>,
+    main_scroll_handle: ScrollHandle,
 }
 
 impl Global for RouterState {}
@@ -82,6 +82,7 @@ impl RouterState {
         window_id: WindowId,
         window_handle: AnyWindowHandle,
         route_tree: Rc<RouteTree>,
+        main_scroll_handle: &ScrollHandle,
     ) -> Self {
         let current_match = route_tree
             .match_path(&initial.pathname)
@@ -102,6 +103,8 @@ impl RouterState {
             window_handle,
             root_view: None,
             pending_loaders: Arc::new(AtomicUsize::new(0)),
+            scroll_positions: HashMap::new(),
+            main_scroll_handle: main_scroll_handle.clone(),
         }
     }
 
@@ -110,6 +113,11 @@ impl RouterState {
     pub fn navigate(&mut self, loc: Location, options: NavigateOptions, cx: &mut App) {
         if !options.ignore_blocker {
             let current = self.current_location();
+            // Save scroll position
+            let offset = self.main_scroll_handle.offset();
+            if offset.x != Pixels::ZERO || offset.y != Pixels::ZERO {
+                self.scroll_positions.insert(current.pathname.clone(), offset);
+            }
             for blocker in self.blockers.values() {
                 if !blocker.should_allow(&current, &loc) {
                     self.pending_navigation = Some(loc);
@@ -189,7 +197,6 @@ impl RouterState {
 
     pub fn register_loader_factory(&mut self, route_id: &str, factory: LoaderFactory) {
         log::debug!("Registering rs-query loader factory for route: {}", route_id);
-        eprintln!("[DEBUG] Registering loader factory for route: {}", route_id);
         self.loader_factories.insert(route_id.to_string(), factory);
     }
 
@@ -202,7 +209,6 @@ impl RouterState {
             for ancestor in &ancestors {
                 if ancestor.has_loader {
                     if let Some(factory) = self.loader_factories.get(&ancestor.id) {
-                        eprintln!("[DEBUG] Found factory for ancestor: {}", ancestor.id);
                         if let Some((ancestor_params, _)) = self.route_tree.match_path(&to.pathname) {
                             let query = factory(&ancestor_params);
                             let key = query.key.clone();
@@ -212,7 +218,6 @@ impl RouterState {
                             let ancestor_id = ancestor.id.clone();
 
                             loader_futures.push(async move {
-                                eprintln!("[DEBUG] Starting loader for {}", ancestor_id);
                                 match (fetch_fn)().await {
                                     Ok(data) => {
                                         client.set_query_data(&key, data, options);
@@ -224,9 +229,6 @@ impl RouterState {
                             loader_count += 1;
                         }
                     }
-                }
-                else if ancestor.has_loader {
-                    eprintln!("[DEBUG] Ancestor {} has loader but no factory found", ancestor.id);
                 }
             }
 
@@ -248,7 +250,15 @@ impl RouterState {
                         let _ = cx.update(|cx| {
                             push_event(RouterEvent::Load { from: from_clone.clone(), to: to_clone.clone() }, cx);
                             push_event(RouterEvent::BeforeRouteMount { from: from_clone.clone(), to: to_clone.clone() }, cx);
-                            push_event(RouterEvent::Rendered { from: from_clone, to: to_clone }, cx);
+                            push_event(RouterEvent::Rendered { from: from_clone, to: to_clone.clone() }, cx);
+                            // Restore scroll position
+                            if let Some(state) = RouterState::try_global(cx) {
+                                if let Some(offset) = state.scroll_positions.get(&to_clone.pathname) {
+                                    state.main_scroll_handle.set_offset(*offset);
+                                } else {
+                                    state.main_scroll_handle.set_offset(Point::default());
+                                }
+                            }
                             let _ = window_handle.update(cx, |_, window, _| window.refresh());
                         });
                     }
@@ -269,20 +279,11 @@ impl RouterState {
 
     pub fn get_loader_data<R: crate::RouteDef>(&self) -> Option<R::LoaderData> {
         let (params, node) = self.current_match.as_ref()?;
-        eprintln!("[DEBUG] get_loader_data called for {}", std::any::type_name::<R>());
-        eprintln!("[DEBUG] get_loader_data: node.id = {}, params = {:?}", node.id, params);
         if node.id != R::name() { return None; }
         let key = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
             .with("params", serde_json::to_string(params).ok()?);
-        eprintln!("[DEBUG] get_loader_data key: {}", key.cache_key());
-        let any_data: AnyData = match self.query_client.get_query_data(&key) {
-            Some(d) => d,
-            None => {
-                eprintln!("[DEBUG] No data in cache for key {}", key.cache_key());
-                return None;
-            }
-        };
+        let any_data: AnyData = self.query_client.get_query_data(&key)?;
         let arc_data = any_data.0.downcast_ref::<Arc<R::LoaderData>>()?;
         Some((**arc_data).clone())
     }
@@ -308,6 +309,10 @@ impl RouterState {
 
     pub fn has_pending_loader(&self) -> bool {
         self.pending_loaders.load(Ordering::Relaxed) > 0
+    }
+
+    pub fn main_scroll_handle(&self) -> ScrollHandle {
+        self.main_scroll_handle.clone()
     }
 
     pub fn global(cx: &App) -> &Self { cx.global::<Self>() }

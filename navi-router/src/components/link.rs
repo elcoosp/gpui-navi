@@ -1,7 +1,7 @@
 use crate::{Navigator, RouterState};
 use gpui::{
     AnyElement, App, InteractiveElement, IntoElement, MouseButton, MouseUpEvent, ParentElement,
-    RenderOnce, Styled, Window, div, FontWeight,,
+    RenderOnce, Styled, Window, div, FontWeight,
 };
 use std::time::Duration;
 

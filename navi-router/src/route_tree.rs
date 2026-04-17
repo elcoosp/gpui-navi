@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::collections::BTreeMap;
+use crate::radix_tree::RouteTrie;
 
 /// A segment of a route pattern.
 #[derive(Clone, Debug, PartialEq)]
@@ -25,7 +27,6 @@ pub enum Segment {
 }
 
 impl Segment {
-    /// Returns the name of the parameter if this is a dynamic or optional segment.
     pub fn param_name(&self) -> Option<&str> {
         match self {
             Segment::Dynamic { name, .. } => Some(name),
@@ -34,22 +35,18 @@ impl Segment {
         }
     }
 
-    /// Returns true if this is a static segment.
     pub fn is_static(&self) -> bool {
         matches!(self, Segment::Static(_))
     }
 
-    /// Returns true if this is a dynamic segment.
     pub fn is_dynamic(&self) -> bool {
         matches!(self, Segment::Dynamic { .. })
     }
 
-    /// Returns true if this is an optional segment.
     pub fn is_optional(&self) -> bool {
         matches!(self, Segment::Optional { .. })
     }
 
-    /// Returns true if this is a splat segment.
     pub fn is_splat(&self) -> bool {
         matches!(self, Segment::Splat { .. })
     }
@@ -64,19 +61,13 @@ pub struct RoutePattern {
 }
 
 impl RoutePattern {
-    /// Parse a pattern string like "/users/$id" into segments with ranking.
     pub fn parse(pattern: &str) -> Self {
         let raw = pattern.to_string();
         let segments = Self::parse_segments(pattern);
         let rank = Self::compute_rank(&segments);
-        Self {
-            raw,
-            segments,
-            rank,
-        }
+        Self { raw, segments, rank }
     }
 
-    /// Match a path against this pattern, extracting parameters.
     pub fn matches(&self, path: &str) -> Option<HashMap<String, String>> {
         let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         let mut params = HashMap::new();
@@ -85,45 +76,29 @@ impl RoutePattern {
         for seg in &self.segments {
             match seg {
                 Segment::Static(s) => {
-                    if path_idx >= path_segments.len() {
-                        return None;
-                    }
-                    if path_segments[path_idx] != s {
+                    if path_idx >= path_segments.len() || path_segments[path_idx] != s {
                         return None;
                     }
                     path_idx += 1;
                 }
-                Segment::Dynamic {
-                    name,
-                    prefix,
-                    suffix,
-                } => {
+                Segment::Dynamic { name, prefix, suffix } => {
                     if path_idx >= path_segments.len() {
                         return None;
                     }
                     let part = path_segments[path_idx];
-                    if let Some(pre) = prefix
-                        && !part.starts_with(pre) {
-                            return None;
-                        }
-                    if let Some(suf) = suffix
-                        && !part.ends_with(suf) {
-                            return None;
-                        }
-                    // Extract the value between prefix and suffix
+                    if let Some(pre) = prefix {
+                        if !part.starts_with(pre) { return None; }
+                    }
+                    if let Some(suf) = suffix {
+                        if !part.ends_with(suf) { return None; }
+                    }
                     let start = prefix.as_ref().map_or(0, |p| p.len());
                     let end = suffix.as_ref().map_or(part.len(), |s| part.len() - s.len());
-                    if start > end {
-                        return None;
-                    }
+                    if start > end { return None; }
                     params.insert(name.clone(), part[start..end].to_string());
                     path_idx += 1;
                 }
-                Segment::Optional {
-                    name,
-                    prefix,
-                    suffix,
-                } => {
+                Segment::Optional { name, prefix, suffix } => {
                     if path_idx < path_segments.len() {
                         let part = path_segments[path_idx];
                         let start = prefix.as_ref().map_or(0, |p| p.len());
@@ -138,24 +113,15 @@ impl RoutePattern {
                         params.insert(name.clone(), String::new());
                     }
                 }
-                Segment::Splat {
-                    prefix,
-                    suffix: _suffix,
-                } => {
-                    // Splat matches all remaining path segments
+                Segment::Splat { prefix: _, suffix: _ } => {
                     let remaining = path_segments[path_idx..].join("/");
-                    if let Some(_pre) = prefix {
-                        // If there's a prefix, check it
-                    }
                     params.insert("*splat".to_string(), remaining);
                     path_idx = path_segments.len();
                 }
             }
         }
 
-        // All path segments must be consumed (unless we have optional/splat at end)
         if path_idx != path_segments.len() {
-            // Check if remaining segments are all optional
             return None;
         }
 
@@ -164,73 +130,44 @@ impl RoutePattern {
 
     fn parse_segments(pattern: &str) -> Vec<Segment> {
         let parts: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
-
         let mut segments = Vec::new();
 
         for part in parts {
-            // Handle escaped segments [x]
             if part.starts_with('[') && part.ends_with(']') {
-                segments.push(Segment::Static(part[1..part.len() - 1].to_string()));
+                segments.push(Segment::Static(part[1..part.len()-1].to_string()));
                 continue;
             }
-
-            // Handle optional parameters {-$param}
             if part.starts_with("{-$") && part.ends_with('}') {
-                let name = part[3..part.len() - 1].to_string();
-                segments.push(Segment::Optional {
-                    name,
-                    prefix: None,
-                    suffix: None,
-                });
+                let name = part[3..part.len()-1].to_string();
+                segments.push(Segment::Optional { name, prefix: None, suffix: None });
                 continue;
             }
-
-            // Handle prefix/suffix patterns {$param}.ext
             if part.starts_with("{$") && part.contains('}') {
                 let close_brace = part.find('}').unwrap();
                 let name = part[2..close_brace].to_string();
                 let suffix = if close_brace + 1 < part.len() {
-                    Some(part[close_brace + 1..].to_string())
+                    Some(part[close_brace+1..].to_string())
                 } else {
                     None
                 };
-                segments.push(Segment::Dynamic {
-                    name,
-                    prefix: None,
-                    suffix,
-                });
+                segments.push(Segment::Dynamic { name, prefix: None, suffix });
                 continue;
             }
-
-            // Handle splat $
             if part == "$" {
-                segments.push(Segment::Splat {
-                    prefix: None,
-                    suffix: None,
-                });
+                segments.push(Segment::Splat { prefix: None, suffix: None });
                 continue;
             }
-
-            // Handle dynamic segments $param
-            if let Some(stripped) = part.strip_prefix('$') {
-                let name = stripped.to_string();
-                segments.push(Segment::Dynamic {
-                    name,
-                    prefix: None,
-                    suffix: None,
-                });
+            if part.starts_with('$') {
+                let name = part[1..].to_string();
+                segments.push(Segment::Dynamic { name, prefix: None, suffix: None });
                 continue;
             }
-
-            // Static segment
             segments.push(Segment::Static(part.to_string()));
         }
 
         segments
     }
 
-    /// Compute specificity rank: higher = more specific.
-    /// Depth is the most important factor, then static count, etc.
     fn compute_rank(segments: &[Segment]) -> usize {
         let depth = segments.len();
         let static_count = segments.iter().filter(|s| s.is_static()).count();
@@ -249,7 +186,6 @@ impl RoutePattern {
     }
 }
 
-/// Represents a node in the route tree.
 #[derive(Clone)]
 pub struct RouteNode {
     pub id: String,
@@ -274,15 +210,12 @@ impl std::fmt::Debug for RouteNode {
     }
 }
 
-use std::collections::BTreeMap;
-
-/// The route tree holding all registered routes.
 #[derive(Clone)]
 pub struct RouteTree {
     nodes: BTreeMap<String, RouteNode>,
     children: HashMap<String, Vec<String>>,
     root_id: String,
-    matcher: crate::matcher::RouteMatcher,
+    trie: RouteTrie,
 }
 
 impl RouteTree {
@@ -291,7 +224,7 @@ impl RouteTree {
             nodes: BTreeMap::new(),
             children: HashMap::new(),
             root_id: "__root__".to_string(),
-            matcher: crate::matcher::RouteMatcher::new(),
+            trie: RouteTrie::new(),
         }
     }
 
@@ -303,35 +236,24 @@ impl RouteTree {
                 chain.push(node);
                 current_id = node.parent.clone();
             } else {
-                log::warn!("RouteTree::ancestors: node '{}' not found", id);
                 break;
             }
         }
         chain.reverse();
-        if chain.is_empty() {
-            log::error!("ancestors: empty chain for route '{}'", route_id);
-        }
         chain
     }
 
     pub fn add_route(&mut self, node: RouteNode) {
         let id = node.id.clone();
-        let pattern = node.pattern.clone();
-        let is_index = node.is_index;
         if let Some(parent) = &node.parent {
-            self.children
-                .entry(parent.clone())
-                .or_default()
-                .push(id.clone());
+            self.children.entry(parent.clone()).or_default().push(id.clone());
         }
-        self.nodes.insert(id.clone(), node);
-        self.matcher.insert(pattern, id, is_index);
+        self.nodes.insert(id.clone(), node.clone());
+        self.trie.insert(node);
     }
 
     pub fn match_path(&self, path: &str) -> Option<(HashMap<String, String>, &RouteNode)> {
-        self.matcher
-            .match_path(path)
-            .and_then(|(params, id)| self.nodes.get(&id).map(|node| (params, node)))
+        self.trie.match_path(path)
     }
 
     pub fn get_node(&self, id: &str) -> Option<&RouteNode> {

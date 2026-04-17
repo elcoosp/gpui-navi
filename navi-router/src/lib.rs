@@ -3,17 +3,16 @@ pub mod components;
 pub mod event_bus;
 pub mod history;
 pub mod location;
-pub mod matcher;
 pub mod navigator;
 pub mod redirect;
 pub mod route_tree;
+pub mod radix_tree;
 pub mod state;
 pub mod validation;
 
 pub use blocker::{Blocker, BlockerId};
 pub use history::History;
 pub use location::{Location, NavigateOptions, ScrollIntoViewOptions, ViewTransitionOptions};
-pub use matcher::RouteMatcher;
 pub use navigator::Navigator;
 pub use redirect::{NotFound, Redirect, not_found, redirect};
 pub use route_tree::{RouteNode, RoutePattern, RouteTree, Segment};

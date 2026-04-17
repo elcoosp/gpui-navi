@@ -1668,9 +1668,6 @@ impl DevtoolsState {
         let info_color = theme.info;
         let muted_fg = theme.muted_foreground;
         let border_color = theme.border;
-        let secondary_bg = theme.secondary;
-        // Drop theme reference to allow mutable borrows later
-        drop(theme);
 
         let entries: Vec<_> = self.query_client.cache.iter().collect();
 

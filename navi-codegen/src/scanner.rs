@@ -87,7 +87,7 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
         });
     }
 
-    assign_parents(&mut routes, config);
+    assign_parents(&mut routes);
 
     // Sort by depth (parents before children)
     routes.sort_by(|a, b| {
@@ -325,59 +325,40 @@ fn infer_route_type_name(file_stem: &str, relative_path: &Path) -> String {
     format!("{}Route", base)
 }
 
-fn assign_parents(routes: &mut Vec<RouteInfo>, _config: &NaviConfig) {
-    // Build a map from route_type_name to index
-    let mut type_to_index: HashMap<String, usize> = HashMap::new();
-    for (i, route) in routes.iter().enumerate() {
-        type_to_index.insert(route.route_type_name.clone(), i);
+/// Pure in-memory parent assignment using directory-to-layout mapping.
+fn assign_parents(routes: &mut Vec<RouteInfo>) {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    // Map from directory path to the route ID of the layout that owns it
+    let mut dir_to_layout: HashMap<PathBuf, String> = HashMap::new();
+
+    for route in routes.iter() {
+        if route.is_layout || route.is_root {
+            let dir = if route.relative_path.file_name().unwrap() == "mod.rs" {
+                route.relative_path.parent().unwrap().to_path_buf()
+            } else {
+                route.relative_path.with_extension("")
+            };
+            dir_to_layout.insert(dir, route.route_id.clone());
+        }
     }
 
-    for i in 0..routes.len() {
-        let route = &routes[i];
+    let root_id = routes.iter()
+        .find(|r| r.is_root)
+        .map(|r| r.route_id.clone());
+
+    for route in routes.iter_mut() {
         if route.is_root {
             continue;
         }
-
-        let path = &route.relative_path;
-        let parent_path = path.parent().unwrap_or(Path::new(""));
-
-        if parent_path.as_os_str().is_empty() {
-            // Top-level routes have parent RootRoute (type name)
-            if let Some(&root_idx) = type_to_index.get("RootRoute") {
-                routes[i].parent = Some(routes[root_idx].route_id.clone());
-            }
-            continue;
+        let mut search = route.relative_path.parent().unwrap_or(Path::new("")).to_path_buf();
+        while let Some(layout_id) = dir_to_layout.get(&search) {
+            route.parent = Some(layout_id.clone());
+            break;
         }
-
-        // Find the parent layout file in the parent directory
-        let parent_dir_name = parent_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
-        // Possible parent file names: mod.rs, {dir_name}.rs, __root.rs
-        let candidates = vec![
-            parent_path.join("mod.rs"),
-            parent_path.join(format!("{}.rs", parent_dir_name)),
-            parent_path.join("__root.rs"),
-        ];
-
-        let mut found_parent = None;
-        for candidate in candidates {
-            if let Ok(content) = fs::read_to_string(&candidate) {
-                if let Some(type_name) = extract_route_type_from_ast(&content) {
-                    if let Some(&parent_idx) = type_to_index.get(&type_name) {
-                        found_parent = Some(routes[parent_idx].route_id.clone());
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Fallback to RootRoute if no parent found
-        if let Some(parent_id) = found_parent {
-            routes[i].parent = Some(parent_id);
-        } else if let Some(&root_idx) = type_to_index.get("RootRoute") {
-            routes[i].parent = Some(routes[root_idx].route_id.clone());
+        if route.parent.is_none() {
+            route.parent = root_id.clone();
         }
     }
 }

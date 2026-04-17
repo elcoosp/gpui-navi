@@ -3,6 +3,7 @@ pub mod components;
 pub mod event_bus;
 pub mod history;
 pub mod loader;
+pub mod loader_query;
 pub mod location;
 pub mod matcher;
 pub mod navigator;

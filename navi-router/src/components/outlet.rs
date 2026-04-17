@@ -1,8 +1,10 @@
+// navi-router/src/components/outlet.rs
 use crate::RouterState;
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, Window,
     div,
 };
+use navi_core::context;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -24,12 +26,18 @@ where
 
 #[derive(IntoElement, Default)]
 pub struct Outlet {
+    depth: Option<usize>,
     children: Vec<AnyElement>,
 }
 
 impl Outlet {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn depth(mut self, depth: usize) -> Self {
+        self.depth = Some(depth);
+        self
     }
 }
 
@@ -40,34 +48,58 @@ impl ParentElement for Outlet {
 }
 
 impl RenderOnce for Outlet {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = RouterState::try_global(cx);
         if state.is_none() {
             log::error!("Outlet: RouterState not found in global context");
             return div().child("Router not initialized").into_any_element();
         }
         let state = state.unwrap();
+
+        // Determine the outlet depth: use explicit depth or read from context
+        let depth = self.depth.unwrap_or_else(|| {
+            context::consume::<OutletDepth>(window.window_handle().window_id())
+                .map(|d| d.0)
+                .unwrap_or(0)
+        });
+
         let current_match = state.current_match.as_ref();
+        if let Some((_params, leaf_node)) = current_match {
+            // Get ancestor chain for the matched leaf route
+            let ancestors = state.route_tree.ancestors(&leaf_node.id);
+            if depth >= ancestors.len() {
+                log::warn!(
+                    "Outlet depth {} exceeds ancestors length {}",
+                    depth,
+                    ancestors.len()
+                );
+                return div()
+                    .child("No matching route at this depth")
+                    .into_any_element();
+            }
 
-        if let Some((_params, node)) = current_match {
-            log::debug!("Outlet rendering route: {}", node.id);
+            let node = ancestors[depth];
+            log::debug!("Outlet (depth {}) rendering route: {}", depth, node.id);
 
-            // Use a stable ID – only the route name, no hash
-            let key = ElementId::Name(format!("outlet-{}", node.id).into());
+            // Provide the next depth for child outlets
+            let window_id = window.window_handle().window_id();
+            context::provide(window_id, OutletDepth(depth + 1));
 
             if let Some(constructor) = REGISTRY.lock().unwrap().get(&node.id) {
                 let element = constructor(cx);
-                return div()
-                    .id(key)
+                div()
+                    .id(ElementId::Name(
+                        format!("outlet-{}-{}", node.id, depth).into(),
+                    ))
                     .child(element)
                     .children(self.children)
-                    .into_any_element();
+                    .into_any_element()
             } else {
                 log::warn!("No component registered for route: {}", node.id);
-                return div()
+                div()
                     .child(format!("No component for route: {}", node.id))
                     .children(self.children)
-                    .into_any_element();
+                    .into_any_element()
             }
         } else {
             log::warn!("Outlet: no matching route");
@@ -75,3 +107,7 @@ impl RenderOnce for Outlet {
         }
     }
 }
+
+/// Context value used to track outlet nesting depth.
+#[derive(Clone, Copy)]
+struct OutletDepth(usize);

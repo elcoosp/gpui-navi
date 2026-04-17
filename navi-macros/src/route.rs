@@ -1,3 +1,4 @@
+// navi-macros/src/route.rs
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
@@ -10,16 +11,13 @@ struct RouteDefInput {
     search_ty: Option<Type>,
     data_ty: Option<Type>,
     loader_closure: Option<ExprClosure>,
-    #[allow(dead_code)]
     component_ty: Option<Type>,
-    #[allow(dead_code)]
     stale_time: Option<syn::Expr>,
-    #[allow(dead_code)]
     gc_time: Option<syn::Expr>,
-    #[allow(dead_code)]
     preload_stale_time: Option<syn::Expr>,
     is_layout: Option<LitBool>,
     is_index: Option<LitBool>,
+    parent: Option<LitStr>,
 }
 
 impl Parse for RouteDefInput {
@@ -40,6 +38,7 @@ impl Parse for RouteDefInput {
         let mut preload_stale_time = None;
         let mut is_layout = None;
         let mut is_index = None;
+        let mut parent = None;
 
         while !input.is_empty() {
             let key: Ident = input.parse()?;
@@ -56,6 +55,7 @@ impl Parse for RouteDefInput {
                 "preload_stale_time" => preload_stale_time = Some(input.parse()?),
                 "is_layout" => is_layout = Some(input.parse()?),
                 "is_index" => is_index = Some(input.parse()?),
+                "parent" => parent = Some(input.parse()?),
                 _ => return Err(syn::Error::new(key.span(), format!("Unknown key: {}", key))),
             }
             if input.peek(Token![,]) {
@@ -79,6 +79,7 @@ impl Parse for RouteDefInput {
             preload_stale_time,
             is_layout,
             is_index,
+            parent,
         })
     }
 }
@@ -94,6 +95,10 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let params_ty = input.params_ty.unwrap_or_else(|| syn::parse_quote!(()));
     let search_ty = input.search_ty.unwrap_or_else(|| syn::parse_quote!(()));
     let data_ty = input.data_ty.unwrap_or_else(|| syn::parse_quote!(()));
+    let component_ty = input.component_ty;
+    let is_layout = input.is_layout.map(|b| b.value).unwrap_or(false);
+    let is_index = input.is_index.map(|b| b.value).unwrap_or(false);
+    let parent = input.parent.map(|s| s.value());
 
     let (has_loader, loader_registration) = if let Some(ref loader_closure) = input.loader_closure {
         let loader_closure = loader_closure.clone();
@@ -128,8 +133,21 @@ pub fn define_route(input: TokenStream) -> TokenStream {
         (false, quote! {})
     };
 
-    let is_layout = input.is_layout.map(|b| b.value).unwrap_or(false);
-    let is_index = input.is_index.map(|b| b.value).unwrap_or(false);
+    let component_registration = if let Some(comp_ty) = component_ty {
+        quote! {
+            navi_router::components::register_route_component(Self::name(), |_cx| {
+                gpui::Component::new(#comp_ty).into_any_element()
+            });
+        }
+    } else {
+        quote! {}
+    };
+
+    let parent_field = if let Some(p) = parent {
+        quote! { Some(#p.to_string()) }
+    } else {
+        quote! { None }
+    };
 
     let expanded = quote! {
         pub struct #name;
@@ -154,7 +172,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                 navi_router::RouteNode {
                     id: stringify!(#name).to_string(),
                     pattern,
-                    parent: None,
+                    parent: #parent_field,
                     is_layout: #is_layout,
                     is_index: #is_index,
                     has_loader: #has_loader,
@@ -164,7 +182,8 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                 }
             }
 
-            pub fn register_loader(cx: &mut gpui::App) {
+            pub fn register(cx: &mut gpui::App) {
+                #component_registration
                 #loader_registration
             }
         }

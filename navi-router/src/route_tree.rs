@@ -295,7 +295,20 @@ impl RouteTree {
             matcher: crate::matcher::RouteMatcher::new(),
         }
     }
-
+    pub fn ancestors(&self, route_id: &str) -> Vec<&RouteNode> {
+        let mut chain = Vec::new();
+        let mut current = Some(route_id);
+        while let Some(id) = current {
+            if let Some(node) = self.get_node(id) {
+                chain.push(node);
+                current = node.parent.as_deref();
+            } else {
+                break;
+            }
+        }
+        chain.reverse();
+        chain
+    }
     pub fn add_route(&mut self, node: RouteNode) {
         let id = node.id.clone();
         let pattern = node.pattern.clone();

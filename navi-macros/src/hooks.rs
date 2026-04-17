@@ -1,3 +1,4 @@
+// navi-macros/src/hooks.rs
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
@@ -42,34 +43,11 @@ pub fn use_search(input: TokenStream) -> TokenStream {
 
 pub fn use_loader_data(input: TokenStream) -> TokenStream {
     let route_ty = parse_macro_input!(input as syn::Type);
+    // No longer triggers loader — that's done in navigate()
     let expanded = quote! {
         {
-            log::debug!("use_loader_data called for {}", stringify!(#route_ty));
-
-            let state = navi_router::RouterState::try_global(cx);
-            let data_ready = state.as_ref()
+            navi_router::RouterState::try_global(cx)
                 .and_then(|s| s.get_loader_data::<#route_ty>())
-                .is_some();
-
-            if !data_ready {
-                let is_loading = state.map(|s| s.is_loading()).unwrap_or(false);
-                if !is_loading {
-                    log::debug!("Loader data not ready and not loading, triggering loader");
-                    navi_router::RouterState::update(cx, |state, cx| state.trigger_loader(cx));
-                } else {
-                    log::debug!("Loader data not ready but already loading, skipping trigger");
-                }
-            }
-
-            let result = navi_router::RouterState::try_global(cx)
-                .and_then(|s| s.get_loader_data::<#route_ty>());
-
-            if result.is_some() {
-                log::debug!("use_loader_data returning Some");
-            } else {
-                log::debug!("use_loader_data returning None");
-            }
-            result
         }
     };
     expanded.into()
@@ -78,8 +56,7 @@ pub fn use_loader_data(input: TokenStream) -> TokenStream {
 pub fn use_navigate(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
         {
-            let window_handle = cx.window_handle();
-            navi_router::Navigator::new(window_handle)
+            navi_router::Navigator::new(window.window_handle())
         }
     };
     expanded.into()
@@ -96,7 +73,9 @@ pub fn use_blocker(input: TokenStream) -> TokenStream {
 
 pub fn use_can_go_back(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
-        false
+        navi_router::RouterState::try_global(cx)
+            .map(|s| s.history.can_go_back())
+            .unwrap_or(false)
     };
     expanded.into()
 }

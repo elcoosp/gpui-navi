@@ -5,17 +5,6 @@ mod router;
 use proc_macro::TokenStream;
 
 /// Define a route with type-safe parameters, search validation, and loader configuration.
-///
-/// # Example
-/// ```ignore
-/// define_route!(
-///     UserRoute,
-///     path: "/users/$id",
-///     params: UserParams,
-///     search: UserSearch,
-///     component: UserPage,
-/// );
-/// ```
 #[proc_macro]
 pub fn define_route(input: TokenStream) -> TokenStream {
     route::define_route(input)
@@ -55,6 +44,18 @@ pub fn use_blocker(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn use_can_go_back(input: TokenStream) -> TokenStream {
     hooks::use_can_go_back(input)
+}
+
+/// Hook to get the current match (route id and params).
+#[proc_macro]
+pub fn use_match(input: TokenStream) -> TokenStream {
+    hooks::use_match(input)
+}
+
+/// Hook to get the loader state (Idle/Loading/Ready/Error) for a route.
+#[proc_macro]
+pub fn use_loader_state(input: TokenStream) -> TokenStream {
+    hooks::use_loader_state(input)
 }
 
 /// Define a router from a list of route types, generating the Route enum and route tree.

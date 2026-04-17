@@ -41,8 +41,8 @@ pub fn use_search(input: TokenStream) -> TokenStream {
 }
 
 pub fn use_loader_data(input: TokenStream) -> TokenStream {
-    let route_ty = syn::parse_macro_input!(input as syn::Type);
-    let expanded = quote::quote! {
+    let route_ty = parse_macro_input!(input as syn::Type);
+    let expanded = quote! {
         {
             let state = ::navi_router::RouterState::global(cx);
             state.get_loader_data::<#route_ty>()
@@ -50,6 +50,7 @@ pub fn use_loader_data(input: TokenStream) -> TokenStream {
     };
     expanded.into()
 }
+
 pub fn use_navigate(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
         {
@@ -71,7 +72,30 @@ pub fn use_blocker(input: TokenStream) -> TokenStream {
 
 pub fn use_can_go_back(_input: TokenStream) -> TokenStream {
     let expanded = quote! {
-        false
+        ::navi_router::Navigator::can_go_back(cx)
+    };
+    expanded.into()
+}
+
+pub fn use_match(_input: TokenStream) -> TokenStream {
+    let expanded = quote! {
+        {
+            let state = ::navi_router::RouterState::global(cx);
+            state.current_match.clone()
+                .map(|(params, node)| (node.id.clone(), params))
+                .unwrap_or_default()
+        }
+    };
+    expanded.into()
+}
+
+pub fn use_loader_state(input: TokenStream) -> TokenStream {
+    let route_ty = parse_macro_input!(input as syn::Type);
+    let expanded = quote! {
+        {
+            let state = ::navi_router::RouterState::global(cx);
+            state.get_loader_state::<#route_ty>()
+        }
     };
     expanded.into()
 }

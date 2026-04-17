@@ -69,6 +69,15 @@ impl std::fmt::Debug for AnyData {
 
 type LoaderFactory = Arc<dyn Fn(&HashMap<String, String>) -> Query<AnyData> + Send + Sync>;
 
+/// Loader state for a route.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LoaderState {
+    Idle,
+    Loading,
+    Ready,
+    Error(String),
+}
+
 /// The central router state.
 pub struct RouterState {
     pub history: History,
@@ -200,6 +209,7 @@ impl RouterState {
             }
         }
     }
+
     pub fn current_location(&self) -> Location {
         self.history.current()
     }
@@ -392,6 +402,33 @@ impl RouterState {
         let arc_data = any_data.0.downcast_ref::<Arc<R::LoaderData>>()?.clone();
         Some((*arc_data).clone())
     }
+
+    /// Get the loader state for a specific route type.
+    pub fn get_loader_state<R: crate::RouteDef>(&self) -> LoaderState {
+        let (params, node) = match self.current_match.as_ref() {
+            Some(m) => m,
+            None => return LoaderState::Idle,
+        };
+        if node.id != R::name() {
+            return LoaderState::Idle;
+        }
+        let key = QueryKey::new("navi_loader")
+            .with("route", node.id.as_str())
+            .with("params", serde_json::to_string(params).unwrap_or_default());
+
+        match self.query_client.get_query_state(&key) {
+            rs_query::QueryState::Idle => LoaderState::Idle,
+            rs_query::QueryState::Loading => LoaderState::Loading,
+            rs_query::QueryState::Success => LoaderState::Ready,
+            rs_query::QueryState::Error(e) => LoaderState::Error(e.to_string()),
+        }
+    }
+
+    /// Check if any loader is currently pending.
+    pub fn has_pending_loader(&self) -> bool {
+        self.query_client.is_fetching()
+    }
+
     // Global access helpers
     pub fn global(cx: &App) -> &Self {
         cx.global::<Self>()

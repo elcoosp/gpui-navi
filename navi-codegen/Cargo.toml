@@ -1,7 +1,12 @@
+# navi-codegen/Cargo.toml
 [package]
 name = "navi-codegen"
 version = "0.1.0"
 edition = "2024"
+
+[[bin]]
+name = "navi-codegen"
+path = "src/main.rs"
 
 [dependencies]
 walkdir = "2.4"

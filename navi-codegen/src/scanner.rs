@@ -1,6 +1,8 @@
+// navi-codegen/src/scanner.rs
 use crate::config::NaviConfig;
 use anyhow::Result;
 use regex::Regex;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -10,6 +12,7 @@ pub struct RouteInfo {
     pub route_pattern: String,
     pub module_name: String,
     pub pascal_name: String,
+    pub route_id: String,
     pub is_layout: bool,
     pub is_index: bool,
     pub is_root: bool,
@@ -42,7 +45,6 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
             None => continue,
         };
 
-        // Skip mod.rs files – they are module roots, not routes
         if file_name == "mod" {
             continue;
         }
@@ -56,10 +58,17 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
         routes.push(route_info);
     }
 
+    // Second pass: assign parents based on directory nesting
+    assign_parents(&mut routes);
+
+    // Sort by depth then specificity
     routes.sort_by(|a, b| {
-        let a_static = a.route_pattern.matches('/').count();
-        let b_static = b.route_pattern.matches('/').count();
-        b_static.cmp(&a_static)
+        let a_depth = a.relative_path.components().count();
+        let b_depth = b.relative_path.components().count();
+        b_depth.cmp(&a_depth).then_with(|| {
+            // Index routes after non-index at same depth
+            a.is_index.cmp(&b.is_index)
+        })
     });
 
     Ok(routes)
@@ -67,53 +76,54 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
 
 fn parse_route_file(file_name: &str, relative_path: &Path, config: &NaviConfig) -> RouteInfo {
     let is_root = file_name == "__root";
-    let is_layout = file_name.starts_with('_') && !is_root;
     let is_index = file_name == config.index_token();
     let has_dynamic_segment = file_name.contains('$');
 
-    let route_pattern = file_name_to_pattern(file_name, relative_path, config);
+    let route_pattern = file_name_to_pattern(file_name, relative_path);
     let module_name = build_module_path(relative_path);
     let pascal_name = to_pascal_case(&module_name);
-
-    let parent = compute_parent(relative_path);
+    let route_id = generate_route_id(file_name, relative_path);
+    let is_layout = infer_layout(file_name, relative_path);
 
     RouteInfo {
         relative_path: relative_path.to_path_buf(),
         route_pattern,
         module_name,
         pascal_name,
+        route_id,
         is_layout,
         is_index,
         is_root,
         has_dynamic_segment,
-        parent,
+        parent: None,
     }
 }
 
-/// Build a Rust module path from the relative file path.
-/// Example: "users/_dollar_id.rs" -> "users::_dollar_id"
+/// Build a Rust module path from the relative file path, using sanitized identifiers.
 fn build_module_path(relative_path: &Path) -> String {
     let mut components: Vec<String> = relative_path
         .parent()
         .into_iter()
         .flat_map(|p| p.iter())
-        .map(|c| sanitize_module_name(c.to_str().unwrap_or("")))
+        .map(|c| sanitize_module_ident(c.to_str().unwrap_or("")))
         .collect();
 
     let file_stem = relative_path.file_stem().unwrap().to_str().unwrap();
-    components.push(sanitize_module_name(file_stem));
+    components.push(sanitize_module_ident(file_stem));
 
     components.join("::")
 }
 
-/// Sanitize a name to a valid Rust identifier, escaping keywords.
-fn sanitize_module_name(name: &str) -> String {
-    let name = name
-        .replace('-', "_")
-        .replace('.', "_")
-        .replace('$', "_dollar_");
+/// Sanitize a name to a valid Rust identifier.
+/// - Strips leading `$` and prefixes with `param_` if it becomes empty or conflicts.
+/// - Replaces `-` and `.` with `_`.
+fn sanitize_module_ident(name: &str) -> String {
+    let mut name = name.replace('-', "_").replace('.', "_");
+    if name.starts_with('$') {
+        name = format!("param_{}", &name[1..]);
+    }
+    // Escape Rust keywords
     match name.as_str() {
-        // Rust keywords
         "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern" | "false"
         | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod" | "move"
         | "mut" | "pub" | "ref" | "return" | "self" | "Self" | "static" | "struct" | "super"
@@ -123,14 +133,14 @@ fn sanitize_module_name(name: &str) -> String {
     }
 }
 
-/// Convert a file name to a route pattern.
-fn file_name_to_pattern(file_name: &str, relative_path: &Path, _config: &NaviConfig) -> String {
+/// Convert a file name to a route pattern, preserving `$` segments.
+fn file_name_to_pattern(file_name: &str, relative_path: &Path) -> String {
     let mut segments = Vec::new();
 
     for component in relative_path.parent().into_iter().flat_map(|p| p.iter()) {
         if let Some(comp) = component.to_str() {
             if comp.starts_with('(') && comp.ends_with(')') {
-                continue;
+                continue; // pathless group
             }
             if comp.starts_with('-') {
                 continue;
@@ -177,14 +187,72 @@ fn component_name_to_segment(name: &str) -> String {
     name.to_string()
 }
 
-fn compute_parent(relative_path: &Path) -> Option<String> {
-    relative_path.parent().and_then(|p| {
-        if p.as_os_str().is_empty() {
-            None
-        } else {
-            Some(build_module_path(p))
+fn generate_route_id(file_name: &str, relative_path: &Path) -> String {
+    let mut parts: Vec<String> = relative_path
+        .parent()
+        .into_iter()
+        .flat_map(|p| p.iter())
+        .map(|c| c.to_str().unwrap().to_string())
+        .collect();
+    parts.push(file_name.to_string());
+    parts.join("/")
+}
+
+fn infer_layout(file_name: &str, relative_path: &Path) -> bool {
+    if file_name == "__root" {
+        return true;
+    }
+    if file_name.starts_with('_') {
+        return true;
+    }
+    // A file is a layout if there is a directory with the same name alongside it.
+    if let Some(parent) = relative_path.parent() {
+        let dir_name = file_name;
+        let sibling_dir = parent.join(dir_name);
+        sibling_dir.is_dir()
+    } else {
+        false
+    }
+}
+
+fn assign_parents(routes: &mut Vec<RouteInfo>) {
+    // Map route id to index for quick lookup
+    let mut id_to_index: HashMap<String, usize> = HashMap::new();
+    for (i, route) in routes.iter().enumerate() {
+        id_to_index.insert(route.route_id.clone(), i);
+    }
+
+    for i in 0..routes.len() {
+        let route = &routes[i];
+        let path = &route.relative_path;
+        if let Some(parent_path) = path.parent() {
+            // Find parent route: a file that is the immediate parent directory's index or layout
+            if let Some(parent_dir) = parent_path.file_name().and_then(|n| n.to_str()) {
+                // Try to find a layout file with the same name as the directory
+                let parent_file = parent_path.join("mod").with_extension("rs");
+                let parent_layout_file = parent_path
+                    .join(format!("_{}", parent_dir))
+                    .with_extension("rs");
+                let parent_index_file = parent_path.join("index").with_extension("rs");
+
+                let candidate_files = [
+                    parent_path.join(format!("{}.rs", parent_dir)),
+                    parent_layout_file,
+                    parent_index_file,
+                ];
+
+                for candidate in candidate_files {
+                    if let Some(candidate_stem) = candidate.file_stem().and_then(|s| s.to_str()) {
+                        let candidate_id = generate_route_id(candidate_stem, &candidate);
+                        if let Some(&parent_idx) = id_to_index.get(&candidate_id) {
+                            routes[i].parent = Some(routes[parent_idx].route_id.clone());
+                            break;
+                        }
+                    }
+                }
+            }
         }
-    })
+    }
 }
 
 fn to_pascal_case(name: &str) -> String {

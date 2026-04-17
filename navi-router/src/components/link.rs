@@ -1,7 +1,7 @@
 use crate::{Navigator, RouterState};
 use gpui::{
     AnyElement, App, InteractiveElement, IntoElement, MouseButton, MouseUpEvent, ParentElement,
-    RenderOnce, Styled, Window, div,
+    RenderOnce, Styled, Window, div, FontWeight, white, rgb,
 };
 use std::time::Duration;
 
@@ -13,38 +13,35 @@ pub enum PreloadType {
     Render,
 }
 
-#[derive(IntoElement)]
 pub struct Link {
-    to: String,
+    href: String,
     search: Option<serde_json::Value>,
     hash: Option<String>,
     state: Option<serde_json::Value>,
     replace: bool,
-    #[allow(dead_code)]
-    reset_scroll: Option<bool>,
     preload: Option<PreloadType>,
-    #[allow(dead_code)]
     preload_delay: Option<Duration>,
     disabled: bool,
-    active_class: Option<String>,
-    inactive_class: Option<String>,
+    exact: bool,
+    active_style: Option<Box<dyn Fn(gpui::Div) -> gpui::Div>>,
+    inactive_style: Option<Box<dyn Fn(gpui::Div) -> gpui::Div>>,
     children: Vec<AnyElement>,
 }
 
 impl Link {
     pub fn new(to: impl Into<String>) -> Self {
         Self {
-            to: to.into(),
+            href: to.into(),
             search: None,
             hash: None,
             state: None,
             replace: false,
-            reset_scroll: None,
             preload: None,
             preload_delay: None,
             disabled: false,
-            active_class: None,
-            inactive_class: None,
+            exact: false,
+            active_style: None,
+            inactive_style: None,
             children: Vec::new(),
         }
     }
@@ -69,13 +66,18 @@ impl Link {
         self
     }
 
-    pub fn active_class(mut self, class: impl Into<String>) -> Self {
-        self.active_class = Some(class.into());
+    pub fn exact(mut self) -> Self {
+        self.exact = true;
         self
     }
 
-    pub fn inactive_class(mut self, class: impl Into<String>) -> Self {
-        self.inactive_class = Some(class.into());
+    pub fn active_style(mut self, f: impl Fn(gpui::Div) -> gpui::Div + 'static) -> Self {
+        self.active_style = Some(Box::new(f));
+        self
+    }
+
+    pub fn inactive_style(mut self, f: impl Fn(gpui::Div) -> gpui::Div + 'static) -> Self {
+        self.inactive_style = Some(Box::new(f));
         self
     }
 
@@ -90,7 +92,7 @@ impl Link {
     }
 
     pub fn to(&self) -> &str {
-        &self.to
+        &self.href
     }
 
     pub fn is_disabled(&self) -> bool {
@@ -106,15 +108,23 @@ impl ParentElement for Link {
 
 impl RenderOnce for Link {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let to = self.to.clone();
+        let href = self.href.clone();
         let replace = self.replace;
         let disabled = self.disabled;
         let search = self.search.clone();
         let hash = self.hash.clone();
         let state = self.state.clone();
+        let exact = self.exact;
 
         let is_active = RouterState::try_global(cx)
-            .map(|router_state: &RouterState| router_state.current_location().pathname == to)
+            .map(|router_state: &RouterState| {
+                let current = &router_state.current_location().pathname;
+                if exact {
+                    current == &href
+                } else {
+                    current.starts_with(&href)
+                }
+            })
             .unwrap_or(false);
 
         let navigator = Navigator::new(window.window_handle());
@@ -122,18 +132,20 @@ impl RenderOnce for Link {
         let mut element = div().cursor_pointer().children(self.children);
 
         if is_active {
-            if let Some(class) = &self.active_class {
-                element = element.child(class.clone());
+            if let Some(f) = self.active_style {
+                element = f(element);
+            } else {
+                element = element.font_weight(FontWeight::BOLD);
             }
-        } else if let Some(class) = &self.inactive_class {
-            element = element.child(class.clone());
+        } else if let Some(f) = self.inactive_style {
+            element = f(element);
         }
 
         element.on_mouse_up(
             MouseButton::Left,
             move |_event: &MouseUpEvent, _window, cx| {
                 if !disabled {
-                    let mut loc = crate::Location::new(&to);
+                    let mut loc = crate::Location::new(&href);
                     if let Some(s) = &search {
                         loc.search = s.clone();
                     }

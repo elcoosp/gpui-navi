@@ -95,7 +95,9 @@ impl RenderOnce for UsersIndexPage {
                     }))
             )
             .children(user_ids.into_iter().map(|id| {
-                Link::new(format!("/users/{}", id)).child(format!("User {}", id))
+                Link::new(format!("/users/{}", id))
+                    .active_style(|el| el.bg(rgb(0x2563eb)).text_color(white()))
+                    .child(format!("User {}", id))
             }))
     }
 }

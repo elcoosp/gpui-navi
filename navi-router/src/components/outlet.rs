@@ -1,12 +1,15 @@
 // navi-router/src/components/outlet.rs
 use crate::RouterState;
-use gpui::{AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, Window, div};
+use gpui::{
+    AnyElement, App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, Window,
+    div,
+};
 use navi_core::context;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-type ComponentConstructor = Box<dyn Fn(&mut App) -> AnyElement + Send + Sync>;
+type ComponentConstructor = Arc<dyn Fn(&mut App) -> AnyElement + Send + Sync>;
 
 static REGISTRY: Lazy<Mutex<HashMap<String, ComponentConstructor>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -18,7 +21,7 @@ where
     REGISTRY
         .lock()
         .unwrap()
-        .insert(route_id.to_string(), Box::new(constructor));
+        .insert(route_id.to_string(), Arc::new(constructor));
 }
 
 #[derive(IntoElement, Default)]
@@ -77,7 +80,7 @@ impl RenderOnce for Outlet {
                 let node = ancestors[depth];
                 log::debug!("Outlet (depth {}) rendering route: {}", depth, node.id);
 
-                let constructor = REGISTRY.lock().unwrap().get(&node.id).cloned();
+                let constructor = REGISTRY.lock().unwrap().get(&node.id).cloned(); // Arc is Clone
                 (node.id.clone(), constructor)
             } else {
                 log::warn!("Outlet: no matching route");

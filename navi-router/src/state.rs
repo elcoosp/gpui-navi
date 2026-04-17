@@ -5,7 +5,7 @@ use crate::history::History;
 use crate::loader::{CacheEntry, LoaderRegistry, LoaderState, LoaderTask};
 use crate::location::{Location, NavigateOptions, ViewTransitionOptions};
 use crate::route_tree::{RouteNode, RouteTree};
-use gpui::{AnyWindowHandle, App, EntityId, Global, WindowId};
+use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -221,7 +221,7 @@ impl RouterState {
 
                         let key_clone = key.clone();
                         let node_id = node.id.clone();
-                        let stale_time = node.loader_stale_time;
+                        let _stale_time = node.loader_stale_time;
 
                         cx.spawn(async move |cx| {
                             let task = cx.update_global::<RouterState, _>(|state, _| {
@@ -445,7 +445,7 @@ impl RouterState {
                     let from_clone = from.clone();
                     let to_clone = to.clone();
                     let node_id = node.id.clone();
-                    let stale_time = node.loader_stale_time;
+                    let _stale_time = node.loader_stale_time;
                     let root_view = self.root_view;
 
                     cx.spawn(async move |cx| {

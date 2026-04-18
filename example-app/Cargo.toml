@@ -4,6 +4,17 @@ version = "0.1.0"
 edition = "2024"
 build = "build.rs"
 
+[package.metadata.bundle]
+name = "Navi GPUI Example"
+identifier = "com.navi.example-app"
+icon = ["icon.png"]
+version = "0.1.0"
+copyright = "MIT"
+category = "public.app-category.developer-tools"
+short_description = "Navi GPUI Example"
+long_description = "Example application for Navi in GPUI."
+osx_url_schemes = ["naviapp"]
+
 [dependencies]
 gpui = { workspace = true }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }

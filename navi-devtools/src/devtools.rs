@@ -26,6 +26,10 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
+// NEW: Import DeepLinkView conditionally
+#[cfg(feature = "nexum")]
+use crate::deep_link_view::DeepLinkView;
+
 actions!(
     devtools,
     [
@@ -34,6 +38,7 @@ actions!(
         SwitchToTab2,
         SwitchToTab3,
         SwitchToTab4,
+        SwitchToTab5, // NEW
         FocusTimelineSearch
     ]
 );
@@ -80,6 +85,8 @@ pub enum DevtoolsTab {
     Cache,
     Timeline,
     State,
+    #[cfg(feature = "nexum")]
+    DeepLinks,
 }
 
 // ---------------------------------------------------------------------------
@@ -468,6 +475,9 @@ pub struct DevtoolsState {
     route_test_params: Option<Entity<InputState>>,
     query_client: QueryClient,
     cache_table_state: Option<Entity<TableState<CacheTableDelegate>>>,
+
+    #[cfg(feature = "nexum")]
+    deep_link_view: Entity<DeepLinkView>,
 }
 
 impl EventEmitter<()> for DevtoolsState {}
@@ -502,6 +512,13 @@ impl DevtoolsState {
         cx.bind_keys([KeyBinding::new("ctrl-3", SwitchToTab3, Some("Devtools"))]);
         cx.bind_keys([KeyBinding::new("cmd-4", SwitchToTab4, Some("Devtools"))]);
         cx.bind_keys([KeyBinding::new("ctrl-4", SwitchToTab4, Some("Devtools"))]);
+
+        #[cfg(feature = "nexum")]
+        {
+            cx.bind_keys([KeyBinding::new("cmd-5", SwitchToTab5, Some("Devtools"))]);
+            cx.bind_keys([KeyBinding::new("ctrl-5", SwitchToTab5, Some("Devtools"))]);
+        }
+
         cx.bind_keys([KeyBinding::new(
             "cmd-f",
             FocusTimelineSearch,
@@ -534,6 +551,9 @@ impl DevtoolsState {
             route_test_params: None,
             query_client,
             cache_table_state: None,
+
+            #[cfg(feature = "nexum")]
+            deep_link_view: cx.new(|_| DeepLinkView::new()),
         };
         this.refresh_log(cx);
         this
@@ -623,6 +643,8 @@ impl DevtoolsState {
             DevtoolsTab::Cache => 1,
             DevtoolsTab::Timeline => 2,
             DevtoolsTab::State => 3,
+            #[cfg(feature = "nexum")]
+            DevtoolsTab::DeepLinks => 4,
         }
     }
 
@@ -632,6 +654,8 @@ impl DevtoolsState {
             1 => DevtoolsTab::Cache,
             2 => DevtoolsTab::Timeline,
             3 => DevtoolsTab::State,
+            #[cfg(feature = "nexum")]
+            4 => DevtoolsTab::DeepLinks,
             _ => DevtoolsTab::Timeline,
         }
     }
@@ -729,7 +753,6 @@ impl DevtoolsState {
                     ),
             );
 
-            // Route Tester
             container = container.child(
                 div()
                     .p_3()
@@ -862,7 +885,6 @@ impl DevtoolsState {
             let layout_count = node_infos.iter().filter(|(_, _, l, _, _, _)| *l).count();
             let loader_count = node_infos.iter().filter(|(_, _, _, _, ld, _)| *ld).count();
 
-            // Recursive tree rendering function
             fn render_node(
                 id: &str,
                 depth: usize,
@@ -994,25 +1016,24 @@ impl DevtoolsState {
 
                 rows.push(row);
 
-                if !is_collapsed
-                    && let Some(children) = children_map.get(id) {
-                        let mut sorted_children = children.clone();
-                        sorted_children.sort();
-                        for child_id in sorted_children {
-                            rows.extend(render_node(
-                                &child_id,
-                                depth + 1,
-                                node_infos_map,
-                                children_map,
-                                collapsed,
-                                matched_chain,
-                                matched_leaf_id,
-                                window_handle,
-                                cx,
-                                window,
-                            ));
-                        }
+                if !is_collapsed && let Some(children) = children_map.get(id) {
+                    let mut sorted_children = children.clone();
+                    sorted_children.sort();
+                    for child_id in sorted_children {
+                        rows.extend(render_node(
+                            &child_id,
+                            depth + 1,
+                            node_infos_map,
+                            children_map,
+                            collapsed,
+                            matched_chain,
+                            matched_leaf_id,
+                            window_handle,
+                            cx,
+                            window,
+                        ));
                     }
+                }
 
                 rows
             }
@@ -1503,8 +1524,7 @@ impl DevtoolsState {
                                                     )
                                                     .when(is_rendered, |d| {
                                                         let path = jump_path.clone().unwrap();
-                                                        let window_handle =
-                                                            window_handle_for_jump;
+                                                        let window_handle = window_handle_for_jump;
                                                         d.child(
                                                             Button::new(format!("jump-btn-{}", ix))
                                                                 .icon(IconName::Play)
@@ -1662,7 +1682,6 @@ impl DevtoolsState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        // Extract theme colors early to avoid borrow conflicts
         let theme = cx.theme();
         let info_color = theme.info;
         let muted_fg = theme.muted_foreground;
@@ -1670,7 +1689,6 @@ impl DevtoolsState {
 
         let entries: Vec<_> = self.query_client.cache.iter().collect();
 
-        // Build rows for the table
         let rows: Vec<CacheEntryRow> = entries
             .into_iter()
             .map(|entry| {
@@ -1686,7 +1704,6 @@ impl DevtoolsState {
 
         let row_count = rows.len();
 
-        // Create or update table state
         if self.cache_table_state.is_none() && !rows.is_empty() {
             let delegate =
                 CacheTableDelegate::new(rows, self.query_client.clone(), cx.entity().downgrade());
@@ -2137,7 +2154,43 @@ impl Render for DevtoolsState {
         let panel_width = px(550.0).min(viewport.width - px(20.0));
         let panel_height = px(450.0).min(viewport.height - px(20.0));
 
-        div()
+        // FIX: Extract TabBar to a variable so we can conditionally append to it
+        let tab_bar = TabBar::new("devtools-tabs")
+            .selected_index(self.tab_index())
+            .on_click(cx.listener(|this, index, _, cx| {
+                this.set_selected_tab(this.tab_from_index(*index), cx);
+            }))
+            .child(
+                Tab::new()
+                    .label("Routes")
+                    .prefix(Icon::new(IconName::Folder).ml_1()),
+            )
+            .child(
+                Tab::new()
+                    .label("Cache")
+                    .prefix(Icon::new(IconName::Inbox).ml_1()),
+            )
+            .child(
+                Tab::new()
+                    .label("Timeline")
+                    .prefix(Icon::new(IconName::Calendar).ml_1()),
+            )
+            .child(
+                Tab::new()
+                    .label("State")
+                    .prefix(Icon::new(IconName::Settings).ml_1()),
+            );
+
+        // FIX: Shadow the variable with the conditional child
+        #[cfg(feature = "nexum")]
+        let tab_bar = tab_bar.child(
+            Tab::new()
+                .label("Deep Links")
+                .prefix(Icon::new(IconName::Globe).ml_1()),
+        );
+
+        // FIX: Extract builder chain to a mutable variable to break the chain
+        let mut panel = div()
             .absolute()
             .bottom_0()
             .right_0()
@@ -2168,82 +2221,64 @@ impl Render for DevtoolsState {
             }))
             .on_action(cx.listener(|this, _: &SwitchToTab4, _window, cx| {
                 this.set_selected_tab(DevtoolsTab::State, cx);
-            }))
-            .on_action(cx.listener(|this, _: &FocusTimelineSearch, window, cx| {
-                this.set_selected_tab(DevtoolsTab::Timeline, cx);
-                this.ensure_timeline_search(window, cx);
-                if let Some(search) = &this.timeline_search {
-                    search.update(cx, |state, cx| state.focus(window, cx));
-                }
-            }))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px_2()
-                    .py_1()
-                    .bg(theme.secondary.opacity(0.95))
-                    .rounded_tl(px(8.0))
-                    .border_b_1()
-                    .border_color(theme.border)
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap_1()
-                                    .child(Icon::new(IconName::Info))
-                                    .child(" Devtools"),
-                            )
-                            .child(
-                                Button::new("close-devtools")
-                                    .icon(IconName::Close)
-                                    .ghost()
-                                    .small()
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.toggle_expanded(window, cx);
-                                    })),
-                            ),
-                    ),
-            )
-            .child(
-                TabBar::new("devtools-tabs")
-                    .selected_index(self.tab_index())
-                    .on_click(cx.listener(|this, index, _, cx| {
-                        this.set_selected_tab(this.tab_from_index(*index), cx);
-                    }))
-                    .child(
-                        Tab::new()
-                            .label("Routes")
-                            .prefix(Icon::new(IconName::Folder).ml_1()),
-                    )
-                    .child(
-                        Tab::new()
-                            .label("Cache")
-                            .prefix(Icon::new(IconName::Inbox).ml_1()),
-                    )
-                    .child(
-                        Tab::new()
-                            .label("Timeline")
-                            .prefix(Icon::new(IconName::Calendar).ml_1()),
-                    )
-                    .child(
-                        Tab::new()
-                            .label("State")
-                            .prefix(Icon::new(IconName::Settings).ml_1()),
-                    ),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .p_3()
-                    .overflow_y_scrollbar()
-                    .child(match self.selected_tab {
+            }));
+
+        // FIX: Conditionally append the deep links action
+        #[cfg(feature = "nexum")]
+        {
+            panel = panel.on_action(cx.listener(|this, _: &SwitchToTab5, _window, cx| {
+                this.set_selected_tab(DevtoolsTab::DeepLinks, cx);
+            }));
+        }
+
+        // FIX: Resume the builder chain
+        panel =
+            panel
+                .on_action(cx.listener(|this, _: &FocusTimelineSearch, window, cx| {
+                    this.set_selected_tab(DevtoolsTab::Timeline, cx);
+                    this.ensure_timeline_search(window, cx);
+                    if let Some(search) = &this.timeline_search {
+                        search.update(cx, |state, cx| state.focus(window, cx));
+                    }
+                }))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .px_2()
+                        .py_1()
+                        .bg(theme.secondary.opacity(0.95))
+                        .rounded_tl(px(8.0))
+                        .border_b_1()
+                        .border_color(theme.border)
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_1()
+                                        .child(Icon::new(IconName::Info))
+                                        .child(" Devtools"),
+                                )
+                                .child(
+                                    Button::new("close-devtools")
+                                        .icon(IconName::Close)
+                                        .ghost()
+                                        .small()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.toggle_expanded(window, cx);
+                                        })),
+                                ),
+                        ),
+                )
+                .child(tab_bar) // Pass the extracted variable here
+                .child(div().flex_1().p_3().overflow_y_scrollbar().child(
+                    match self.selected_tab {
                         DevtoolsTab::Routes => {
                             self.render_routes_tab(window, cx).into_any_element()
                         }
@@ -2252,8 +2287,11 @@ impl Render for DevtoolsState {
                             self.render_timeline_tab(window, cx).into_any_element()
                         }
                         DevtoolsTab::State => self.render_state_tab(cx).into_any_element(),
-                    }),
-            )
-            .into_any_element()
+                        // Match arm cfg is perfectly valid
+                        #[cfg(feature = "nexum")]
+                        DevtoolsTab::DeepLinks => self.deep_link_view.clone().into_any_element(),
+                    },
+                ));
+        panel.into_any_element()
     }
 }

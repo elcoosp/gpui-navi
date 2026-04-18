@@ -10,8 +10,6 @@ use navi_router::{
 };
 
 #[cfg(feature = "nexum")]
-use navi_devtools::DeepLinkView;
-#[cfg(feature = "nexum")]
 use navi_router::deep_link;
 
 mod routes;
@@ -23,24 +21,16 @@ use route_tree::build_route_tree;
 struct AppView {
     router_provider: RouterProvider,
     devtools: Entity<DevtoolsState>,
-    #[cfg(feature = "nexum")]
-    deep_link_view: Entity<DeepLinkView>,
 }
 
 impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut base = div()
+        div()
             .size_full()
             .relative()
             .child(self.router_provider.clone().child(Outlet::new()))
-            .child(self.devtools.clone());
-
-        #[cfg(feature = "nexum")]
-        {
-            base = base.child(self.deep_link_view.clone());
-        }
-
-        base.children(Root::render_dialog_layer(window, cx))
+            .child(self.devtools.clone())
+            .children(Root::render_dialog_layer(window, cx))
             .children(Root::render_sheet_layer(window, cx))
             .children(Root::render_notification_layer(window, cx))
     }
@@ -51,6 +41,12 @@ fn main() {
     log::info!("Starting Navi example app with file-based routing");
 
     let app = gpui_platform::application();
+
+    // STEP 1: Setup deep links BEFORE app.run() consumes the handle!
+    // This perfectly matches your working example.
+    #[cfg(feature = "nexum")]
+    let deep_link_handle = deep_link::setup(&app, vec!["naviapp".to_string()]);
+
     let app = app.with_assets(Assets);
 
     app.run(move |cx: &mut App| {
@@ -86,27 +82,19 @@ fn main() {
 
                 route_tree::register_routes(cx);
 
-                // Initialize deep linking if feature is enabled
+                // STEP 2: Attach the listener INSIDE the window context!
+                // This perfectly matches your working example's attach_deep_link call.
                 #[cfg(feature = "nexum")]
-                {
-                    // FIX: GPUI's Application wraps an OS-level singleton. Calling this
-                    // inside .run() safely retrieves a handle to the active application.
-                    let app_handle = gpui_platform::application();
-
-                    deep_link::init(&app_handle, vec!["naviapp".to_string()], window_handle, cx);
-                }
+                deep_link::attach(deep_link_handle, window_handle, cx);
 
                 let query_client = RouterState::global(cx).query_client.clone();
-                let devtools = cx.new(|cx| DevtoolsState::new(query_client, cx));
 
-                #[cfg(feature = "nexum")]
-                let deep_link_view = cx.new(|_cx| DeepLinkView::new());
+                // Devtools now creates and manages the DeepLinkView internally!
+                let devtools = cx.new(|cx| DevtoolsState::new(query_client, cx));
 
                 let root_view = cx.new(|_cx| AppView {
                     router_provider,
                     devtools,
-                    #[cfg(feature = "nexum")]
-                    deep_link_view,
                 });
 
                 RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));

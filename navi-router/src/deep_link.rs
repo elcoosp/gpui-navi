@@ -39,8 +39,20 @@ pub fn subscribe_events() -> Option<broadcast::Receiver<DeepLinkEvent>> {
     EVENT_TX.lock().unwrap().as_ref().map(|tx| tx.subscribe())
 }
 
-// Opaque wrapper so we don't have to expose nexum_core types in your public API
 pub struct DeepLinkHandle(pub(crate) nexum_core::DeepLinkHandle);
+
+/// Ensures custom scheme URLs are treated as having a path, not a host.
+/// e.g., "naviapp://users" becomes "naviapp:///users"
+fn normalize_url(url: &str) -> String {
+    if let Some(idx) = url.find("://") {
+        let scheme = &url[..idx];
+        let rest = &url[idx + 3..];
+        if !rest.starts_with('/') {
+            return format!("{}:///{}", scheme, rest);
+        }
+    }
+    url.to_string()
+}
 
 /// Step 1: Setup OS-level scheme listener.
 /// MUST be called BEFORE `app.run()` consumes the Application handle!
@@ -84,8 +96,14 @@ pub fn attach(handle: DeepLinkHandle, window: AnyWindowHandle, cx: &mut App) {
     cx.spawn(move |cx: &mut AsyncApp| {
         let cx = cx.clone();
         async move {
-            while let Some(url) = mpsc_rx.recv().await {
-                info!("🌐 [Async Task] Picked up URL: {}", url);
+            while let Some(raw_url) = mpsc_rx.recv().await {
+                info!("🌐 [Async Task] Picked up URL: {}", raw_url);
+
+                // FIX: Normalize the URL so "naviapp://users" becomes "naviapp:///users"
+                let url = normalize_url(&raw_url);
+                if url != raw_url {
+                    info!("🔧 [Async Task] Normalized URL to: {}", url);
+                }
 
                 let (status, matched_route) = match crate::Location::from_url(&url) {
                     Ok(loc) => {
@@ -122,7 +140,7 @@ pub fn attach(handle: DeepLinkHandle, window: AnyWindowHandle, cx: &mut App) {
 
                 emit_event(DeepLinkEvent {
                     timestamp: Local::now(),
-                    url,
+                    url, // Emit the normalized URL
                     status,
                     matched_route,
                 });

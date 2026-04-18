@@ -19,3 +19,5 @@ pub use route_tree::{RouteNode, RoutePattern, RouteTree, Segment};
 pub use state::AnyData;
 pub use state::{RouteDef, RouterEvent, RouterState};
 pub use validation::{ValidateSearch, ValidationError, ValidationResult};
+#[cfg(feature = "nexum")]
+pub mod deep_link;

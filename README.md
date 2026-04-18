@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/elcoosp/gpui-navi/main/assets/logos/horizontal.svg">
-      <img src="https://raw.githubusercontent.com/elcoosp/rs-query/main/assets/logos/horizontal.svg" alt="rs-query horizontal logo" width="500">
+      <img src="https://raw.githubusercontent.com/elcoosp/gpui-navi/main/assets/logos/horizontal.svg" alt="rs-query horizontal logo" width="500">
   </a>
 </p>
 

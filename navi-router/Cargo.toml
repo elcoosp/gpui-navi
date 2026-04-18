@@ -28,9 +28,14 @@ valico = { version = "4.0", optional = true }
 schemars = { version = "0.8", optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 rs-query = { git = "https://github.com/elcoosp/rs-query", features = ["devtools"] }
+# Nexum integration (optional)
+nexum-core = { path = "../../nexum/nexum-core", optional = true }
+nexum-gpui = { path = "../../nexum/nexum-gpui", optional = true }
+tokio = { version = "1", features = ["sync", "rt"], optional = true }
 
 [features]
 default = []
+nexum = ["dep:nexum-core", "dep:nexum-gpui", "dep:tokio"]
 validator = ["dep:validator"]
 garde = ["dep:garde"]
 validify = ["dep:validify"]

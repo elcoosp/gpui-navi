@@ -1,3 +1,4 @@
+use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
@@ -16,5 +17,10 @@ impl RenderOnce for AboutPage {
 define_route!(
     AboutRoute,
     path: "/about",
+    meta: {
+        let mut map = std::collections::HashMap::new();
+        map.insert("title".to_string(), serde_json::json!("About Navi"));
+        map
+    },
     component: AboutPage,
 );

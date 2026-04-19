@@ -1,52 +1,103 @@
 use crate::RouterState;
-use gpui::{App, IntoElement, RenderOnce, Window, div};
+use gpui::{
+    App, Element, GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, ScrollHandle,
+    Window, point,
+};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-static SCROLL_POSITIONS: Lazy<Mutex<HashMap<String, f32>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static SCROLL_POSITIONS: Lazy<Mutex<HashMap<String, f32>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-pub struct ScrollRestoration;
-
-impl Default for ScrollRestoration {
-    fn default() -> Self {
-        Self::new()
-    }
+pub struct ScrollRestoration {
+    scroll_handle: ScrollHandle,
 }
 
 impl ScrollRestoration {
-    pub fn new() -> Self {
-        Self
+    pub fn new(scroll_handle: ScrollHandle) -> Self {
+        Self { scroll_handle }
     }
 
-    pub fn save(path: &str, y: f32) {
-        SCROLL_POSITIONS.lock().unwrap().insert(path.to_string(), y);
+    fn save(path: &str, offset: f32) {
+        SCROLL_POSITIONS.lock().unwrap().insert(path.to_string(), offset);
     }
 
-    pub fn get(path: &str) -> Option<f32> {
+    fn get(path: &str) -> Option<f32> {
         SCROLL_POSITIONS.lock().unwrap().get(path).copied()
     }
 }
 
-impl RenderOnce for ScrollRestoration {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        if let Some(state) = RouterState::try_global(cx) {
+impl Element for ScrollRestoration {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<gpui::ElementId> {
+        None
+    }
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let layout_id = window.request_layout(Default::default(), [], cx);
+        (layout_id, ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: gpui::Bounds<Pixels>,
+        _state: &mut Self::RequestLayoutState,
+        _window: &mut Window,
+        cx: &mut App,
+    ) {
+        let state = RouterState::try_global(cx);
+        if let Some(state) = state {
             let path = state.current_location().pathname.clone();
-            // In a real implementation, you'd apply the saved scroll position to the scrollable element.
-            // Here we just log it.
-            if let Some(y) = Self::get(&path) {
-                log::debug!("Restoring scroll position for {}: {}", path, y);
+            let offset_y = self.scroll_handle.offset().y;
+            let offset_val = offset_y.as_f32(); // use public method instead of .0
+            if offset_val != 0.0 {
+                Self::save(&path, offset_val);
             }
         }
-        div()
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: gpui::Bounds<Pixels>,
+        _state: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let state = RouterState::try_global(cx);
+        if let Some(state) = state {
+            let path = state.current_location().pathname.clone();
+            if let Some(saved_y) = Self::get(&path) {
+                let scroll_handle = self.scroll_handle.clone();
+                // Use Pixels::from(saved_y) instead of tuple struct constructor
+                let saved = point(scroll_handle.offset().x, Pixels::from(saved_y));
+                window.on_next_frame(move |window, _| {
+                    scroll_handle.set_offset(saved);
+                    window.refresh();
+                });
+            }
+        }
     }
 }
 
 impl IntoElement for ScrollRestoration {
-    type Element = gpui::Component<Self>;
-
+    type Element = Self;
     fn into_element(self) -> Self::Element {
-        gpui::Component::new(self)
+        self
     }
 }

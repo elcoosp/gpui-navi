@@ -5,6 +5,7 @@
 #[path = "routes/about.rs"] pub mod about;
 #[path = "routes/admin/dashboard.rs"] pub mod admin_dashboard;
 #[path = "routes/admin/mod.rs"] pub mod admin;
+#[path = "routes/awaited.rs"] pub mod awaited;
 #[path = "routes/blocking.rs"] pub mod blocking;
 #[path = "routes/dashboard/analytics.rs"] pub mod dashboard_analytics;
 #[path = "routes/dashboard/index.rs"] pub mod dashboard_index;
@@ -14,6 +15,7 @@
 #[path = "routes/index.rs"] pub mod index;
 #[path = "routes/lifecycle.rs"] pub mod lifecycle;
 #[path = "routes/login.rs"] pub mod login;
+#[path = "routes/scroll.rs"] pub mod scroll;
 #[path = "routes/settings.rs"] pub mod settings;
 #[path = "routes/users/$id.rs"] pub mod users_param_id;
 #[path = "routes/users/index.rs"] pub mod users_index;
@@ -40,6 +42,12 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
+        let mut node = scroll::ScrollRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
         let mut node = index::IndexRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
@@ -53,6 +61,12 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 
     {
         let mut node = blocking::BlockingRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = awaited::AwaitedDemoRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -168,9 +182,11 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 pub fn register_routes(cx: &mut gpui::App) {
 about::AboutRoute::register(cx);
 __root::RootRoute::register(cx);
+scroll::ScrollRoute::register(cx);
 index::IndexRoute::register(cx);
 login::LoginRoute::register(cx);
 blocking::BlockingRoute::register(cx);
+awaited::AwaitedDemoRoute::register(cx);
 lifecycle::LifecycleRoute::register(cx);
 settings::SettingsRoute::register(cx);
 #[cfg(feature = "garde")] validation_test_garde::GardeTestRoute::register(cx);

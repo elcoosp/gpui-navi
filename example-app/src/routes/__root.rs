@@ -35,6 +35,8 @@ impl RenderOnce for RootLayout {
                     .child(Link::new("/admin").child("🔒 Admin"))
                     .child(Link::new("/lifecycle").child("🔄 Lifecycle"))
                     .child(Link::new("/blocking").child("🚫 Blocking"))
+                    .child(Link::new("/scroll").child("📜 Scroll"))
+                    .child(Link::new("/awaited").child("⏳ Awaited"))
             )
             .child(div().flex_1().p_4().child(Outlet::new()))
     }

@@ -1,5 +1,5 @@
 use crate::components::outlet::OutletDepth;
-use crate::{Location, RouteTree, RouterState};
+use crate::{Location, RouteTree, RouterState, RouterOptions};
 use gpui::{
     AnyElement, AnyWindowHandle, App, IntoElement, ParentElement, RenderOnce, Window, WindowId, div,
 };
@@ -22,6 +22,17 @@ impl RouterProvider {
         route_tree: RouteTree,
         cx: &mut App,
     ) -> Self {
+        Self::new_with_options(window_id, window_handle, initial_location, route_tree, RouterOptions::default(), cx)
+    }
+
+    pub fn new_with_options(
+        window_id: WindowId,
+        window_handle: AnyWindowHandle,
+        initial_location: Location,
+        route_tree: RouteTree,
+        options: RouterOptions,
+        cx: &mut App,
+    ) -> Self {
         crate::event_bus::init_event_log(cx);
         log::info!(
             "RouterProvider::new: initializing context for window {:?}",
@@ -29,11 +40,12 @@ impl RouterProvider {
         );
         context::init_window(window_id);
         let route_tree = Rc::new(route_tree);
-        let state = RouterState::new(
+        let state = RouterState::new_with_options(
             initial_location.clone(),
             window_id,
             window_handle,
             route_tree.clone(),
+            options,
         );
         cx.set_global(state);
         log::info!("RouterProvider created successfully");

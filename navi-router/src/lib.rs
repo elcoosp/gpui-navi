@@ -18,5 +18,5 @@ pub use redirect::{NotFound, Redirect, not_found, redirect};
 pub use route_tree::{
     BeforeLoadContext, BeforeLoadResult, RouteNode, RoutePattern, RouteTree, Segment,
 };
-pub use state::{AnyData, LoaderOutcome, RouteDef, RouterEvent, RouterState};
+pub use state::{AnyData, LoaderOutcome, RouteDef, RouterEvent, RouterState, RouterOptions, NotFoundMode};
 pub use validation::{ValidateSearch, ValidationError, ValidationResult};

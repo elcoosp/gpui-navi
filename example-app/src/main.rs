@@ -1,4 +1,3 @@
-use gpui::ScrollHandle;
 use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;

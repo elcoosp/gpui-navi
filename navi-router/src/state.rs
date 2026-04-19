@@ -99,11 +99,30 @@ pub enum LoaderState {
     Error(String),
 }
 
+#[derive(Clone)]
 pub enum NotFoundMode {
     /// Render the global 404 route.
     Root,
     /// Render the closest scoped 404 route.
     Fuzzy,
+}
+
+/// Options for configuring the router.
+#[derive(Clone)]
+pub struct RouterOptions {
+    pub default_pending_ms: u64,
+    pub default_pending_min_ms: u64,
+    pub not_found_mode: NotFoundMode,
+}
+
+impl Default for RouterOptions {
+    fn default() -> Self {
+        Self {
+            default_pending_ms: 1000,
+            default_pending_min_ms: 500,
+            not_found_mode: NotFoundMode::Root,
+        }
+    }
 }
 
 /// The central router state.
@@ -143,6 +162,22 @@ impl RouterState {
         window_handle: AnyWindowHandle,
         route_tree: Rc<RouteTree>,
     ) -> Self {
+        Self::new_with_options(
+            initial,
+            window_id,
+            window_handle,
+            route_tree,
+            RouterOptions::default(),
+        )
+    }
+
+    pub fn new_with_options(
+        initial: Location,
+        window_id: WindowId,
+        window_handle: AnyWindowHandle,
+        route_tree: Rc<RouteTree>,
+        options: RouterOptions,
+    ) -> Self {
         let current_match = route_tree
             .match_path(&initial.pathname)
             .map(|(params, node)| (params, node.clone()));
@@ -161,10 +196,10 @@ impl RouterState {
             loader_factories: HashMap::new(),
             window_handle,
             root_view: None,
-            not_found_mode: NotFoundMode::Root,
+            not_found_mode: options.not_found_mode,
             not_found_data: None,
-            default_pending_ms: 1000,
-            default_pending_min_ms: 500,
+            default_pending_ms: options.default_pending_ms,
+            default_pending_min_ms: options.default_pending_min_ms,
         }
     }
 
@@ -340,7 +375,11 @@ impl RouterState {
             && node.has_loader
             && let Some(factory) = self.loader_factories.get(&node.id)
         {
-            let query = factory(&params);
+            let stale_time = node.loader_stale_time.unwrap_or(std::time::Duration::ZERO);
+            let gc_time = node
+                .loader_gc_time
+                .unwrap_or(std::time::Duration::from_secs(300));
+            let query = factory(&params).stale_time(stale_time).gc_time(gc_time);
             let key = query.key.clone();
             let client = self.query_client.clone();
             let fetch_fn = query.fetch_fn.clone();
@@ -555,6 +594,11 @@ impl RouterState {
         if node.id != R::name() {
             return None;
         }
+        let _deps_json = node
+            .loader_deps
+            .as_ref()
+            .map(|f| f(&self.current_location().search))
+            .unwrap_or(serde_json::Value::Null);
         let key = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
             .with("params", serde_json::to_string(params).ok()?);
@@ -572,9 +616,18 @@ impl RouterState {
         if node.id != R::name() {
             return LoaderState::Idle;
         }
+        let deps_json = node
+            .loader_deps
+            .as_ref()
+            .map(|f| f(&self.current_location().search))
+            .unwrap_or(serde_json::Value::Null);
         let key = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
-            .with("params", serde_json::to_string(params).unwrap_or_default());
+            .with("params", serde_json::to_string(params).unwrap_or_default())
+            .with(
+                "deps",
+                serde_json::to_string(&deps_json).unwrap_or_default(),
+            );
 
         if self.query_client.is_in_flight(&key) {
             LoaderState::Loading

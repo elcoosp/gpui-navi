@@ -1,4 +1,3 @@
-use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
@@ -8,7 +7,7 @@ define_route!(
     AdminRoute,
     path: "/admin",
     is_layout: true,
-    before_load: |ctx| async move {
+    before_load: |_ctx| async move {
         // Simulate auth check - toggle to test
         let is_authenticated = false; // change to true to allow access
         if !is_authenticated {

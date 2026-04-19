@@ -99,8 +99,9 @@ fn parse_query_string(query: &str) -> serde_json::Value {
         .collect();
     serde_json::Value::Object(map)
 }
+
 /// Options for navigation, matching TanStack Router's NavigateOptions.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub struct NavigateOptions {
     pub replace: bool,
     pub reset_scroll: Option<bool>,
@@ -111,14 +112,14 @@ pub struct NavigateOptions {
     pub href: Option<String>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub struct ScrollIntoViewOptions {
     pub behavior: Option<String>,
     pub block: Option<String>,
     pub inline: Option<String>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub struct ViewTransitionOptions {
     pub types: Vec<String>,
 }

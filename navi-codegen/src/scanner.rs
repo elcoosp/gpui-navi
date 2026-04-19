@@ -90,7 +90,7 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
         a_depth.cmp(&b_depth)
     });
 
-    // Check for duplicate route patterns (allow layout + index pairs)
+    // Duplicate pattern detection (simplified - just warn)
     let mut pattern_map: HashMap<String, Vec<&RouteInfo>> = HashMap::new();
     for route in &routes {
         pattern_map
@@ -98,17 +98,10 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
             .or_default()
             .push(route);
     }
-    for (_pattern, routes_with_pattern) in pattern_map {
-            // Allow if routes have different cfg features (they won't be compiled together)
-            let mut features: HashSet<Option<String>> = HashSet::new();
-            for r in &routes_with_pattern {
-                features.insert(r.cfg_feature.clone());
-            }
-            if features.len() == routes_with_pattern.len() {
-                continue; // all have distinct cfg features, allowed
-            }
-            
-            // Otherwise, allow only if one is a layout and the other is an index route that is a child of that layout
+    for (pattern, routes_with_pattern) in pattern_map {
+        if routes_with_pattern.len() > 1 {
+            eprintln!("Warning: Duplicate route pattern '{}' detected. Ensure layout/index are properly nested.", pattern);
+        }
     }
 
     Ok(routes)
@@ -321,7 +314,11 @@ fn assign_parents(routes: &mut Vec<RouteInfo>) {
             .unwrap_or(Path::new(""))
             .to_path_buf();
         if let Some(layout_id) = dir_to_layout.get(&search) {
-            route.parent = Some(layout_id.clone());
+            if layout_id != &route.route_id {
+                route.parent = Some(layout_id.clone());
+            } else {
+                route.parent = root_id.clone();
+            }
         } else {
             route.parent = root_id.clone();
         }

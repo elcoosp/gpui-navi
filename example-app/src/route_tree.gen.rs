@@ -155,7 +155,7 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 
     {
         let mut node = _auth::AuthLayoutRoute::build_node();
-        node.parent = Some("AuthLayoutRoute".into());
+        node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
 

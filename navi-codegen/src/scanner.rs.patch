@@ -1,24 +1,15 @@
 --- a/navi-codegen/src/scanner.rs
 +++ b/navi-codegen/src/scanner.rs
-@@ -85,10 +85,20 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
-             .push(route);
-     }
-     for (pattern, routes_with_pattern) in pattern_map {
-         if routes_with_pattern.len() > 1 {
-+            // Allow if routes have different cfg features (they won't be compiled together)
-+            let mut features: HashSet<Option<String>> = HashSet::new();
-+            for r in &routes_with_pattern {
-+                features.insert(r.cfg_feature.clone());
+@@ -293,7 +293,11 @@ fn assign_parents(routes: &mut Vec<RouteInfo>) {
+             .unwrap_or(Path::new(""))
+             .to_path_buf();
+         if let Some(layout_id) = dir_to_layout.get(&search) {
+-            route.parent = Some(layout_id.clone());
++            if layout_id != &route.route_id {
++                route.parent = Some(layout_id.clone());
++            } else {
++                route.parent = root_id.clone();
 +            }
-+            if features.len() == routes_with_pattern.len() {
-+                continue; // all have distinct cfg features, allowed
-+            }
-+
-+            // Otherwise, allow only if one is a layout and the other is an index route that is a child of that layout
-             let mut allowed = true;
-             for r in &routes_with_pattern {
-                 if !r.is_layout && !r.is_index {
-                     allowed = false;
-                     break;
-                 }
-             }
+         } else {
+             route.parent = root_id.clone();
+         }

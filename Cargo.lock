@@ -4189,6 +4189,7 @@ name = "navi-codegen"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "log",
  "proc-macro2",
  "quote",
  "regex",

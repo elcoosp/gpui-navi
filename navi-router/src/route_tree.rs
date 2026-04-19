@@ -385,11 +385,23 @@ impl RouteTree {
 
     pub fn ancestors(&self, route_id: &str) -> Vec<&RouteNode> {
         let mut chain = Vec::new();
+        let mut depth = 0;
+        const MAX_DEPTH: usize = 100;
         let mut current_id = Some(route_id.to_string());
         while let Some(id) = current_id {
             if let Some(node) = self.nodes.get(&id) {
                 chain.push(node);
+                // Cycle detection
+                if chain.len() > 100 {
+                    log::error!("RouteTree::ancestors exceeded depth limit (100) - probable cycle involving {}", route_id);
+                    break;
+                }
                 current_id = node.parent.clone();
+            depth += 1;
+            if depth > MAX_DEPTH {
+                log::error!("RouteTree::ancestors exceeded depth limit ({}) - probable cycle involving {}", MAX_DEPTH, route_id);
+                break;
+            }
             } else {
                 log::warn!("RouteTree::ancestors: node '{}' not found", id);
                 break;

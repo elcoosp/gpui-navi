@@ -194,6 +194,8 @@ impl RouterState {
     }
 
     fn commit_navigation(&mut self, loc: Location, options: NavigateOptions, cx: &mut App) {
+        log::debug!("commit_navigation: {}", loc.pathname);
+        log::debug!("commit_navigation to: {}", loc.pathname);
         let prev_route_ids: HashSet<String> = self
             .current_match
             .as_ref()
@@ -247,11 +249,14 @@ impl RouterState {
             self.history.push(loc.clone());
         }
 
-        self.trigger_loader_with_locations(None, loc, cx);
+        // self.trigger_loader_with_locations(None, loc, cx);
     }
 
     pub fn navigate(&mut self, loc: Location, options: NavigateOptions, cx: &mut App) {
+        log::debug!("navigate called: {}", loc.pathname);
+        log::debug!("navigate called with: {}", loc.pathname);
         if !options.ignore_blocker {
+        log::debug!("Checking blockers, count: {}", self.blockers.len());
             let current = self.current_location();
             let blockers: Vec<Blocker> = self.blockers.values().cloned().collect();
             if !blockers.is_empty() {
@@ -265,6 +270,7 @@ impl RouterState {
                             futures.push(blocker.should_allow(&current, &loc));
                         }
                         let results = futures::future::join_all(futures).await;
+        log::debug!("Async blocker results: {:?}", results);
                         if results.iter().all(|&allow| allow) {
                             let _ = cx.update(|cx| {
                                 RouterState::update(cx, |state, cx| {

@@ -4268,6 +4268,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "navi-test"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "gpui",
+ "navi-router",
+ "tokio",
+]
+
+[[package]]
 name = "ndk-sys"
 version = "0.6.0+11769913"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "navi-test",
     "stubs/history-navigation",
     "navi-core",
     "navi-router",

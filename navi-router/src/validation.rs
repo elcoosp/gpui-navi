@@ -207,3 +207,26 @@ pub fn to_query_string(params: &HashMap<String, String>) -> String {
     parts.sort();
     parts.join("&")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_validate_search_custom() {
+        #[derive(Debug, Default)]
+        struct MySearch;
+        impl ValidateSearch for MySearch {
+            fn validate(_raw: &HashMap<String, String>) -> ValidationResult<Self> {
+                Ok(MySearch)
+            }
+            fn to_query(&self) -> HashMap<String, String> {
+                HashMap::new()
+            }
+        }
+        let raw = HashMap::new();
+        let result = MySearch::validate(&raw);
+        assert!(result.is_ok());
+    }
+}

@@ -49,3 +49,37 @@ impl Blocker {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::location::Location;
+    use futures::executor::block_on;
+
+    #[test]
+    fn test_sync_blocker_allows() {
+        let blocker = Blocker::new_sync(|_, _| false);
+        let from = Location::new("/from");
+        let to = Location::new("/to");
+        let allow = block_on(blocker.should_allow(&from, &to));
+        assert!(allow);
+    }
+
+    #[test]
+    fn test_sync_blocker_blocks() {
+        let blocker = Blocker::new_sync(|_, _| true);
+        let from = Location::new("/from");
+        let to = Location::new("/to");
+        let allow = block_on(blocker.should_allow(&from, &to));
+        assert!(!allow);
+    }
+
+    #[test]
+    fn test_async_blocker() {
+        let blocker = Blocker::new(|_, _| async move { true });
+        let from = Location::new("/from");
+        let to = Location::new("/to");
+        let allow = block_on(blocker.should_allow(&from, &to));
+        assert!(!allow);
+    }
+}

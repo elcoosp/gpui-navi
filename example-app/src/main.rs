@@ -1,15 +1,11 @@
-use gpui::prelude::*;
 use gpui::*;
 use gpui_component::Root;
 use gpui_component_assets::Assets;
 use navi_devtools::DevtoolsState;
 use navi_router::{
-    Location, RouterState,
+    Location, NotFoundMode, RouterOptions, RouterState,
     components::{Outlet, RouterProvider},
 };
-
-#[cfg(feature = "nexum")]
-use navi_router::deep_link;
 
 mod route_tree {
     include!("route_tree.gen.rs");
@@ -36,70 +32,58 @@ impl Render for AppView {
 
 fn main() {
     env_logger::init();
-    log::info!("Starting Navi example app with file-based routing");
 
-    let app = gpui_platform::application();
+    gpui_platform::application()
+        .with_assets(Assets)
+        .run(|cx: &mut App| {
+            cx.init_colors();
+            gpui_component::init(cx);
 
-    // STEP 1: Setup deep links BEFORE app.run() consumes the handle!
-    // This perfectly matches your working example.
-    #[cfg(feature = "nexum")]
-    let deep_link_handle = deep_link::setup(&app, vec!["naviapp".to_string()]);
+            let tree = build_route_tree();
 
-    let app = app.with_assets(Assets);
+            cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                        None,
+                        size(px(900.0), px(700.0)),
+                        cx,
+                    ))),
+                    ..Default::default()
+                },
+                |window, cx| {
+                    let window_id = window.window_handle().window_id();
+                    let window_handle = window.window_handle();
+                    let initial = Location::new("/");
 
-    app.run(move |cx: &mut App| {
-        cx.init_colors();
-        gpui_component::init(cx);
+                    let router_provider = RouterProvider::new_with_options(
+                        window_id,
+                        window_handle,
+                        initial,
+                        tree,
+                        RouterOptions {
+                            default_pending_ms: 500,
+                            default_pending_min_ms: 200,
+                            not_found_mode: NotFoundMode::Fuzzy,
+                        },
+                        cx,
+                    );
 
-        log::info!("Building route tree from generated code");
-        let tree = build_route_tree();
+                    route_tree::register_routes(cx);
 
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-                    None,
-                    size(px(900.0), px(700.0)),
-                    cx,
-                ))),
-                ..Default::default()
-            },
-            |window, cx| {
-                let window_id = window.window_handle().window_id();
-                let window_handle = window.window_handle();
-                let initial = Location::new("/");
+                    let query_client = RouterState::global(cx).query_client.clone();
+                    let devtools = cx.new(|cx| DevtoolsState::new(query_client, cx));
 
-                let router_provider = RouterProvider::new(
-                    window_id,
-                    window_handle,
-                    initial,
-                    tree,
-                    cx,
-                );
+                    let root_view = cx.new(|_cx| AppView {
+                        router_provider,
+                        devtools,
+                    });
 
-                route_tree::register_routes(cx);
+                    RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
+                    cx.new(|cx| Root::new(root_view, window, cx))
+                },
+            )
+            .unwrap();
 
-                // STEP 2: Attach the listener INSIDE the window context!
-                // This perfectly matches your working example's attach_deep_link call.
-                #[cfg(feature = "nexum")]
-                deep_link::attach(deep_link_handle, window_handle, cx);
-
-                let query_client = RouterState::global(cx).query_client.clone();
-
-                // Devtools now creates and manages the DeepLinkView internally!
-                let devtools = cx.new(|cx| DevtoolsState::new(query_client, cx));
-
-                let root_view = cx.new(|_cx| AppView {
-                    router_provider,
-                    devtools,
-                });
-
-                RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
-                cx.new(|cx| Root::new(root_view, window, cx))
-            },
-        )
-        .unwrap();
-
-        cx.activate(true);
-        log::info!("Application running");
-    });
+            cx.activate(true);
+        });
 }

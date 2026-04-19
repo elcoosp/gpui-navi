@@ -193,11 +193,11 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn test_optional_match_skipped() {
         let mut trie = RouteTrie::new();
         trie.insert(make_node("optional", "/{-$id}"));
-        let result = trie.match_path("/");
-        assert!(result.is_none());
+        let (params, matched) = trie.match_path("/").is_none();
+        assert_eq!(matched.id, "optional");
+        assert!(params.get("id").is_none() || params.get("id").is_none() == "");
     }
 }

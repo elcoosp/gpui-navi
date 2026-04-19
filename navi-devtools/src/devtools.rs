@@ -1,4 +1,4 @@
-//! Developer tools for Navi router.
+//! Developer tools for Navi router - Enhanced with Chunk 1-7 features.
 
 use gpui::{
     AnyWindowHandle, App, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight, Hsla,
@@ -18,7 +18,7 @@ use gpui_component::{
     v_virtual_list,
 };
 use navi_router::{
-    Navigator, RouterEvent, RouterState,
+    Navigator, NotFoundMode, RouterEvent, RouterState,
     event_bus::{self, TimedEvent},
 };
 use rs_query::QueryClient;
@@ -26,7 +26,6 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
-// NEW: Import DeepLinkView conditionally
 #[cfg(feature = "nexum")]
 use crate::deep_link_view::DeepLinkView;
 
@@ -38,7 +37,7 @@ actions!(
         SwitchToTab2,
         SwitchToTab3,
         SwitchToTab4,
-        SwitchToTab5, // NEW
+        SwitchToTab5,
         FocusTimelineSearch
     ]
 );
@@ -679,7 +678,7 @@ impl DevtoolsState {
     }
 
     // -----------------------------------------------------------------------
-    // Routes tab
+    // Routes tab - ENHANCED with meta, stale/gc, beforeLoad
     // -----------------------------------------------------------------------
 
     fn render_routes_tab(
@@ -866,11 +865,21 @@ impl DevtoolsState {
                 HashSet::new()
             };
 
-            let mut node_infos_map: HashMap<String, (String, bool, bool, bool)> = HashMap::new();
-            for (id, pattern, is_layout, is_index, has_loader, _) in &node_infos {
-                node_infos_map.insert(
-                    id.clone(),
-                    (pattern.clone(), *is_layout, *is_index, *has_loader),
+            // Build enhanced node info map including meta, stale/gc times, before_load
+            let mut node_details: HashMap<String, EnhancedNodeInfo> = HashMap::new();
+            for node in state.route_tree.all_nodes() {
+                node_details.insert(
+                    node.id.clone(),
+                    EnhancedNodeInfo {
+                        pattern: node.pattern.raw.clone(),
+                        is_layout: node.is_layout,
+                        is_index: node.is_index,
+                        has_loader: node.has_loader,
+                        stale_time: node.loader_stale_time,
+                        gc_time: node.loader_gc_time,
+                        meta: node.meta.clone(),
+                        before_load: node.before_load.is_some(),
+                    },
                 );
             }
 
@@ -888,22 +897,22 @@ impl DevtoolsState {
             fn render_node(
                 id: &str,
                 depth: usize,
-                node_infos_map: &HashMap<String, (String, bool, bool, bool)>,
+                node_details: &HashMap<String, EnhancedNodeInfo>,
                 children_map: &HashMap<String, Vec<String>>,
                 collapsed: &HashSet<String>,
                 matched_chain: &HashSet<String>,
                 matched_leaf_id: Option<&str>,
                 window_handle: AnyWindowHandle,
                 cx: &mut Context<DevtoolsState>,
-                window: &mut Window,
+                _window: &mut Window,
             ) -> Vec<Div> {
                 let theme = cx.theme();
                 let mut rows = Vec::new();
-                let info = node_infos_map.get(id).unwrap();
-                let pattern = &info.0;
-                let is_layout = info.1;
-                let is_index = info.2;
-                let has_loader = info.3;
+                let info = node_details.get(id).unwrap();
+                let pattern = &info.pattern;
+                let is_layout = info.is_layout;
+                let is_index = info.is_index;
+                let has_loader = info.has_loader;
                 let is_in_chain = matched_chain.contains(id);
                 let is_leaf_match = matched_leaf_id == Some(id);
                 let indent_px = px(16.0 * depth as f32);
@@ -1014,6 +1023,46 @@ impl DevtoolsState {
                         })))
                     });
 
+                // Enhanced details: meta, stale/gc times, before_load
+                if !info.meta.is_empty() {
+                    let meta_str = info
+                        .meta
+                        .iter()
+                        .map(|(k, v)| format!("{}:{}", k, v))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    row = row.child(
+                        div()
+                            .text_size(px(9.0))
+                            .text_color(theme.muted_foreground)
+                            .child(format!("meta: {{{}}}", meta_str)),
+                    );
+                }
+                if let Some(st) = info.stale_time {
+                    row = row.child(
+                        div()
+                            .text_size(px(9.0))
+                            .text_color(theme.muted_foreground)
+                            .child(format!("stale:{:?}", st)),
+                    );
+                }
+                if let Some(gc) = info.gc_time {
+                    row = row.child(
+                        div()
+                            .text_size(px(9.0))
+                            .text_color(theme.muted_foreground)
+                            .child(format!("gc:{:?}", gc)),
+                    );
+                }
+                if info.before_load {
+                    row = row.child(
+                        div()
+                            .text_size(px(9.0))
+                            .text_color(theme.warning)
+                            .child("🔒 beforeLoad"),
+                    );
+                }
+
                 rows.push(row);
 
                 if !is_collapsed && let Some(children) = children_map.get(id) {
@@ -1023,14 +1072,14 @@ impl DevtoolsState {
                         rows.extend(render_node(
                             &child_id,
                             depth + 1,
-                            node_infos_map,
+                            node_details,
                             children_map,
                             collapsed,
                             matched_chain,
                             matched_leaf_id,
                             window_handle,
                             cx,
-                            window,
+                            _window,
                         ));
                     }
                 }
@@ -1072,7 +1121,7 @@ impl DevtoolsState {
                             render_node(
                                 root_id,
                                 0,
-                                &node_infos_map,
+                                &node_details,
                                 &children_map,
                                 &self.collapsed_route_nodes,
                                 &matched_chain,
@@ -1786,8 +1835,9 @@ impl DevtoolsState {
                 div().into_any_element()
             })
     }
+
     // -----------------------------------------------------------------------
-    // State tab
+    // State tab - ENHANCED with pending nav, NotFoundMode, default timings, meta
     // -----------------------------------------------------------------------
 
     fn render_state_tab(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -2015,6 +2065,77 @@ impl DevtoolsState {
                                                     blocker_count.to_string()
                                                 }),
                                         ),
+                                )
+                                // Enhanced: Pending Navigation
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Pending Navigation"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(if state.pending_navigation.is_some() {
+                                                    theme.warning
+                                                } else {
+                                                    theme.muted_foreground
+                                                })
+                                                .text_size(px(11.0))
+                                                .child(
+                                                    state
+                                                        .pending_navigation
+                                                        .as_ref()
+                                                        .map(|l| l.pathname.clone())
+                                                        .unwrap_or_else(|| "None".to_string()),
+                                                ),
+                                        ),
+                                )
+                                // Enhanced: NotFoundMode
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("NotFound Mode"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.foreground)
+                                                .text_size(px(11.0))
+                                                .child(match state.not_found_mode {
+                                                    NotFoundMode::Root => "Root",
+                                                    NotFoundMode::Fuzzy => "Fuzzy",
+                                                }),
+                                        ),
+                                )
+                                // Enhanced: Default Pending (ms)
+                                .child(
+                                    div()
+                                        .flex()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_color(theme.muted_foreground)
+                                                .text_size(px(11.0))
+                                                .child("Default Pending (ms)"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(theme.foreground)
+                                                .text_size(px(11.0))
+                                                .child(format!(
+                                                    "{} / {}",
+                                                    state.default_pending_ms,
+                                                    state.default_pending_min_ms
+                                                )),
+                                        ),
                                 ),
                         ),
                 )
@@ -2110,6 +2231,34 @@ impl DevtoolsState {
                                         ),
                                 ),
                         ),
+                )
+                // Enhanced: Current Meta
+                .child(
+                    div()
+                        .p_3()
+                        .bg(theme.secondary)
+                        .rounded(px(6.0))
+                        .border_1()
+                        .border_color(theme.border)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_color(theme.foreground)
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_size(px(12.0))
+                                        .child("Current Meta"),
+                                )
+                                .child(
+                                    div()
+                                        .text_color(theme.foreground)
+                                        .text_size(px(11.0))
+                                        .child(format!("{:?}", state.current_meta())),
+                                ),
+                        ),
                 );
         } else {
             container = container.child(
@@ -2121,6 +2270,18 @@ impl DevtoolsState {
 
         container
     }
+}
+
+// Enhanced node info struct for Routes tab
+struct EnhancedNodeInfo {
+    pattern: String,
+    is_layout: bool,
+    is_index: bool,
+    has_loader: bool,
+    stale_time: Option<std::time::Duration>,
+    gc_time: Option<std::time::Duration>,
+    meta: HashMap<String, serde_json::Value>,
+    before_load: bool,
 }
 
 impl Render for DevtoolsState {
@@ -2154,7 +2315,6 @@ impl Render for DevtoolsState {
         let panel_width = px(550.0).min(viewport.width - px(20.0));
         let panel_height = px(450.0).min(viewport.height - px(20.0));
 
-        // FIX: Extract TabBar to a variable so we can conditionally append to it
         let tab_bar = TabBar::new("devtools-tabs")
             .selected_index(self.tab_index())
             .on_click(cx.listener(|this, index, _, cx| {
@@ -2181,7 +2341,6 @@ impl Render for DevtoolsState {
                     .prefix(Icon::new(IconName::Settings).ml_1()),
             );
 
-        // FIX: Shadow the variable with the conditional child
         #[cfg(feature = "nexum")]
         let tab_bar = tab_bar.child(
             Tab::new()
@@ -2189,7 +2348,6 @@ impl Render for DevtoolsState {
                 .prefix(Icon::new(IconName::Globe).ml_1()),
         );
 
-        // FIX: Extract builder chain to a mutable variable to break the chain
         let mut panel = div()
             .absolute()
             .bottom_0()
@@ -2223,7 +2381,6 @@ impl Render for DevtoolsState {
                 this.set_selected_tab(DevtoolsTab::State, cx);
             }));
 
-        // FIX: Conditionally append the deep links action
         #[cfg(feature = "nexum")]
         {
             panel = panel.on_action(cx.listener(|this, _: &SwitchToTab5, _window, cx| {
@@ -2231,67 +2388,62 @@ impl Render for DevtoolsState {
             }));
         }
 
-        // FIX: Resume the builder chain
-        panel =
-            panel
-                .on_action(cx.listener(|this, _: &FocusTimelineSearch, window, cx| {
-                    this.set_selected_tab(DevtoolsTab::Timeline, cx);
-                    this.ensure_timeline_search(window, cx);
-                    if let Some(search) = &this.timeline_search {
-                        search.update(cx, |state, cx| state.focus(window, cx));
+        panel = panel
+            .on_action(cx.listener(|this, _: &FocusTimelineSearch, window, cx| {
+                this.set_selected_tab(DevtoolsTab::Timeline, cx);
+                this.ensure_timeline_search(window, cx);
+                if let Some(search) = &this.timeline_search {
+                    search.update(cx, |state, cx| state.focus(window, cx));
+                }
+            }))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .px_2()
+                    .py_1()
+                    .bg(theme.secondary.opacity(0.95))
+                    .rounded_tl(px(8.0))
+                    .border_b_1()
+                    .border_color(theme.border)
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(Icon::new(IconName::Info))
+                                    .child(" Devtools"),
+                            )
+                            .child(
+                                Button::new("close-devtools")
+                                    .icon(IconName::Close)
+                                    .ghost()
+                                    .small()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.toggle_expanded(window, cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .child(tab_bar)
+            .child(div().flex_1().p_3().overflow_y_scrollbar().child(
+                match self.selected_tab {
+                    DevtoolsTab::Routes => self.render_routes_tab(window, cx).into_any_element(),
+                    DevtoolsTab::Cache => self.render_cache_tab(window, cx).into_any_element(),
+                    DevtoolsTab::Timeline => {
+                        self.render_timeline_tab(window, cx).into_any_element()
                     }
-                }))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .px_2()
-                        .py_1()
-                        .bg(theme.secondary.opacity(0.95))
-                        .rounded_tl(px(8.0))
-                        .border_b_1()
-                        .border_color(theme.border)
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_1()
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap_1()
-                                        .child(Icon::new(IconName::Info))
-                                        .child(" Devtools"),
-                                )
-                                .child(
-                                    Button::new("close-devtools")
-                                        .icon(IconName::Close)
-                                        .ghost()
-                                        .small()
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.toggle_expanded(window, cx);
-                                        })),
-                                ),
-                        ),
-                )
-                .child(tab_bar) // Pass the extracted variable here
-                .child(div().flex_1().p_3().overflow_y_scrollbar().child(
-                    match self.selected_tab {
-                        DevtoolsTab::Routes => {
-                            self.render_routes_tab(window, cx).into_any_element()
-                        }
-                        DevtoolsTab::Cache => self.render_cache_tab(window, cx).into_any_element(),
-                        DevtoolsTab::Timeline => {
-                            self.render_timeline_tab(window, cx).into_any_element()
-                        }
-                        DevtoolsTab::State => self.render_state_tab(cx).into_any_element(),
-                        // Match arm cfg is perfectly valid
-                        #[cfg(feature = "nexum")]
-                        DevtoolsTab::DeepLinks => self.deep_link_view.clone().into_any_element(),
-                    },
-                ));
+                    DevtoolsTab::State => self.render_state_tab(cx).into_any_element(),
+                    #[cfg(feature = "nexum")]
+                    DevtoolsTab::DeepLinks => self.deep_link_view.clone().into_any_element(),
+                },
+            ));
         panel.into_any_element()
     }
 }

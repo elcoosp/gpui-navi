@@ -77,6 +77,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let mut on_leave = None;
     let mut loader_deps = None;
     let mut context_fn = None;
+    let mut meta = None;
 
     for field in input.fields {
         let key_str = field.key.to_string();
@@ -161,6 +162,11 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                     context_fn = Some(expr);
                 }
             }
+            "meta" => {
+                if let FieldValue::Expr(expr) = field.value {
+                    meta = Some(expr);
+                }
+            }
             _ => {}
         }
     }
@@ -193,6 +199,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let on_leave_impl = on_leave.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
     let loader_deps_impl = loader_deps.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
     let context_fn_impl = context_fn.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
+    let meta_impl = meta.map(|e| quote! { #e }).unwrap_or(quote! { ::std::collections::HashMap::new() });
 
     let (has_loader, loader_factory_impl) = if let Some(loader_closure) = loader_closure {
         let stale_time_expr = stale_time.clone().unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
@@ -298,6 +305,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                     on_leave: #on_leave_impl,
                     loader_deps: #loader_deps_impl,
                     context_fn: #context_fn_impl,
+                    meta: #meta_impl,
                 };
                 node
             }

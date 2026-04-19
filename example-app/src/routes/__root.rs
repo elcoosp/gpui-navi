@@ -1,13 +1,17 @@
+use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
 use navi_router::components::{Link, Outlet};
+use navi_router::RouterState;
 
 #[derive(Clone, IntoElement)]
 struct RootLayout;
 
 impl RenderOnce for RootLayout {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let meta = RouterState::global(cx).current_meta();
+        let title = meta.get("title").and_then(|v| v.as_str()).unwrap_or("Navi App");
         div()
             .size_full()
             .flex()
@@ -20,6 +24,7 @@ impl RenderOnce for RootLayout {
                     .gap_4()
                     .p_4()
                     .bg(rgb(0x313244))
+                    .child(format!("🌐 {}", title))
                     .child(Link::new("/").child("🏠 Home"))
                     .child(Link::new("/about").child("ℹ️ About"))
                     .child(Link::new("/users").child("👥 Users"))
@@ -39,5 +44,10 @@ define_route!(
     RootRoute,
     path: "/",
     is_layout: true,
+    meta: {
+        let mut map = std::collections::HashMap::new();
+        map.insert("title".to_string(), serde_json::json!("Navi Demo"));
+        map
+    },
     component: RootLayout,
 );

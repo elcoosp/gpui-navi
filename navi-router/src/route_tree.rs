@@ -213,6 +213,7 @@ pub struct RouteNode {
     pub on_leave: Option<Arc<dyn Fn(&Location) + Send + Sync>>,
     pub loader_deps: Option<Arc<dyn Fn(&serde_json::Value) -> serde_json::Value + Send + Sync>>,
     pub context_fn: Option<Arc<dyn Fn(RouteContextArgs) -> serde_json::Value + Send + Sync>>,
+    pub meta: HashMap<String, serde_json::Value>,
 }
 
 impl std::fmt::Debug for RouteNode {
@@ -457,6 +458,7 @@ mod tests {
             on_leave: None,
             loader_deps: None,
             context_fn: None,
+            meta: HashMap::new(),
         }
     }
 

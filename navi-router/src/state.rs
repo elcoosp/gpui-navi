@@ -16,30 +16,12 @@ use std::sync::Arc;
 /// Events emitted by the router during navigation lifecycle.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum RouterEvent {
-    BeforeNavigate {
-        from: Option<Location>,
-        to: Location,
-    },
-    BeforeLoad {
-        from: Option<Location>,
-        to: Location,
-    },
-    Load {
-        from: Option<Location>,
-        to: Location,
-    },
-    BeforeRouteMount {
-        from: Option<Location>,
-        to: Location,
-    },
-    Resolved {
-        from: Option<Location>,
-        to: Location,
-    },
-    Rendered {
-        from: Option<Location>,
-        to: Location,
-    },
+    BeforeNavigate { from: Option<Location>, to: Location },
+    BeforeLoad { from: Option<Location>, to: Location },
+    Load { from: Option<Location>, to: Location },
+    BeforeRouteMount { from: Option<Location>, to: Location },
+    Resolved { from: Option<Location>, to: Location },
+    Rendered { from: Option<Location>, to: Location },
 }
 
 /// Trait for route definitions.
@@ -47,19 +29,15 @@ pub trait RouteDef: 'static {
     type Params: Clone + std::fmt::Debug + DeserializeOwned + 'static;
     type Search: Clone + std::fmt::Debug + 'static;
     type LoaderData: Clone + std::fmt::Debug + Send + Sync + 'static;
-
     fn path() -> &'static str;
     fn name() -> &'static str;
 }
 
-// Wrapper that implements PartialEq for any type.
 #[derive(Clone)]
 pub struct AnyData(pub Arc<dyn std::any::Any + Send + Sync>);
 
 impl PartialEq for AnyData {
-    fn eq(&self, _other: &Self) -> bool {
-        false // Always treat as not equal to force cache updates
-    }
+    fn eq(&self, _other: &Self) -> bool { false }
 }
 
 impl std::fmt::Debug for AnyData {
@@ -75,7 +53,6 @@ pub enum LoaderOutcome<T> {
     NotFound(NotFound),
 }
 
-// Implement PartialEq for LoaderOutcome (required for rs_query structural sharing)
 impl<T: PartialEq> PartialEq for LoaderOutcome<T> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -90,7 +67,6 @@ impl<T: PartialEq> PartialEq for LoaderOutcome<T> {
 type LoaderFactory =
     Arc<dyn Fn(&HashMap<String, String>) -> Query<LoaderOutcome<AnyData>> + Send + Sync>;
 
-/// Loader state for a route.
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoaderState {
     Idle,
@@ -101,13 +77,10 @@ pub enum LoaderState {
 
 #[derive(Clone)]
 pub enum NotFoundMode {
-    /// Render the global 404 route.
     Root,
-    /// Render the closest scoped 404 route.
     Fuzzy,
 }
 
-/// Options for configuring the router.
 #[derive(Clone)]
 pub struct RouterOptions {
     pub default_pending_ms: u64,
@@ -125,7 +98,6 @@ impl Default for RouterOptions {
     }
 }
 
-/// The central router state.
 pub struct RouterState {
     pub history: History,
     pub route_tree: Rc<RouteTree>,
@@ -137,16 +109,10 @@ pub struct RouterState {
     pub current_base: Option<String>,
     events: Vec<Box<dyn Fn(RouterEvent) + Send + Sync>>,
     next_blocker_id: BlockerId,
-
-    // --- rs-query integration ---
     pub query_client: QueryClient,
     loader_factories: HashMap<String, LoaderFactory>,
-
-    /// The window handle, used to refresh the UI after loader updates.
     window_handle: AnyWindowHandle,
-    /// The EntityId of the root view, kept for future use (e.g., view transitions).
     root_view: Option<EntityId>,
-
     pub not_found_mode: NotFoundMode,
     pub not_found_data: Option<serde_json::Value>,
     pub default_pending_ms: u64,
@@ -162,13 +128,7 @@ impl RouterState {
         window_handle: AnyWindowHandle,
         route_tree: Rc<RouteTree>,
     ) -> Self {
-        Self::new_with_options(
-            initial,
-            window_id,
-            window_handle,
-            route_tree,
-            RouterOptions::default(),
-        )
+        Self::new_with_options(initial, window_id, window_handle, route_tree, RouterOptions::default())
     }
 
     pub fn new_with_options(
@@ -208,7 +168,6 @@ impl RouterState {
     }
 
     fn commit_navigation(&mut self, loc: Location, options: NavigateOptions, cx: &mut App) {
-        // Collect previous route IDs for lifecycle hooks
         let prev_route_ids: HashSet<String> = self
             .current_match
             .as_ref()
@@ -222,13 +181,11 @@ impl RouterState {
             })
             .unwrap_or_default();
 
-        // Update current_match
         self.current_match = self
             .route_tree
             .match_path(&loc.pathname)
             .map(|(params, node)| (params, node.clone()));
 
-        // Collect new route IDs
         let new_route_ids: HashSet<String> = self
             .current_match
             .as_ref()
@@ -242,7 +199,6 @@ impl RouterState {
             })
             .unwrap_or_default();
 
-        // Call on_leave for routes no longer active
         for route_id in prev_route_ids.difference(&new_route_ids) {
             if let Some(node) = self.route_tree.get_node(route_id) {
                 if let Some(on_leave) = &node.on_leave {
@@ -251,7 +207,6 @@ impl RouterState {
             }
         }
 
-        // Call on_enter for newly active routes
         for route_id in new_route_ids.difference(&prev_route_ids) {
             if let Some(node) = self.route_tree.get_node(route_id) {
                 if let Some(on_enter) = &node.on_enter {
@@ -260,18 +215,15 @@ impl RouterState {
             }
         }
 
-        // Update history
         if options.replace {
             self.history.replace(loc.clone());
         } else {
             self.history.push(loc.clone());
         }
 
-        // Trigger loaders
         self.trigger_loader_with_locations(None, loc, cx);
     }
 
-    /// Navigate to a new location.
     pub fn navigate(&mut self, loc: Location, options: NavigateOptions, cx: &mut App) {
         if !options.ignore_blocker {
             let current = self.current_location();
@@ -286,25 +238,16 @@ impl RouterState {
         let from = Some(self.current_location());
         let to = loc.clone();
 
-        push_event(
-            RouterEvent::BeforeNavigate {
-                from: from.clone(),
-                to: to.clone(),
-            },
-            cx,
-        );
+        push_event(RouterEvent::BeforeNavigate { from: from.clone(), to: to.clone() }, cx);
 
-        // Find matched route for the target location
         let (params, matched_node) = match self.route_tree.match_path(&loc.pathname) {
             Some((params, node)) => (params, node.clone()),
             None => {
-                // No match – trigger 404 handling
                 self.commit_navigation(loc, options, cx);
                 return;
             }
         };
 
-        // Collect before_load functions from ancestors and the matched node
         let before_load_fns: Vec<(String, crate::route_tree::BeforeLoadFn)> = self
             .route_tree
             .ancestors(&matched_node.id)
@@ -325,7 +268,7 @@ impl RouterState {
             let before_load_fns = before_load_fns.clone();
 
             cx.spawn(move |cx: &mut gpui::AsyncApp| {
-                let cx = cx.clone(); // Clone AsyncApp for use in the async block
+                let cx = cx.clone();
                 async move {
                     for (_route_id, before_load) in before_load_fns {
                         let ctx = BeforeLoadContext {
@@ -354,7 +297,6 @@ impl RouterState {
                             }
                         }
                     }
-                    // All before_load hooks passed
                     let _ = cx.update(|cx| {
                         RouterState::update(cx, |state, cx| {
                             state.commit_navigation(loc, options, cx);
@@ -365,20 +307,17 @@ impl RouterState {
             .detach();
             return;
         }
-        // No before_load hooks, commit immediately
+
         self.commit_navigation(loc, options, cx);
     }
 
-    /// Preload a location without navigating (runs loaders in background).
     pub fn preload_location(&mut self, loc: Location, cx: &mut App) {
         if let Some((params, node)) = self.route_tree.match_path(&loc.pathname)
             && node.has_loader
             && let Some(factory) = self.loader_factories.get(&node.id)
         {
             let stale_time = node.loader_stale_time.unwrap_or(std::time::Duration::ZERO);
-            let gc_time = node
-                .loader_gc_time
-                .unwrap_or(std::time::Duration::from_secs(300));
+            let gc_time = node.loader_gc_time.unwrap_or(std::time::Duration::from_secs(300));
             let query = factory(&params).stale_time(stale_time).gc_time(gc_time);
             let key = query.key.clone();
             let client = self.query_client.clone();
@@ -432,10 +371,7 @@ impl RouterState {
         if let Some(loc) = self.pending_navigation.take() {
             self.navigate(
                 loc,
-                NavigateOptions {
-                    ignore_blocker: true,
-                    ..Default::default()
-                },
+                NavigateOptions { ignore_blocker: true, ..Default::default() },
                 cx,
             );
         }
@@ -454,19 +390,11 @@ impl RouterState {
     }
 
     pub fn register_loader_factory(&mut self, route_id: &str, factory: LoaderFactory) {
-        log::debug!(
-            "Registering rs-query loader factory for route: {}",
-            route_id
-        );
+        log::debug!("Registering rs-query loader factory for route: {}", route_id);
         self.loader_factories.insert(route_id.to_string(), factory);
     }
 
-    fn trigger_loader_with_locations(
-        &mut self,
-        _from: Option<Location>,
-        to: Location,
-        cx: &mut App,
-    ) {
+    fn trigger_loader_with_locations(&mut self, _from: Option<Location>, to: Location, cx: &mut App) {
         if let Some((params, node)) = &self.current_match {
             if node.has_loader {
                 let route_id = node.id.clone();
@@ -487,29 +415,10 @@ impl RouterState {
                                     LoaderOutcome::Data(data) => {
                                         client.set_query_data(&key, data, options.clone());
                                         let _ = cx.update(|cx| {
-                                            push_event(
-                                                RouterEvent::Load {
-                                                    from: None,
-                                                    to: to_clone.clone(),
-                                                },
-                                                cx,
-                                            );
-                                            push_event(
-                                                RouterEvent::BeforeRouteMount {
-                                                    from: None,
-                                                    to: to_clone.clone(),
-                                                },
-                                                cx,
-                                            );
-                                            push_event(
-                                                RouterEvent::Rendered {
-                                                    from: None,
-                                                    to: to_clone,
-                                                },
-                                                cx,
-                                            );
-                                            let _ = window_handle
-                                                .update(cx, |_, window, _| window.refresh());
+                                            push_event(RouterEvent::Load { from: None, to: to_clone.clone() }, cx);
+                                            push_event(RouterEvent::BeforeRouteMount { from: None, to: to_clone.clone() }, cx);
+                                            push_event(RouterEvent::Rendered { from: None, to: to_clone }, cx);
+                                            let _ = window_handle.update(cx, |_, window, _| window.refresh());
                                         });
                                     }
                                     LoaderOutcome::Redirect(redirect) => {
@@ -522,8 +431,7 @@ impl RouterState {
                                         let _ = cx.update(|cx| {
                                             RouterState::update(cx, |state, cx| {
                                                 state.not_found_data = not_found.data;
-                                                let nav =
-                                                    crate::Navigator::new(state.window_handle);
+                                                let nav = crate::Navigator::new(state.window_handle);
                                                 nav.push("/404", cx);
                                             });
                                         });
@@ -532,29 +440,10 @@ impl RouterState {
                                 Err(e) => {
                                     log::error!("Loader error for {}: {:?}", route_id, e);
                                     let _ = cx.update(|cx| {
-                                        push_event(
-                                            RouterEvent::Load {
-                                                from: None,
-                                                to: to_clone.clone(),
-                                            },
-                                            cx,
-                                        );
-                                        push_event(
-                                            RouterEvent::BeforeRouteMount {
-                                                from: None,
-                                                to: to_clone.clone(),
-                                            },
-                                            cx,
-                                        );
-                                        push_event(
-                                            RouterEvent::Rendered {
-                                                from: None,
-                                                to: to_clone,
-                                            },
-                                            cx,
-                                        );
-                                        let _ = window_handle
-                                            .update(cx, |_, window, _| window.refresh());
+                                        push_event(RouterEvent::Load { from: None, to: to_clone.clone() }, cx);
+                                        push_event(RouterEvent::BeforeRouteMount { from: None, to: to_clone.clone() }, cx);
+                                        push_event(RouterEvent::Rendered { from: None, to: to_clone }, cx);
+                                        let _ = window_handle.update(cx, |_, window, _| window.refresh());
                                     });
                                 }
                             }
@@ -572,20 +461,8 @@ impl RouterState {
     }
 
     fn proceed_without_loader(&self, to: Location, cx: &mut App) {
-        push_event(
-            RouterEvent::Load {
-                from: None,
-                to: to.clone(),
-            },
-            cx,
-        );
-        push_event(
-            RouterEvent::BeforeRouteMount {
-                from: None,
-                to: to.clone(),
-            },
-            cx,
-        );
+        push_event(RouterEvent::Load { from: None, to: to.clone() }, cx);
+        push_event(RouterEvent::BeforeRouteMount { from: None, to: to.clone() }, cx);
         push_event(RouterEvent::Rendered { from: None, to }, cx);
     }
 
@@ -594,20 +471,13 @@ impl RouterState {
         if node.id != R::name() {
             return None;
         }
-        let _deps_json = node
-            .loader_deps
-            .as_ref()
-            .map(|f| f(&self.current_location().search))
-            .unwrap_or(serde_json::Value::Null);
         let key = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
             .with("params", serde_json::to_string(params).ok()?);
-
         let any_data: AnyData = self.query_client.get_query_data(&key)?;
         let arc_data = any_data.0.downcast_ref::<Arc<R::LoaderData>>()?.clone();
         Some((*arc_data).clone())
     }
-
 
     pub fn get_loader_state<R: crate::RouteDef>(&self) -> LoaderState {
         let (params, node) = match &self.current_match {
@@ -625,10 +495,7 @@ impl RouterState {
         let key = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
             .with("params", serde_json::to_string(params).unwrap_or_default())
-            .with(
-                "deps",
-                serde_json::to_string(&deps_json).unwrap_or_default(),
-            );
+            .with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
 
         if self.query_client.is_in_flight(&key) {
             LoaderState::Loading
@@ -639,12 +506,8 @@ impl RouterState {
         }
     }
 
-    pub fn has_pending_loader(&self) -> bool {
-        self.query_client.is_fetching()
-    }
-
-    pub fn global(cx: &App) -> &Self {
-        cx.global::<Self>()
+    pub fn get_route_context<R: crate::RouteDef>(&self) -> Option<serde_json::Value> {
+        None // TODO
     }
 
     pub fn try_global(cx: &App) -> Option<&Self> {
@@ -656,5 +519,24 @@ impl RouterState {
         F: FnOnce(&mut Self, &mut App) -> R,
     {
         cx.update_global(|state, cx| f(state, cx))
+    }
+
+    pub fn current_meta(&self) -> HashMap<String, serde_json::Value> {
+        let mut meta = HashMap::new();
+        if let Some((_, node)) = &self.current_match {
+            for ancestor in self.route_tree.ancestors(&node.id) {
+                meta.extend(ancestor.meta.clone());
+            }
+            meta.extend(node.meta.clone());
+        }
+        meta
+    }
+
+    pub fn has_pending_loader(&self) -> bool {
+        self.query_client.is_fetching()
+    }
+
+    pub fn global(cx: &App) -> &Self {
+        cx.global::<Self>()
     }
 }

@@ -110,3 +110,17 @@ pub fn use_route_context(input: TokenStream) -> TokenStream {
     };
     expanded.into()
 }
+
+pub fn use_matched_route(_input: TokenStream) -> TokenStream {
+    let expanded = quote! {
+        {
+            let state = ::navi_router::RouterState::global(cx);
+            let current_match = state.current_match.as_ref()
+                .expect("use_matched_route called but no route matched");
+            let params_map = &current_match.0;
+            let node = &current_match.1;
+            (params_map.clone(), node.clone())
+        }
+    };
+    expanded.into()
+}

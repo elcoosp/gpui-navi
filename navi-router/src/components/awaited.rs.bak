@@ -57,7 +57,6 @@ impl<R: RouteDef> Element for Awaited<R> {
         let state = RouterState::try_global(cx);
         log::debug!("Awaited::request_layout for {}", std::any::type_name::<R>());
         let data = state.and_then(|s| s.get_loader_data::<R>());
-        log::debug!("Awaited data present: {}", data.is_some());
 
         if let Some(data) = data {
             if let Some(child_fn) = &self.child {

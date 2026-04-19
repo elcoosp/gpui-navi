@@ -445,6 +445,7 @@ impl RouterState {
                                         let _ = cx.update(|cx| {
                                             RouterState::update(cx, |_, cx| cx.refresh_windows());
                                         });
+                                        log::debug!("Loader data set for key: {:?}", key);
                                         let _ = cx.update(|cx| {
                                             push_event(RouterEvent::Load { from: None, to: to_clone.clone() }, cx);
                                             push_event(RouterEvent::BeforeRouteMount { from: None, to: to_clone.clone() }, cx);
@@ -512,15 +513,12 @@ impl RouterState {
         } else {
             serde_json::to_string(params).unwrap_or_else(|_| "null".to_string())
         };
-        let mut key_builder = QueryKey::new("navi_loader")
+        let key = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
-            .with("params", params_str);
-        if !deps_json.is_null() {
-            key_builder = key_builder.with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
-        }
-        let key = key_builder;
-        log::debug!("get_loader_data key: {:?}", key);
+            .with("params", params_str)
+            .with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
         let any_data: AnyData = self.query_client.get_query_data(&key)?;
+        log::debug!("get_loader_data found data for key: {:?}", key);
         let arc_data = any_data.0.downcast_ref::<Arc<R::LoaderData>>()?.clone();
         Some((*arc_data).clone())
     }
@@ -543,13 +541,10 @@ impl RouterState {
         } else {
             serde_json::to_string(params).unwrap_or_else(|_| "null".to_string())
         };
-        let mut key_builder = QueryKey::new("navi_loader")
+        let key = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
-            .with("params", params_str);
-        if !deps_json.is_null() {
-            key_builder = key_builder.with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
-        }
-        let key = key_builder;
+            .with("params", params_str)
+            .with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
         if self.query_client.is_in_flight(&key) {
             LoaderState::Loading
         } else if self.query_client.get_query_data::<AnyData>(&key).is_some() {

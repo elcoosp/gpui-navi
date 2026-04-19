@@ -210,14 +210,9 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                 + Send + Sync
             > {
                 std::sync::Arc::new(move |params_map: &std::collections::HashMap<String, String>| {
-                    let params: #params_ty = if std::any::TypeId::of::<#params_ty>() == std::any::TypeId::of::<()>() {
-                serde_json::from_value(serde_json::Value::Null).unwrap()
-            } else {
-                serde_json::from_value(
-    
+                    let params: #params_ty = serde_json::from_value(
                         serde_json::to_value(params_map).unwrap()
-                    ).expect("Failed to deserialize route params")
-            };
+                    ).expect("Failed to deserialize route params");
                     let params_clone = params.clone();
                     let loader = #loader_closure;
                     let executor = executor.clone();

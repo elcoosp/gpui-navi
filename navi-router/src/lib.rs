@@ -4,9 +4,9 @@ pub mod event_bus;
 pub mod history;
 pub mod location;
 pub mod navigator;
+pub mod radix_tree;
 pub mod redirect;
 pub mod route_tree;
-pub mod radix_tree;
 pub mod state;
 pub mod validation;
 
@@ -15,9 +15,8 @@ pub use history::History;
 pub use location::{Location, NavigateOptions, ScrollIntoViewOptions, ViewTransitionOptions};
 pub use navigator::Navigator;
 pub use redirect::{NotFound, Redirect, not_found, redirect};
-pub use route_tree::{RouteNode, RoutePattern, RouteTree, Segment};
-pub use state::AnyData;
-pub use state::{RouteDef, RouterEvent, RouterState};
+pub use route_tree::{
+    BeforeLoadContext, BeforeLoadResult, RouteNode, RoutePattern, RouteTree, Segment,
+};
+pub use state::{AnyData, LoaderOutcome, RouteDef, RouterEvent, RouterState};
 pub use validation::{ValidateSearch, ValidationError, ValidationResult};
-#[cfg(feature = "nexum")]
-pub mod deep_link;

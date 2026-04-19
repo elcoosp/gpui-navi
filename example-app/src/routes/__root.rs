@@ -1,17 +1,14 @@
+use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::scroll::ScrollableElement;
 use navi_macros::define_route;
-use navi_router::RouterState;
-use navi_router::components::{Link, Outlet, PreloadType, SuspenseBoundary};
+use navi_router::components::{Link, Outlet};
 
 #[derive(Clone, IntoElement)]
 struct RootLayout;
 
 impl RenderOnce for RootLayout {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let scroll_handle = RouterState::global(cx).main_scroll_handle();
-
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         div()
             .size_full()
             .flex()
@@ -27,33 +24,15 @@ impl RenderOnce for RootLayout {
                     .child(Link::new("/").child("🏠 Home"))
                     .child(Link::new("/about").child("ℹ️ About"))
                     .child(Link::new("/users").child("👥 Users"))
-                    .child(
-                        Link::new("/dashboard")
-                            .preload(PreloadType::Intent)
-                            .child("📊 Dashboard"),
-                    )
+                    .child(Link::new("/users/1").child("User 1"))
+                    .child(Link::new("/users/2").child("User 2"))
                     .child(Link::new("/settings").child("⚙️ Settings"))
-                    .child(Link::new("/docs/getting-started").child("📄 Docs"))
-                    .child(Link::new("/validation-test").child("🧪 Validation")),
+                    .child(Link::new("/docs/getting-started").child("📄 Docs (splat)"))
+                    .child(Link::new("/validation-test").child("🧪 Validation Tests"))
+                    .child(Link::new("/admin").child("🔒 Admin"))
+                    .child(Link::new("/lifecycle").child("🔄 Lifecycle")),
             )
-            .child(
-                SuspenseBoundary::new(|| {
-                    div()
-                        .w_full()
-                        .h(px(3.0))
-                        .bg(rgb(0x2563eb))
-                        .into_any_element()
-                })
-                .with_child(
-                    div()
-                        .id("main-scroll-container")
-                        .flex_1()
-                        .p_4()
-                        .track_scroll(&scroll_handle)
-                        .overflow_y_scrollbar()
-                        .child(Outlet::new()),
-                ),
-            )
+            .child(div().flex_1().p_4().child(Outlet::new()))
     }
 }
 

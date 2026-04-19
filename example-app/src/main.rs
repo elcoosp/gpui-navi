@@ -12,7 +12,6 @@ use navi_router::{
 #[cfg(feature = "nexum")]
 use navi_router::deep_link;
 
-mod routes;
 mod route_tree {
     include!("route_tree.gen.rs");
 }
@@ -69,14 +68,12 @@ fn main() {
                 let window_id = window.window_handle().window_id();
                 let window_handle = window.window_handle();
                 let initial = Location::new("/");
-                let main_scroll_handle = ScrollHandle::new();
 
                 let router_provider = RouterProvider::new(
                     window_id,
                     window_handle,
                     initial,
                     tree,
-                    main_scroll_handle,
                     cx,
                 );
 

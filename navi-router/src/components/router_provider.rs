@@ -1,7 +1,7 @@
 use crate::components::outlet::OutletDepth;
 use crate::{Location, RouteTree, RouterState};
 use gpui::{
-    AnyElement, AnyWindowHandle, App, IntoElement, ParentElement, RenderOnce, ScrollHandle, Window, WindowId, div,
+    AnyElement, AnyWindowHandle, App, IntoElement, ParentElement, RenderOnce, Window, WindowId, div,
 };
 use navi_core::context;
 use std::rc::Rc;
@@ -12,7 +12,6 @@ pub struct RouterProvider {
     window_handle: AnyWindowHandle,
     initial_location: Location,
     route_tree: Rc<RouteTree>,
-    main_scroll_handle: ScrollHandle,
 }
 
 impl RouterProvider {
@@ -21,7 +20,6 @@ impl RouterProvider {
         window_handle: AnyWindowHandle,
         initial_location: Location,
         route_tree: RouteTree,
-        main_scroll_handle: ScrollHandle,
         cx: &mut App,
     ) -> Self {
         crate::event_bus::init_event_log(cx);
@@ -36,7 +34,6 @@ impl RouterProvider {
             window_id,
             window_handle,
             route_tree.clone(),
-            &main_scroll_handle,
         );
         cx.set_global(state);
         log::info!("RouterProvider created successfully");
@@ -45,7 +42,6 @@ impl RouterProvider {
             window_handle,
             initial_location,
             route_tree,
-            main_scroll_handle,
         }
     }
 
@@ -84,13 +80,11 @@ impl RenderOnce for RouterProviderWithChildren {
                 self.provider.window_id,
                 self.provider.window_handle,
                 self.provider.route_tree.clone(),
-                &self.provider.main_scroll_handle,
             );
             cx.set_global(state);
         }
+        // Provide initial depth 0 for the root outlet
         context::provide(self.provider.window_id, OutletDepth(0));
-        // 克隆 provider 以使用它（因为我们已经使用了它的字段，需要重新构建一个用于渲染）
-        let provider = self.provider.clone();
-        div().child(provider).children(self.children)
+        div().child(self.provider).children(self.children)
     }
 }

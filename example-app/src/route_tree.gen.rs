@@ -3,12 +3,16 @@
 // Module declarations for discovered routes
 #[path = "routes/__root.rs"] pub mod __root;
 #[path = "routes/about.rs"] pub mod about;
+#[path = "routes/admin/dashboard.rs"] pub mod admin_dashboard;
+#[path = "routes/admin/mod.rs"] pub mod admin;
 #[path = "routes/dashboard/analytics.rs"] pub mod dashboard_analytics;
 #[path = "routes/dashboard/index.rs"] pub mod dashboard_index;
 #[path = "routes/dashboard/mod.rs"] pub mod dashboard;
 #[path = "routes/dashboard/settings.rs"] pub mod dashboard_settings;
 #[path = "routes/docs/$.rs"] pub mod docs_splat;
 #[path = "routes/index.rs"] pub mod index;
+#[path = "routes/lifecycle.rs"] pub mod lifecycle;
+#[path = "routes/login.rs"] pub mod login;
 #[path = "routes/settings.rs"] pub mod settings;
 #[path = "routes/users/$id.rs"] pub mod users_param_id;
 #[path = "routes/users/index.rs"] pub mod users_index;
@@ -36,6 +40,18 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 
     {
         let mut node = index::IndexRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = login::LoginRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = lifecycle::LifecycleRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -80,6 +96,18 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 
     {
         let mut node = validation_test_valico::ValicoTestRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = admin::AdminRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = admin_dashboard::AdminDashboardRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -134,12 +162,16 @@ pub fn register_routes(cx: &mut gpui::App) {
 about::AboutRoute::register(cx);
 __root::RootRoute::register(cx);
 index::IndexRoute::register(cx);
+login::LoginRoute::register(cx);
+lifecycle::LifecycleRoute::register(cx);
 settings::SettingsRoute::register(cx);
 #[cfg(feature = "garde")] validation_test_garde::GardeTestRoute::register(cx);
 #[cfg(feature = "validify")] validation_test_validify::ValidifyTestRoute::register(cx);
 validation_test_index::ValidationTestIndexRoute::register(cx);
 #[cfg(feature = "validator")] validation_test_validator::ValidatorTestRoute::register(cx);
 #[cfg(feature = "valico")] validation_test_valico::ValicoTestRoute::register(cx);
+admin::AdminRoute::register(cx);
+admin_dashboard::AdminDashboardRoute::register(cx);
 docs_splat::DocsRoute::register(cx);
 dashboard_index::DashboardIndexRoute::register(cx);
 dashboard::DashboardRoute::register(cx);

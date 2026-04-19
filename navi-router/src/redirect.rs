@@ -3,6 +3,7 @@
 use crate::location::NavigateOptions;
 
 /// A redirect directive that the router catches.
+#[derive(Clone, PartialEq)]
 pub struct Redirect {
     pub to: String,
     pub options: NavigateOptions,
@@ -29,6 +30,7 @@ pub fn redirect(to: impl Into<String>) -> Redirect {
 }
 
 /// A not-found directive that the router catches.
+#[derive(Clone, PartialEq)]
 pub struct NotFound {
     pub route_id: Option<String>,
     pub data: Option<serde_json::Value>,

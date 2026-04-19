@@ -61,7 +61,6 @@ impl Parse for FieldValue {
 pub fn define_route(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as RouteDefInput);
     let name = input.name;
-    let name_str = name.to_string();
     let mut path = None;
     let mut params_ty = None;
     let mut search_ty = None;
@@ -73,6 +72,10 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let mut is_layout = None;
     let mut is_index = None;
     let mut parent = None;
+    let mut before_load_closure = None;
+    let mut on_enter = None;
+    let mut on_leave = None;
+    let mut loader_deps = None;
 
     for field in input.fields {
         let key_str = field.key.to_string();
@@ -132,6 +135,26 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                     parent = Some(lit);
                 }
             }
+            "before_load" => {
+                if let FieldValue::Expr(expr) = field.value {
+                    before_load_closure = Some(expr);
+                }
+            }
+            "on_enter" => {
+                if let FieldValue::Expr(expr) = field.value {
+                    on_enter = Some(expr);
+                }
+            }
+            "on_leave" => {
+                if let FieldValue::Expr(expr) = field.value {
+                    on_leave = Some(expr);
+                }
+            }
+            "loader_deps" => {
+                if let FieldValue::Expr(expr) = field.value {
+                    loader_deps = Some(expr);
+                }
+            }
             _ => {}
         }
     }
@@ -145,43 +168,43 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let is_index = is_index.map(|b| b.value).unwrap_or(false);
     let parent = parent.map(|s| s.value());
 
-    // Detect if params type is unit `()` to skip deserialization
-    let is_unit_params = {
-        let type_str = quote!(#params_ty).to_string();
-        type_str == "()" || type_str == "(  )"
+    let before_load_impl = if let Some(before_load) = before_load_closure {
+        quote! {
+            pub fn before_load_fn() -> Option<::navi_router::route_tree::BeforeLoadFn> {
+                Some(::std::sync::Arc::new(|ctx| {
+                    let closure = #before_load;
+                    ::futures::future::FutureExt::boxed(closure(ctx))
+                }))
+            }
+        }
+    } else {
+        quote! {
+            pub fn before_load_fn() -> Option<::navi_router::route_tree::BeforeLoadFn> { None }
+        }
     };
 
+    let on_enter_impl = on_enter.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
+    let on_leave_impl = on_leave.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
+    let loader_deps_impl = loader_deps.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
+
     let (has_loader, loader_factory_impl) = if let Some(loader_closure) = loader_closure {
-        let stale_time_expr = stale_time.unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
-        let gc_time_expr = gc_time.unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
-        let params_deser = if is_unit_params {
-            quote! { let params = (); }
-        } else {
-            quote! {
-                let params: #params_ty = serde_json::from_value(
-                    serde_json::to_value(params_map).unwrap()
-                ).expect("Failed to deserialize route params");
-            }
-        };
-        // Use "{}" for unit params key to match retrieval key
-        let params_key_expr = if is_unit_params {
-            quote! { "{}" }
-        } else {
-            quote! { serde_json::to_string(&params).unwrap() }
-        };
+        let stale_time_expr = stale_time.clone().unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
+        let gc_time_expr = gc_time.clone().unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
         let factory = quote! {
             pub fn loader_factory(executor: ::gpui::BackgroundExecutor) -> std::sync::Arc<
-                dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::AnyData>
+                dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::LoaderOutcome<::navi_router::AnyData>>
                 + Send + Sync
             > {
                 std::sync::Arc::new(move |params_map: &std::collections::HashMap<String, String>| {
-                    #params_deser
+                    let params: #params_ty = serde_json::from_value(
+                        serde_json::to_value(params_map).unwrap()
+                    ).expect("Failed to deserialize route params");
                     let params_clone = params.clone();
                     let loader = #loader_closure;
                     let executor = executor.clone();
                     let key = ::rs_query::QueryKey::new("navi_loader")
-                        .with("route", #name_str)
-                        .with("params", #params_key_expr);
+                        .with("route", <#name as ::navi_router::RouteDef>::name())
+                        .with("params", serde_json::to_string(&params).unwrap());
                     ::rs_query::Query::new(key, move || {
                         let params = params_clone.clone();
                         let loader = loader.clone();
@@ -189,7 +212,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                         async move {
                             let data = loader(params, executor).await
                                 .map_err(|e| ::rs_query::QueryError::custom(e.to_string()))?;
-                            Ok(::navi_router::AnyData(std::sync::Arc::new(data) as std::sync::Arc<dyn std::any::Any + Send + Sync>))
+                            Ok(::navi_router::LoaderOutcome::Data(::navi_router::AnyData(std::sync::Arc::new(data) as std::sync::Arc<dyn std::any::Any + Send + Sync>)))
                         }
                     })
                     .stale_time(#stale_time_expr)
@@ -206,7 +229,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     let register_loader_call = if has_loader {
         quote! {
             let executor = cx.background_executor().clone();
-            ::navi_router::RouterState::update(cx, |state, _cx| {
+            navi_router::RouterState::update(cx, |state, _cx| {
                 state.register_loader_factory(<Self as ::navi_router::RouteDef>::name(), Self::loader_factory(executor));
             });
         }
@@ -216,8 +239,8 @@ pub fn define_route(input: TokenStream) -> TokenStream {
 
     let component_registration = if let Some(comp_ty) = component_ty {
         quote! {
-            ::navi_router::components::register_route_component(<Self as ::navi_router::RouteDef>::name(), |_cx| {
-                ::gpui::Component::new(#comp_ty).into_any_element()
+            navi_router::components::register_route_component(<Self as ::navi_router::RouteDef>::name(), |_cx| {
+                gpui::Component::new(#comp_ty).into_any_element()
             });
         }
     } else {
@@ -229,6 +252,9 @@ pub fn define_route(input: TokenStream) -> TokenStream {
     } else {
         quote! { None }
     };
+
+    let stale_time_impl = stale_time.map(|e| quote! { Some(#e) }).unwrap_or(quote! { None });
+    let gc_time_impl = gc_time.map(|e| quote! { Some(#e) }).unwrap_or(quote! { None });
 
     let expanded = quote! {
         pub struct #name;
@@ -243,29 +269,36 @@ pub fn define_route(input: TokenStream) -> TokenStream {
             }
 
             fn name() -> &'static str {
-                #name_str
+                stringify!(#name)
             }
         }
 
         impl #name {
-            pub fn build_node() -> ::navi_router::RouteNode {
-                let pattern = ::navi_router::RoutePattern::parse(#path);
-                ::navi_router::RouteNode {
-                    id: #name_str.to_string(),
+            pub fn build_node() -> navi_router::RouteNode {
+                let pattern = navi_router::RoutePattern::parse(#path);
+                let mut node = navi_router::RouteNode {
+                    id: <Self as ::navi_router::RouteDef>::name().to_string(),
                     pattern,
                     parent: #parent_field,
                     is_layout: #is_layout,
                     is_index: #is_index,
                     has_loader: #has_loader,
-                    loader_stale_time: None,
-                    loader_gc_time: None,
+                    loader_stale_time: #stale_time_impl,
+                    loader_gc_time: #gc_time_impl,
                     preload_stale_time: None,
-                }
+                    before_load: Self::before_load_fn(),
+                    on_enter: #on_enter_impl,
+                    on_leave: #on_leave_impl,
+                    loader_deps: #loader_deps_impl,
+                };
+                node
             }
+
+            #before_load_impl
 
             #loader_factory_impl
 
-            pub fn register(cx: &mut ::gpui::App) {
+            pub fn register(cx: &mut gpui::App) {
                 #component_registration
                 #register_loader_call
             }

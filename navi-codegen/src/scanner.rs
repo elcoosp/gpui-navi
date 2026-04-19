@@ -98,7 +98,7 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
             .or_default()
             .push(route);
     }
-    for (pattern, routes_with_pattern) in pattern_map {
+    for (_pattern, routes_with_pattern) in pattern_map {
             // Allow if routes have different cfg features (they won't be compiled together)
             let mut features: HashSet<Option<String>> = HashSet::new();
             for r in &routes_with_pattern {

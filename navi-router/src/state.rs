@@ -257,7 +257,7 @@ impl RouterState {
             if !blockers.is_empty() {
                 let loc = loc.clone();
                 let options = options.clone();
-                cx.spawn(|mut cx: &mut gpui::AsyncApp| {
+                cx.spawn(|cx: &mut gpui::AsyncApp| {
                     let cx = cx.clone();
                     async move {
                         let mut futures = Vec::new();

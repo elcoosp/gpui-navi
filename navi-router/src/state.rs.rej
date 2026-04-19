@@ -1,9 +1,0 @@
-@@ -135,7 +135,7 @@
-                         let _cx = _cx.clone();
-                         async move {
-                             match (fetch_fn)().await {
--                                        eprintln!("[DEBUG] Setting cache with key: {}", key.cache_key());
-                                 Ok(data) => {
-+                                    eprintln!("[DEBUG] Setting cache with key: {}", key.cache_key());
-                                     client.set_query_data(&key, data, options);
-                                 }

@@ -1,7 +1,7 @@
 use crate::{Navigator, RouterState};
 use gpui::{
-    AnyElement, App, InteractiveElement, IntoElement, MouseButton, MouseUpEvent, ParentElement,
-    RenderOnce, Styled, Window, div, FontWeight,
+    AnyElement, App, FontWeight, InteractiveElement, IntoElement, MouseButton, MouseUpEvent,
+    ParentElement, RenderOnce, Styled, Window, div,
 };
 use std::time::Duration;
 
@@ -184,5 +184,13 @@ impl RenderOnce for Link {
                 }
             },
         )
+    }
+}
+
+impl Link {
+    /// Set a delay before preloading (for intent-based preloading).
+    pub fn preload_delay(mut self, delay: Duration) -> Self {
+        self.preload_delay = Some(delay);
+        self
     }
 }

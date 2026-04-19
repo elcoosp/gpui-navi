@@ -1,7 +1,7 @@
 use crate::{Navigator, RouterState};
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement, IntoElement, MouseButton, MouseUpEvent,
-    ParentElement, RenderOnce, Styled, Window, div, FontWeight, StatefulInteractiveElement,
+    AnyElement, App, InteractiveElement, IntoElement, MouseButton, MouseUpEvent, ParentElement,
+    RenderOnce, Styled, Window, div, FontWeight,
 };
 use std::time::Duration;
 
@@ -13,6 +13,13 @@ pub enum PreloadType {
     Render,
 }
 
+#[derive(Clone, Default)]
+pub struct ActiveOptions {
+    pub exact: bool,
+    pub include_hash: bool,
+    pub include_search: bool,
+}
+
 #[derive(IntoElement)]
 pub struct Link {
     href: String,
@@ -21,10 +28,10 @@ pub struct Link {
     state: Option<serde_json::Value>,
     replace: bool,
     preload: Option<PreloadType>,
-    #[allow(dead_code)]
     preload_delay: Option<Duration>,
     disabled: bool,
-    exact: bool,
+    active_options: ActiveOptions,
+    reset_scroll: bool,
     active_style: Option<Box<dyn Fn(gpui::Div) -> gpui::Div>>,
     inactive_style: Option<Box<dyn Fn(gpui::Div) -> gpui::Div>>,
     children: Vec<AnyElement>,
@@ -41,7 +48,8 @@ impl Link {
             preload: None,
             preload_delay: None,
             disabled: false,
-            exact: false,
+            active_options: ActiveOptions::default(),
+            reset_scroll: false,
             active_style: None,
             inactive_style: None,
             children: Vec::new(),
@@ -68,8 +76,13 @@ impl Link {
         self
     }
 
-    pub fn exact(mut self) -> Self {
-        self.exact = true;
+    pub fn active_options(mut self, options: ActiveOptions) -> Self {
+        self.active_options = options;
+        self
+    }
+
+    pub fn reset_scroll(mut self, reset: bool) -> Self {
+        self.reset_scroll = reset;
         self
     }
 
@@ -116,50 +129,36 @@ impl RenderOnce for Link {
         let search = self.search.clone();
         let hash = self.hash.clone();
         let state = self.state.clone();
-        let exact = self.exact;
-        let preload = self.preload;
+        let active_options = self.active_options.clone();
+        let reset_scroll = self.reset_scroll;
 
         let is_active = RouterState::try_global(cx)
-            .map(|router_state: &RouterState| {
-                let current = &router_state.current_location().pathname;
-                if exact {
-                    current == &href
+            .map(|router_state| {
+                let current = router_state.current_location();
+                let path_matches = if active_options.exact {
+                    current.pathname == href
                 } else {
-                    current.starts_with(&href)
-                }
+                    current.pathname.starts_with(&href)
+                };
+                // TODO: include hash/search checks if options set
+                path_matches
             })
             .unwrap_or(false);
 
         let navigator = Navigator::new(window.window_handle());
 
-        // 构建基础 Div 并应用样式
-        let mut div_element = div().cursor_pointer().children(self.children);
+        let mut element = div().cursor_pointer().children(self.children);
 
         if is_active {
             if let Some(f) = self.active_style {
-                div_element = f(div_element);
+                element = f(element);
             } else {
-                div_element = div_element.font_weight(FontWeight::BOLD);
+                element = element.font_weight(FontWeight::BOLD);
             }
         } else if let Some(f) = self.inactive_style {
-            div_element = f(div_element);
+            element = f(element);
         }
 
-        // 转换为 Stateful<Div> 以支持 on_hover
-        let mut element = div_element.id(ElementId::Name(format!("navi-link-{}", href).into()));
-
-        // 绑定悬停预加载
-        if let Some(PreloadType::Intent) = preload {
-            let href_clone = href.clone();
-            let navigator_clone = navigator.clone();
-            element = element.on_hover(move |hovered: &bool, _window, cx| {
-                if *hovered {
-                    navigator_clone.preload(href_clone.clone(), cx);
-                }
-            });
-        }
-
-        // 绑定点击导航
         element.on_mouse_up(
             MouseButton::Left,
             move |_event: &MouseUpEvent, _window, cx| {
@@ -174,6 +173,9 @@ impl RenderOnce for Link {
                     if let Some(st) = &state {
                         loc.state = st.clone();
                     }
+                    let mut options = crate::NavigateOptions::default();
+                    options.replace = replace;
+                    options.reset_scroll = Some(reset_scroll);
                     if replace {
                         navigator.replace_location(loc, cx);
                     } else {

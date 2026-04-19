@@ -5,6 +5,7 @@
 #[path = "routes/about.rs"] pub mod about;
 #[path = "routes/admin/dashboard.rs"] pub mod admin_dashboard;
 #[path = "routes/admin/mod.rs"] pub mod admin;
+#[path = "routes/blocking.rs"] pub mod blocking;
 #[path = "routes/dashboard/analytics.rs"] pub mod dashboard_analytics;
 #[path = "routes/dashboard/index.rs"] pub mod dashboard_index;
 #[path = "routes/dashboard/mod.rs"] pub mod dashboard;
@@ -46,6 +47,12 @@ pub fn build_route_tree() -> navi_router::RouteTree {
 
     {
         let mut node = login::LoginRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = blocking::BlockingRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -163,6 +170,7 @@ about::AboutRoute::register(cx);
 __root::RootRoute::register(cx);
 index::IndexRoute::register(cx);
 login::LoginRoute::register(cx);
+blocking::BlockingRoute::register(cx);
 lifecycle::LifecycleRoute::register(cx);
 settings::SettingsRoute::register(cx);
 #[cfg(feature = "garde")] validation_test_garde::GardeTestRoute::register(cx);

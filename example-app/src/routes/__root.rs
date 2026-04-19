@@ -1,3 +1,4 @@
+use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
@@ -33,7 +34,8 @@ impl RenderOnce for RootLayout {
                     .child(Link::new("/docs/getting-started").child("📄 Docs (splat)"))
                     .child(Link::new("/validation-test").child("🧪 Validation Tests"))
                     .child(Link::new("/admin").child("🔒 Admin"))
-                    .child(Link::new("/lifecycle").child("🔄 Lifecycle")),
+                    .child(Link::new("/lifecycle").child("🔄 Lifecycle"))
+                    .child(Link::new("/blocking").child("🚫 Blocking"))
             )
             .child(div().flex_1().p_4().child(Outlet::new()))
     }

@@ -1,3 +1,4 @@
+use navi_router::RouteDef;
 use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
@@ -54,7 +55,7 @@ impl Render for BlockerState {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.block {
             RouterState::update(cx, |state, _| {
-                state.add_blocker(Blocker::new(move |_from, _to| true));
+                state.add_blocker(Blocker::new_sync(move |_from, _to| true));
             });
         }
         div()

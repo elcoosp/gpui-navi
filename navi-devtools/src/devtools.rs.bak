@@ -2066,37 +2066,6 @@ impl DevtoolsState {
                                                 }),
                                         ),
                                 )
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .mt_2()
-                                        .child(
-                                            Button::new("clear-all-blockers")
-                                                .label("Clear All Blockers")
-                                                .ghost()
-                                                .small()
-                                                .on_click(cx.listener(|_, _, _, cx| {
-                                                    RouterState::update(cx, |state, _cx| {
-                                                        state.blockers.clear();
-                                                        state.reset_block();
-                                                    });
-                                                })),
-                                        )
-                                        .child(
-                                            Button::new("reset-pending")
-                                                .label("Reset Pending")
-                                                .ghost()
-                                                .small()
-                                                .on_click(cx.listener(|_, _, _, cx| {
-                                                    RouterState::update(cx, |state, _cx| {
-                                                        state.reset_block();
-                                                    });
-                                                })),
-                                        ),
-                                )
-
                                 // Enhanced: Pending Navigation
                                 .child(
                                     div()

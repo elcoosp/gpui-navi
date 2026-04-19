@@ -249,7 +249,7 @@ impl RouterState {
             self.history.push(loc.clone());
         }
 
-        // self.trigger_loader_with_locations(None, loc, cx);
+        self.trigger_loader_with_locations(None, loc, cx);
     }
 
     pub fn navigate(&mut self, loc: Location, options: NavigateOptions, cx: &mut App) {
@@ -489,6 +489,13 @@ impl RouterState {
                                 Ok(outcome) => match outcome {
                                     LoaderOutcome::Data(data) => {
                                         client.set_query_data(&key, data, options.clone());
+                    let _ = cx.update(|cx| cx.refresh_windows());
+                    let _ = cx.update(|cx| cx.refresh_windows());
+                    log::debug!("Loader data set for route: {}", route_id);
+                    let _ = cx.update(|cx| {
+                        RouterState::update(cx, |_, cx| cx.refresh_windows());
+                    });
+                    log::debug!("Loader data set for key: {:?}", key);
                                         let _ = cx.update(|cx| {
                                             push_event(
                                                 RouterEvent::Load {

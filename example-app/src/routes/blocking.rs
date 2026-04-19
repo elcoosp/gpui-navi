@@ -1,4 +1,3 @@
-use navi_router::RouteDef;
 use gpui::*;
 use navi_macros::define_route;
 use navi_router::{Blocker, RouterState};

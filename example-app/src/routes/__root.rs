@@ -7,9 +7,13 @@ use navi_router::RouterState;
 struct RootLayout;
 
 impl RenderOnce for RootLayout {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let meta = RouterState::global(cx).current_meta();
         let title = meta.get("title").and_then(|v| v.as_str()).unwrap_or("Navi App");
+
+        // Update the window title
+        window.set_window_title(title);
+
         div()
             .size_full()
             .flex()

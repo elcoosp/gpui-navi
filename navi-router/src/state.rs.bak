@@ -110,6 +110,7 @@ pub struct RouterState {
     next_blocker_id: BlockerId,
     pub query_client: QueryClient,
     loader_factories: HashMap<String, LoaderFactory>,
+    context_cache: HashMap<String, serde_json::Value>,
     window_handle: AnyWindowHandle,
     root_view: Option<EntityId>,
     pub not_found_mode: NotFoundMode,
@@ -153,6 +154,7 @@ impl RouterState {
             next_blocker_id: 0,
             query_client: QueryClient::new(),
             loader_factories: HashMap::new(),
+            context_cache: HashMap::new(),
             window_handle,
             root_view: None,
             not_found_mode: options.not_found_mode,
@@ -185,6 +187,7 @@ impl RouterState {
             .route_tree
             .match_path(&loc.pathname)
             .map(|(params, node)| (params, node.clone()));
+        self.context_cache.clear();
 
         let new_route_ids: HashSet<String> = self
             .current_match
@@ -441,11 +444,23 @@ impl RouterState {
                                 Ok(outcome) => match outcome {
                                     LoaderOutcome::Data(data) => {
                                         client.set_query_data(&key, data, options.clone());
+                                        if let Some(context_fn) = &node.context_fn {
+                                            let args = crate::route_tree::RouteContextArgs {
+                                                parent_context: None,
+                                                params: params.clone(),
+                                                loader_data: Some(AnyData(data.0.clone())),
+                                            };
+                                            let context_value = context_fn(args);
+                                            let _ = cx.update(|cx| {
+                                                RouterState::update(cx, |state, _| {
+                                                    state.context_cache.insert(route_id.clone(), context_value);
+                                                });
+                                            });
+                                        }
                                         log::debug!("Loader data set for route: {}", route_id);
                                         let _ = cx.update(|cx| {
                                             RouterState::update(cx, |_, cx| cx.refresh_windows());
                                         });
-                                        log::debug!("Loader data set for key: {:?}", key);
                                         let _ = cx.update(|cx| {
                                             push_event(RouterEvent::Load { from: None, to: to_clone.clone() }, cx);
                                             push_event(RouterEvent::BeforeRouteMount { from: None, to: to_clone.clone() }, cx);
@@ -513,12 +528,15 @@ impl RouterState {
         } else {
             serde_json::to_string(params).unwrap_or_else(|_| "null".to_string())
         };
-        let key = QueryKey::new("navi_loader")
+        let mut key_builder = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
-            .with("params", params_str)
-            .with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
+            .with("params", params_str);
+        if !deps_json.is_null() {
+            key_builder = key_builder.with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
+        }
+        let key = key_builder;
+        log::debug!("get_loader_data key: {:?}", key);
         let any_data: AnyData = self.query_client.get_query_data(&key)?;
-        log::debug!("get_loader_data found data for key: {:?}", key);
         let arc_data = any_data.0.downcast_ref::<Arc<R::LoaderData>>()?.clone();
         Some((*arc_data).clone())
     }
@@ -541,10 +559,13 @@ impl RouterState {
         } else {
             serde_json::to_string(params).unwrap_or_else(|_| "null".to_string())
         };
-        let key = QueryKey::new("navi_loader")
+        let mut key_builder = QueryKey::new("navi_loader")
             .with("route", node.id.as_str())
-            .with("params", params_str)
-            .with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
+            .with("params", params_str);
+        if !deps_json.is_null() {
+            key_builder = key_builder.with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
+        }
+        let key = key_builder;
         if self.query_client.is_in_flight(&key) {
             LoaderState::Loading
         } else if self.query_client.get_query_data::<AnyData>(&key).is_some() {
@@ -555,7 +576,11 @@ impl RouterState {
     }
 
     pub fn get_route_context<R: crate::RouteDef>(&self) -> Option<serde_json::Value> {
-        None
+        let (_, node) = self.current_match.as_ref()?;
+        if node.id != R::name() {
+            return None;
+        }
+        self.context_cache.get(&node.id).cloned()
     }
 
     pub fn try_global(cx: &App) -> Option<&Self> {

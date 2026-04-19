@@ -13,7 +13,6 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Events emitted by the router during navigation lifecycle.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum RouterEvent {
     BeforeNavigate { from: Option<Location>, to: Location },
@@ -24,7 +23,6 @@ pub enum RouterEvent {
     Rendered { from: Option<Location>, to: Location },
 }
 
-/// Trait for route definitions.
 pub trait RouteDef: 'static {
     type Params: Clone + std::fmt::Debug + DeserializeOwned + 'static;
     type Search: Clone + std::fmt::Debug + 'static;
@@ -110,6 +108,7 @@ pub struct RouterState {
     next_blocker_id: BlockerId,
     pub query_client: QueryClient,
     loader_factories: HashMap<String, LoaderFactory>,
+    context_cache: HashMap<String, serde_json::Value>,
     window_handle: AnyWindowHandle,
     root_view: Option<EntityId>,
     pub not_found_mode: NotFoundMode,
@@ -153,6 +152,7 @@ impl RouterState {
             next_blocker_id: 0,
             query_client: QueryClient::new(),
             loader_factories: HashMap::new(),
+            context_cache: HashMap::new(),
             window_handle,
             root_view: None,
             not_found_mode: options.not_found_mode,
@@ -185,6 +185,7 @@ impl RouterState {
             .route_tree
             .match_path(&loc.pathname)
             .map(|(params, node)| (params, node.clone()));
+        self.context_cache.clear();
 
         let new_route_ids: HashSet<String> = self
             .current_match
@@ -431,17 +432,35 @@ impl RouterState {
                     let client = self.query_client.clone();
                     let fetch_fn = query.fetch_fn.clone();
                     let options = query.options.clone();
-
                     let window_handle = self.window_handle;
                     let to_clone = to.clone();
+
+                    let context_fn = node.context_fn.clone();
+                    let params_ctx = params.clone();
+                    let route_id_ctx = route_id.clone();
+
                     cx.spawn(move |cx: &mut gpui::AsyncApp| {
                         let cx = cx.clone();
                         async move {
                             match (fetch_fn)().await {
                                 Ok(outcome) => match outcome {
                                     LoaderOutcome::Data(data) => {
+                                        let data_clone = AnyData(data.0.clone());
                                         client.set_query_data(&key, data, options.clone());
-                                        log::debug!("Loader data set for route: {}", route_id);
+                                        if let Some(context_fn) = &context_fn {
+                                            let args = crate::route_tree::RouteContextArgs {
+                                                parent_context: None,
+                                                params: params_ctx,
+                                                loader_data: Some(data_clone),
+                                            };
+                                            let context_value = context_fn(args);
+                                            let _ = cx.update(|cx| {
+                                                RouterState::update(cx, |state, _| {
+                                                    state.context_cache.insert(route_id_ctx.clone(), context_value);
+                                                });
+                                            });
+                                        }
+                                        log::debug!("Loader data set for route: {}", route_id_ctx);
                                         let _ = cx.update(|cx| {
                                             RouterState::update(cx, |_, cx| cx.refresh_windows());
                                         });
@@ -469,7 +488,7 @@ impl RouterState {
                                     }
                                 },
                                 Err(e) => {
-                                    log::error!("Loader error for {}: {:?}", route_id, e);
+                                    log::error!("Loader error for {}: {:?}", route_id_ctx, e);
                                     let _ = cx.update(|cx| {
                                         push_event(RouterEvent::Load { from: None, to: to_clone.clone() }, cx);
                                         push_event(RouterEvent::BeforeRouteMount { from: None, to: to_clone.clone() }, cx);
@@ -519,7 +538,6 @@ impl RouterState {
             key_builder = key_builder.with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
         }
         let key = key_builder;
-        log::debug!("get_loader_data key: {:?}", key);
         let any_data: AnyData = self.query_client.get_query_data(&key)?;
         let arc_data = any_data.0.downcast_ref::<Arc<R::LoaderData>>()?.clone();
         Some((*arc_data).clone())
@@ -560,7 +578,11 @@ impl RouterState {
     }
 
     pub fn get_route_context<R: crate::RouteDef>(&self) -> Option<serde_json::Value> {
-        None
+        let (_, node) = self.current_match.as_ref()?;
+        if node.id != R::name() {
+            return None;
+        }
+        self.context_cache.get(&node.id).cloned()
     }
 
     pub fn try_global(cx: &App) -> Option<&Self> {

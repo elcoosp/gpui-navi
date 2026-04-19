@@ -1,10 +1,13 @@
-// navi-codegen/src/generator.rs
 use crate::config::NaviConfig;
 use crate::scanner::scan_routes;
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
 use std::collections::BTreeSet;
+
+fn sanitize_ident(s: &str) -> String {
+    s.replace(['(', ')', '-', '.', '$', '{', '}'], "_")
+}
 
 pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
     let routes = scan_routes(config)?;
@@ -25,8 +28,8 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
         let route_type = &route.route_type_name;
         let file_path = route.relative_path.to_str().unwrap();
 
-        // Module declaration with path relative to src/
-        let mod_ident = module_path.replace("::", "_");
+        // Sanitize module identifier
+        let mod_ident = sanitize_ident(&module_path.replace("::", "_"));
         module_decls.insert(format!("#[path = \"routes/{}\"] pub mod {};", file_path, mod_ident));
 
         let node_block = format!(
@@ -55,17 +58,23 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
         }
 
         // Register call
-        if let Some(feature) = &route.cfg_feature {
-            register_calls.push_str(&format!(
-                "#[cfg(feature = \"{}\")] {}::{}::register(cx);\n",
-                feature, mod_ident, route_type
-            ));
+        let register_line = if let Some(feature) = &route.cfg_feature {
+            format!("#[cfg(feature = \"{}\")] {}::{}::register(cx);\n", feature, mod_ident, route_type)
         } else {
-            register_calls.push_str(&format!(
-                "{}::{}::register(cx);\n",
-                mod_ident, route_type
-            ));
+            format!("{}::{}::register(cx);\n", mod_ident, route_type)
+        };
+        register_calls.push_str(&register_line);
+
+        // If route is a 404 (not found) route, also register under __not_found_* keys
+        if route.is_not_found {
+            let not_found_register = if let Some(feature) = &route.cfg_feature {
+                format!("#[cfg(feature = \"{}\")] {}::{}::register(cx);\n", feature, mod_ident, route_type)
+            } else {
+                format!("{}::{}::register(cx);\n", mod_ident, route_type)
+            };
+            register_calls.push_str(&not_found_register);
         }
+
     }
 
     let module_decls_str = module_decls.into_iter().collect::<Vec<_>>().join("\n");

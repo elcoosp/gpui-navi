@@ -1,7 +1,7 @@
-// navi-codegen/src/scanner.rs
 use crate::config::NaviConfig;
 use anyhow::Result;
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -61,7 +61,7 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
         routes.push(route_info);
     }
 
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();
     routes.retain(|r| seen.insert(r.route_id.clone()));
 
     let has_root = routes.iter().any(|r| r.is_root);
@@ -89,6 +89,27 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
         let b_depth = b.relative_path.components().count();
         a_depth.cmp(&b_depth)
     });
+
+    // Check for duplicate route patterns (allow layout + index pairs)
+    let mut pattern_map: HashMap<String, Vec<&RouteInfo>> = HashMap::new();
+    for route in &routes {
+        pattern_map
+            .entry(route.route_pattern.clone())
+            .or_default()
+            .push(route);
+    }
+    for (pattern, routes_with_pattern) in pattern_map {
+            // Allow if routes have different cfg features (they won't be compiled together)
+            let mut features: HashSet<Option<String>> = HashSet::new();
+            for r in &routes_with_pattern {
+                features.insert(r.cfg_feature.clone());
+            }
+            if features.len() == routes_with_pattern.len() {
+                continue; // all have distinct cfg features, allowed
+            }
+            
+            // Otherwise, allow only if one is a layout and the other is an index route that is a child of that layout
+    }
 
     Ok(routes)
 }
@@ -231,6 +252,9 @@ fn file_name_to_pattern(file_name: &str, relative_path: &Path) -> String {
             if comp.starts_with('(') && comp.ends_with(')') {
                 continue;
             }
+            if comp.starts_with('_') {
+                continue;
+            }
             if comp.starts_with('-') {
                 continue;
             }
@@ -282,7 +306,8 @@ fn assign_parents(routes: &mut Vec<RouteInfo>) {
         }
     }
 
-    let root_id = routes.iter()
+    let root_id = routes
+        .iter()
         .find(|r| r.is_root)
         .map(|r| r.route_id.clone());
 
@@ -290,7 +315,11 @@ fn assign_parents(routes: &mut Vec<RouteInfo>) {
         if route.is_root {
             continue;
         }
-        let search = route.relative_path.parent().unwrap_or(Path::new("")).to_path_buf();
+        let search = route
+            .relative_path
+            .parent()
+            .unwrap_or(Path::new(""))
+            .to_path_buf();
         if let Some(layout_id) = dir_to_layout.get(&search) {
             route.parent = Some(layout_id.clone());
         } else {

@@ -227,7 +227,6 @@ _auth::AuthLayoutRoute::register(cx);
 admin::AdminRoute::register(cx);
 admin_dashboard::AdminDashboardRoute::register(cx);
 docs_splat::DocsRoute::register(cx);
-docs_splat::DocsRoute::register(cx);
 _marketing__about::MarketingAboutRoute::register(cx);
 dashboard_index::DashboardIndexRoute::register(cx);
 dashboard::DashboardRoute::register(cx);

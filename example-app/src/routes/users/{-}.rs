@@ -1,7 +1,6 @@
 use gpui::prelude::*;
 use gpui::*;
 
-use gpui::prelude::*;
 use navi_macros::{define_route, use_params};
 use serde::Deserialize;
 

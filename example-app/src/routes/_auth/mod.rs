@@ -1,7 +1,6 @@
 use gpui::prelude::*;
 use gpui::*;
 
-use gpui::prelude::*;
 use navi_macros::define_route;
 use navi_router::components::Outlet;
 

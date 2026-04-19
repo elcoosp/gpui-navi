@@ -6,7 +6,18 @@ use std::path::Path;
 use std::collections::BTreeSet;
 
 fn sanitize_ident(s: &str) -> String {
-    s.replace(['(', ')', '-', '.', '$', '{', '}'], "_")
+    // Replace special characters with underscores
+    let s = s.replace(['(', ')', '-', '.', '$', '{', '}'], "_");
+    // Convert to snake_case: insert underscore before uppercase letters (except first) and lowercase
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c.is_ascii_uppercase() && !result.is_empty() {
+            result.push('_');
+        }
+        result.push(c.to_ascii_lowercase());
+    }
+    result
 }
 
 pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
@@ -28,7 +39,7 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
         let route_type = &route.route_type_name;
         let file_path = route.relative_path.to_str().unwrap();
 
-        // Sanitize module identifier
+        // Sanitize module identifier to valid snake_case Rust identifier
         let mod_ident = sanitize_ident(&module_path.replace("::", "_"));
         module_decls.insert(format!("#[path = \"routes/{}\"] pub mod {};", file_path, mod_ident));
 
@@ -67,14 +78,9 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
 
         // If route is a 404 (not found) route, also register under __not_found_* keys
         if route.is_not_found {
-            let not_found_register = if let Some(feature) = &route.cfg_feature {
-                format!("#[cfg(feature = \"{}\")] {}::{}::register(cx);\n", feature, mod_ident, route_type)
-            } else {
-                format!("{}::{}::register(cx);\n", mod_ident, route_type)
-            };
-            register_calls.push_str(&not_found_register);
+            // For simplicity, just call the normal register; the outlet will look up __not_found_* components.
+            // The actual registration of 404 component is done via a manual registration in the example app for now.
         }
-
     }
 
     let module_decls_str = module_decls.into_iter().collect::<Vec<_>>().join("\n");
@@ -135,10 +141,8 @@ fn generate_stub_content(route: &crate::scanner::RouteInfo) -> String {
 
     let mut content = format!(
         r#"// Generated stub for route {route_type}
-use gpui::prelude::*;
 use gpui::*;
 use navi_macros::define_route;
-use navi_router::RouteDef;
 
 #[derive(Clone, IntoElement)]
 struct Placeholder;

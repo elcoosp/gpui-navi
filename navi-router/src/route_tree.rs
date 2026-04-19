@@ -4,6 +4,14 @@ use futures::future::BoxFuture;
 use crate::location::Location;
 use crate::redirect::{NotFound, Redirect};
 
+/// Arguments passed to route context function.
+#[derive(Clone)]
+pub struct RouteContextArgs {
+    pub parent_context: Option<serde_json::Value>,
+    pub params: HashMap<String, String>,
+    pub loader_data: Option<crate::state::AnyData>,
+}
+
 /// Context passed to `before_load` hooks.
 pub struct BeforeLoadContext {
     pub params: HashMap<String, String>,
@@ -204,6 +212,7 @@ pub struct RouteNode {
     pub on_enter: Option<Arc<dyn Fn(&Location) + Send + Sync>>,
     pub on_leave: Option<Arc<dyn Fn(&Location) + Send + Sync>>,
     pub loader_deps: Option<Arc<dyn Fn(&serde_json::Value) -> serde_json::Value + Send + Sync>>,
+    pub context_fn: Option<Arc<dyn Fn(RouteContextArgs) -> serde_json::Value + Send + Sync>>,
 }
 
 impl std::fmt::Debug for RouteNode {
@@ -447,6 +456,7 @@ mod tests {
             on_enter: None,
             on_leave: None,
             loader_deps: None,
+            context_fn: None,
         }
     }
 

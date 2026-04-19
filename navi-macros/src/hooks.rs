@@ -99,3 +99,14 @@ pub fn use_loader_state(input: TokenStream) -> TokenStream {
     };
     expanded.into()
 }
+
+pub fn use_route_context(input: TokenStream) -> TokenStream {
+    let route_ty = parse_macro_input!(input as syn::Type);
+    let expanded = quote! {
+        {
+            let state = ::navi_router::RouterState::global(cx);
+            state.get_route_context::<#route_ty>()
+        }
+    };
+    expanded.into()
+}

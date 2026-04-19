@@ -311,7 +311,7 @@ impl RouterState {
             .iter()
             .map(|&node| node)
             .chain(std::iter::once(&matched_node))
-            .filter_map(|node| {
+            .filter_map(|node: &RouteNode| {
                 node.before_load
                     .as_ref()
                     .map(|f| (node.id.clone(), f.clone()))
@@ -607,6 +607,7 @@ impl RouterState {
         let arc_data = any_data.0.downcast_ref::<Arc<R::LoaderData>>()?.clone();
         Some((*arc_data).clone())
     }
+
 
     pub fn get_loader_state<R: crate::RouteDef>(&self) -> LoaderState {
         let (params, node) = match &self.current_match {

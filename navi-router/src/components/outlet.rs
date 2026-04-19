@@ -28,7 +28,6 @@ where
 pub struct OutletDepth(pub usize);
 
 /// Renders the matched route at the current nesting depth.
-/// Depth is automatically inferred from the context and incremented for children.
 #[derive(IntoElement, Default)]
 pub struct Outlet {
     children: Vec<AnyElement>,
@@ -61,60 +60,64 @@ impl RenderOnce for Outlet {
         let state = state.unwrap();
 
         let window_id = window.window_handle().window_id();
-
-        // Determine current depth from navi_core context (default 0)
         let depth = context::consume::<OutletDepth>(window_id)
             .map(|d| d.0)
             .unwrap_or(0);
 
-        // Extract the node id and constructor
-        let (node_id, constructor_opt) = {
+        let (leaf_node_id, constructor_opt) = {
             if let Some((_params, leaf_node)) = state.current_match.as_ref() {
                 let ancestors = state.route_tree.ancestors(&leaf_node.id);
-                log::debug!(
-                    "Outlet ancestors for {}: {:?}",
-                    leaf_node.id,
-                    ancestors.iter().map(|n| &n.id).collect::<Vec<_>>()
-                );
                 if depth >= ancestors.len() {
-                    log::warn!(
-                        "Outlet depth {} exceeds ancestors length {} for route {}",
-                        depth,
-                        ancestors.len(),
-                        leaf_node.id
-                    );
+                    log::warn!("Outlet depth {} exceeds ancestors length", depth);
                     return div().into_any_element();
                 }
                 let node = ancestors[depth];
-                log::debug!("Outlet (depth {}) rendering route: {}", depth, node.id);
-
-                let constructor = REGISTRY.lock().unwrap().get(&node.id).cloned(); // Arc is Clone
+                let constructor = REGISTRY.lock().unwrap().get(&node.id).cloned();
                 (node.id.clone(), constructor)
             } else {
                 log::warn!("Outlet: no matching route");
                 return div().child("404 Not Found").into_any_element();
             }
         };
-        // `state` borrow is now released; we can mutate `cx` safely.
 
         if let Some(constructor) = constructor_opt {
-            // Provide incremented depth for child outlets
             context::provide(window_id, OutletDepth(depth + 1));
             let element = constructor(cx);
             div()
-                .id(ElementId::Name(
-                    format!("outlet-{}-{}", node_id, depth).into(),
-                ))
+                .id(ElementId::Name(format!("outlet-{}-{}", leaf_node_id.as_str(), depth).into()))
                 .child(element)
                 .children(self.children)
                 .into_any_element()
         } else {
-            log::warn!("No component registered for route: {}", node_id);
-            context::provide(window_id, OutletDepth(depth + 1));
-            div()
-                .child(format!("No component for route: {}", node_id))
-                .children(self.children)
-                .into_any_element()
+            // Check for 404 component based on not_found_mode
+            let not_found_component = match state.not_found_mode {
+                crate::NotFoundMode::Root => {
+                    REGISTRY.lock().unwrap().get("__not_found_root__").cloned()
+                }
+                crate::NotFoundMode::Fuzzy => {
+                    let ancestors = state.route_tree.ancestors(&leaf_node_id.as_str());
+                    ancestors.iter().rev().find_map(|ancestor| {
+                        REGISTRY.lock().unwrap().get(&format!("__not_found_{}", ancestor.id)).cloned()
+                    })
+                }
+            };
+
+            if let Some(constructor) = not_found_component {
+                context::provide(window_id, OutletDepth(depth + 1));
+                let element = constructor(cx);
+                div()
+                    .id(ElementId::Name(format!("outlet-404-{}", depth).into()))
+                    .child(element)
+                    .children(self.children)
+                    .into_any_element()
+            } else {
+                log::warn!("No component registered for route: {} and no 404 fallback", leaf_node_id.as_str());
+                context::provide(window_id, OutletDepth(depth + 1));
+                div()
+                    .child(format!("404 - Page not found"))
+                    .children(self.children)
+                    .into_any_element()
+            }
         }
     }
 }

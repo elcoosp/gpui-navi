@@ -19,6 +19,7 @@ pub struct RouteInfo {
     pub has_dynamic_segment: bool,
     pub parent: Option<String>,
     pub cfg_feature: Option<String>,
+    pub is_not_found: bool,
 }
 
 pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
@@ -77,6 +78,7 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
             has_dynamic_segment: false,
             parent: None,
             cfg_feature: None,
+            is_not_found: false,
         });
     }
 
@@ -116,6 +118,13 @@ fn parse_route_file(
         file_name
     };
 
+    let is_not_found = file_name == "$"
+        || (file_name == "mod"
+            && relative_path
+                .parent()
+                .map(|p| p.file_name().unwrap_or_default() == "$")
+                .unwrap_or(false));
+
     let route_pattern = file_name_to_pattern(effective_file_name, relative_path);
     let module_name = build_module_path(relative_path, file_name == "mod");
     let route_type_name = extract_route_type_name(content, relative_path)?;
@@ -135,6 +144,7 @@ fn parse_route_file(
         has_dynamic_segment,
         parent: None,
         cfg_feature,
+        is_not_found,
     })
 }
 
@@ -165,8 +175,8 @@ fn file_stem_to_module_ident(stem: &str) -> String {
     let s = stem.replace(['-', '.'], "_");
     let ident = if s == "$" {
         "splat".to_string()
-    } else if let Some(stripped) = s.strip_prefix('$') {
-        format!("param_{}", stripped)
+    } else if s.starts_with('$') {
+        format!("param_{}", &s[1..])
     } else {
         s
     };

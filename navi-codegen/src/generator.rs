@@ -6,18 +6,25 @@ use std::path::Path;
 use std::collections::BTreeSet;
 
 fn sanitize_ident(s: &str) -> String {
-    // Replace special characters with underscores
-    let s = s.replace(['(', ')', '-', '.', '$', '{', '}'], "_");
-    // Convert to snake_case: insert underscore before uppercase letters (except first) and lowercase
+    let replaced = s.replace(['(', ')', '-', '.', '$', '{', '}'], "_");
     let mut result = String::new();
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c.is_ascii_uppercase() && !result.is_empty() {
-            result.push('_');
+    let mut last_was_underscore = false;
+    for ch in replaced.chars() {
+        if ch == '_' {
+            if !last_was_underscore {
+                result.push('_');
+                last_was_underscore = true;
+            }
+        } else {
+            result.push(ch);
+            last_was_underscore = false;
         }
-        result.push(c.to_ascii_lowercase());
     }
-    result
+    result.trim_end_matches('_').to_lowercase()
+}
+
+fn is_snake_case(s: &str) -> bool {
+    s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
@@ -39,9 +46,13 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
         let route_type = &route.route_type_name;
         let file_path = route.relative_path.to_str().unwrap();
 
-        // Sanitize module identifier to valid snake_case Rust identifier
         let mod_ident = sanitize_ident(&module_path.replace("::", "_"));
-        module_decls.insert(format!("#[path = \"routes/{}\"] pub mod {};", file_path, mod_ident));
+        let mod_decl = if is_snake_case(&mod_ident) {
+            format!("#[path = \"routes/{}\"] pub mod {};", file_path, mod_ident)
+        } else {
+            format!("#[allow(non_snake_case)]\n#[path = \"routes/{}\"] pub mod {};", file_path, mod_ident)
+        };
+        module_decls.insert(mod_decl);
 
         let node_block = format!(
             r#"
@@ -68,19 +79,12 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
             route_nodes.push_str(&node_block);
         }
 
-        // Register call
         let register_line = if let Some(feature) = &route.cfg_feature {
             format!("#[cfg(feature = \"{}\")] {}::{}::register(cx);\n", feature, mod_ident, route_type)
         } else {
             format!("{}::{}::register(cx);\n", mod_ident, route_type)
         };
         register_calls.push_str(&register_line);
-
-        // If route is a 404 (not found) route, also register under __not_found_* keys
-        if route.is_not_found {
-            // For simplicity, just call the normal register; the outlet will look up __not_found_* components.
-            // The actual registration of 404 component is done via a manual registration in the example app for now.
-        }
     }
 
     let module_decls_str = module_decls.into_iter().collect::<Vec<_>>().join("\n");

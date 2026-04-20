@@ -8,13 +8,12 @@ define_route!(
     path: "/admin",
     is_layout: true,
     before_load: |_ctx| async move {
-        // Simulate auth check - toggle to test
-        let is_authenticated = false; // change to true to allow access
+        // Toggle to test
+        let is_authenticated = true;
         if !is_authenticated {
-            BeforeLoadResult::Redirect(redirect("/login"))
-        } else {
-            BeforeLoadResult::Ok
+            return BeforeLoadResult::Redirect(redirect("/login"));
         }
+        BeforeLoadResult::Ok
     },
     component: AdminLayout,
 );

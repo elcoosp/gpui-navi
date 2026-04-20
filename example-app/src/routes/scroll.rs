@@ -1,5 +1,6 @@
 use gpui::prelude::*;
 use gpui::*;
+use gpui_component::{v_flex, scroll::ScrollableElement};
 use navi_macros::define_route;
 use navi_router::components::ScrollRestoration;
 
@@ -13,21 +14,28 @@ define_route!(
 struct ScrollPage;
 
 impl RenderOnce for ScrollPage {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let scroll_handle = ScrollHandle::new();
-        div()
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let scroll_handle = window
+            .use_keyed_state(ElementId::Name("scroll-area".into()), cx, |_, _| {
+                ScrollHandle::new()
+            })
+            .read(cx)
+            .clone();
+
+        v_flex()
             .size_full()
             .child(
-                div()
-                    .id("scroll-container")
-                    .size_full()
-                    .overflow_y_scroll()
-                    .track_scroll(&scroll_handle)
+                v_flex()
+                    .id("scroll-area")
+                    .flex_1()
+                    .min_h_0()
+                    .border_2().border_color(gpui::red()) // Visual indicator
+                    .overflow_y_scrollbar()
                     .child(
-                        div()
+                        v_flex()
                             .child("Scroll Restoration Demo")
                             .children((0..100).map(|i| div().h_8().child(format!("Item {}", i))))
-                    )
+                    ),
             )
             .child(ScrollRestoration::new(scroll_handle))
     }

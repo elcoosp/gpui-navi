@@ -1,3 +1,4 @@
+use gpui::Styled;
 use crate::RouterState;
 use gpui::{InteractiveElement, AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, Window, div};
 use navi_core::context;
@@ -50,7 +51,12 @@ impl RenderOnce for Outlet {
         let state = RouterState::try_global(cx);
         if state.is_none() {
             log::error!("Outlet: RouterState not found");
-            return div().child("Router not initialized").into_any_element();
+            return div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .child("Router not initialized")
+                .into_any_element();
         }
         let state = state.unwrap();
 
@@ -59,10 +65,14 @@ impl RenderOnce for Outlet {
             .map(|d| d.0)
             .unwrap_or(0);
 
-        // Guard against infinite recursion
         if depth > 20 {
             log::error!("Outlet depth {} exceeded limit - possible cycle in route tree", depth);
-            return div().child("Error: Outlet depth limit exceeded").into_any_element();
+            return div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .child("Error: Outlet depth limit exceeded")
+                .into_any_element();
         }
 
         let (leaf_node_id, constructor_opt) = {
@@ -70,22 +80,33 @@ impl RenderOnce for Outlet {
                 let ancestors = state.route_tree.ancestors(&leaf_node.id);
                 if depth >= ancestors.len() {
                     log::warn!("Outlet depth {} exceeds ancestors length", depth);
-                    return div().into_any_element();
+                    return div().size_full().flex().flex_col().into_any_element();
                 }
                 let node = ancestors[depth];
                 let constructor = REGISTRY.lock().unwrap().get(&node.id).cloned();
                 (node.id.clone(), constructor)
             } else {
                 log::warn!("Outlet: no matching route");
-                return div().child("404 Not Found").into_any_element();
+                return div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .child("404 Not Found")
+                    .into_any_element();
             }
         };
+
+        // The wrapper MUST fill the parent and act as a flex column.
+        let wrapper = div()
+            .size_full()                     // Take all available space
+            .flex()                          // Enable flex layout
+            .flex_col()                      // Column direction
+            .id(ElementId::Name(format!("outlet-{}-{}", leaf_node_id, depth).into()));
 
         if let Some(constructor) = constructor_opt {
             context::provide(window_id, OutletDepth(depth + 1));
             let element = constructor(cx);
-            div()
-                .id(ElementId::Name(format!("outlet-{}-{}", leaf_node_id, depth).into()))
+            wrapper
                 .child(element)
                 .children(self.children)
                 .into_any_element()
@@ -105,14 +126,13 @@ impl RenderOnce for Outlet {
             if let Some(constructor) = not_found_component {
                 context::provide(window_id, OutletDepth(depth + 1));
                 let element = constructor(cx);
-                div()
-                    .id(ElementId::Name(format!("outlet-404-{}", depth).into()))
+                wrapper
                     .child(element)
                     .children(self.children)
                     .into_any_element()
             } else {
                 context::provide(window_id, OutletDepth(depth + 1));
-                div()
+                wrapper
                     .child("404 - Page not found")
                     .children(self.children)
                     .into_any_element()

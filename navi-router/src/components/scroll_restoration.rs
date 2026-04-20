@@ -1,13 +1,13 @@
 use crate::RouterState;
 use gpui::{
-    App, Element, GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, ScrollHandle,
-    Window, point,
+    App, Element, ElementId, Global, GlobalElementId, InspectorElementId, IntoElement, LayoutId,
+    Pixels, ScrollHandle, Window, point, px,
 };
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::sync::Mutex;
 
-static SCROLL_POSITIONS: Lazy<Mutex<HashMap<String, f32>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+/// Global storage for scroll positions, keyed by route pathname.
+struct ScrollPositions(HashMap<String, f32>);
+impl Global for ScrollPositions {}
 
 pub struct ScrollRestoration {
     scroll_handle: ScrollHandle,
@@ -18,12 +18,16 @@ impl ScrollRestoration {
         Self { scroll_handle }
     }
 
-    fn save(path: &str, offset: f32) {
-        SCROLL_POSITIONS.lock().unwrap().insert(path.to_string(), offset);
+    /// Save the current scroll offset for the given path.
+    fn save(path: &str, offset: f32, cx: &mut App) {
+        let positions = cx.global_mut::<ScrollPositions>();
+        positions.0.insert(path.to_string(), offset);
     }
 
-    fn get(path: &str) -> Option<f32> {
-        SCROLL_POSITIONS.lock().unwrap().get(path).copied()
+    /// Get a previously saved scroll offset for the given path.
+    fn get(path: &str, cx: &App) -> Option<f32> {
+        cx.try_global::<ScrollPositions>()
+            .and_then(|p| p.0.get(path).copied())
     }
 }
 
@@ -31,10 +35,11 @@ impl Element for ScrollRestoration {
     type RequestLayoutState = ();
     type PrepaintState = ();
 
-    fn id(&self) -> Option<gpui::ElementId> {
+    fn id(&self) -> Option<ElementId> {
         None
     }
-    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
         None
     }
 
@@ -58,13 +63,11 @@ impl Element for ScrollRestoration {
         _window: &mut Window,
         cx: &mut App,
     ) {
-        let state = RouterState::try_global(cx);
-        if let Some(state) = state {
-            let path = state.current_location().pathname.clone();
-            let offset_y = self.scroll_handle.offset().y;
-            let offset_val = offset_y.as_f32(); // use public method instead of .0
-            if offset_val != 0.0 {
-                Self::save(&path, offset_val);
+        if let Some(router) = RouterState::try_global(cx) {
+            let path = router.current_location().pathname.clone();
+            let offset = self.scroll_handle.offset().y.as_f32();
+            if offset != 0.0 {
+                Self::save(&path, offset, cx);
             }
         }
     }
@@ -79,15 +82,13 @@ impl Element for ScrollRestoration {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let state = RouterState::try_global(cx);
-        if let Some(state) = state {
-            let path = state.current_location().pathname.clone();
-            if let Some(saved_y) = Self::get(&path) {
+        if let Some(router) = RouterState::try_global(cx) {
+            let path = router.current_location().pathname.clone();
+            if let Some(saved) = Self::get(&path, cx) {
                 let scroll_handle = self.scroll_handle.clone();
-                // Use Pixels::from(saved_y) instead of tuple struct constructor
-                let saved = point(scroll_handle.offset().x, Pixels::from(saved_y));
+                let target = point(scroll_handle.offset().x, px(saved));
                 window.on_next_frame(move |window, _| {
-                    scroll_handle.set_offset(saved);
+                    scroll_handle.set_offset(target);
                     window.refresh();
                 });
             }

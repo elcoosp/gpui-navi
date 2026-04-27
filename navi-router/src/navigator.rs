@@ -1,5 +1,4 @@
-use crate::location::NavigateOptions;
-use crate::location::Location;
+use crate::{Location, NavigateOptions};
 use crate::state::RouterState;
 use gpui::{AnyWindowHandle, App};
 

@@ -9,9 +9,11 @@ members = [
     "navi-codegen",
     "navi-devtools",
     "example-app",
+    "navi-router-core",
 ]
 
 [workspace.package]
 edition = "2024"
+
 [workspace.dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }

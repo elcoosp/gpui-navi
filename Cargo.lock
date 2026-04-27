@@ -4250,6 +4250,7 @@ dependencies = [
  "history-navigation",
  "log",
  "navi-core",
+ "navi-router-core",
  "nexum-core",
  "nexum-gpui",
  "once_cell",
@@ -4262,6 +4263,28 @@ dependencies = [
  "serde_qs",
  "thiserror 1.0.69",
  "tokio",
+ "url",
+ "valico",
+ "validator",
+ "validify",
+]
+
+[[package]]
+name = "navi-router-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "garde",
+ "history-navigation",
+ "log",
+ "parking_lot",
+ "schemars 0.8.22",
+ "seahash",
+ "serde",
+ "serde_json",
+ "serde_qs",
+ "thiserror 1.0.69",
  "url",
  "valico",
  "validator",

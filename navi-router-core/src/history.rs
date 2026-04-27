@@ -29,3 +29,54 @@ impl History {
 }
 
 type LocationListener = Box<dyn Fn(&Location) + Send + Sync>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::location::Location;
+
+    #[test]
+    fn test_push_and_current() {
+        let mut history = History::new(Location::new("/"));
+        history.push(Location::new("/about"));
+        assert_eq!(history.current().pathname, "/about");
+    }
+
+    #[test]
+    fn test_back_and_forward() {
+        let mut history = History::new(Location::new("/"));
+        history.push(Location::new("/about"));
+        assert!(history.back());
+        assert_eq!(history.current().pathname, "/");
+        assert!(history.forward());
+        assert_eq!(history.current().pathname, "/about");
+    }
+
+    #[test]
+    fn test_can_go_back_and_forward() {
+        let mut history = History::new(Location::new("/"));
+        assert!(!history.can_go_back());
+        history.push(Location::new("/about"));
+        assert!(history.can_go_back());
+        assert!(!history.can_go_forward());
+        history.back();
+        assert!(history.can_go_forward());
+    }
+
+    #[test]
+    fn test_replace() {
+        let mut history = History::new(Location::new("/"));
+        history.replace(Location::new("/about"));
+        assert_eq!(history.current().pathname, "/about");
+        assert!(!history.can_go_back());
+    }
+
+    #[test]
+    fn test_go() {
+        let mut history = History::new(Location::new("/"));
+        history.push(Location::new("/a"));
+        history.push(Location::new("/b"));
+        history.go(-2);
+        assert_eq!(history.current().pathname, "/");
+    }
+}

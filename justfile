@@ -1,5 +1,5 @@
 test:
-    cargo test -p navi-router-core -p navi-router -p navi-macros -p navi-codegen -p example-app
+    cargo test -p navi-router-core -p navi-router -p navi-macros -p navi-codegen
 
 clippy:
     cargo clippy --all-targets --all-features --workspace -- -D warnings

@@ -1,6 +1,6 @@
 [package]
 name = "example-app"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 build = "build.rs"
 
@@ -8,7 +8,7 @@ build = "build.rs"
 name = "Navi GPUI Example"
 identifier = "com.navi.example-app"
 icon = ["icon.png"]
-version = "0.1.0"
+version.workspace = true
 copyright = "MIT"
 category = "public.app-category.developer-tools"
 short_description = "Navi GPUI Example"

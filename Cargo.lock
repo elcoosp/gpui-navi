@@ -1871,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "example-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -3035,7 +3035,7 @@ checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
 name = "history-navigation"
-version = "0.3.0"
+version = "0.2.0"
 
 [[package]]
 name = "hkdf"
@@ -4186,7 +4186,7 @@ dependencies = [
 
 [[package]]
 name = "navi-codegen"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "log",
@@ -4201,7 +4201,7 @@ dependencies = [
 
 [[package]]
 name = "navi-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "gpui",
@@ -4211,7 +4211,7 @@ dependencies = [
 
 [[package]]
 name = "navi-devtools"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "gpui",
@@ -4228,7 +4228,7 @@ dependencies = [
 
 [[package]]
 name = "navi-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "convert_case 0.6.0",
  "darling",
@@ -4239,7 +4239,7 @@ dependencies = [
 
 [[package]]
 name = "navi-router"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4271,7 +4271,7 @@ dependencies = [
 
 [[package]]
 name = "navi-router-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -4293,7 +4293,7 @@ dependencies = [
 
 [[package]]
 name = "navi-test"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures",
  "gpui",

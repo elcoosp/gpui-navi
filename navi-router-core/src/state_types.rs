@@ -4,7 +4,9 @@ use std::sync::Arc;
 pub struct AnyData(pub Arc<dyn std::any::Any + Send + Sync>);
 
 impl PartialEq for AnyData {
-    fn eq(&self, _other: &Self) -> bool { false }
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
 }
 
 impl std::fmt::Debug for AnyData {

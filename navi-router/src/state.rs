@@ -1,6 +1,6 @@
 use crate::{
-    Blocker, BlockerId, Location, NavigateOptions, NotFound, Redirect,
-    RouteNode, RouteTree, ViewTransitionOptions,
+    Blocker, BlockerId, Location, NavigateOptions, NotFound, Redirect, RouteNode, RouteTree,
+    ViewTransitionOptions,
 };
 use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId};
 use navi_router_core::{NavigationEffect, RouterCore};
@@ -13,12 +13,30 @@ use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum RouterEvent {
-    BeforeNavigate { from: Option<Location>, to: Location },
-    BeforeLoad { from: Option<Location>, to: Location },
-    Load { from: Option<Location>, to: Location },
-    BeforeRouteMount { from: Option<Location>, to: Location },
-    Resolved { from: Option<Location>, to: Location },
-    Rendered { from: Option<Location>, to: Location },
+    BeforeNavigate {
+        from: Option<Location>,
+        to: Location,
+    },
+    BeforeLoad {
+        from: Option<Location>,
+        to: Location,
+    },
+    Load {
+        from: Option<Location>,
+        to: Location,
+    },
+    BeforeRouteMount {
+        from: Option<Location>,
+        to: Location,
+    },
+    Resolved {
+        from: Option<Location>,
+        to: Location,
+    },
+    Rendered {
+        from: Option<Location>,
+        to: Location,
+    },
 }
 
 pub trait RouteDef: 'static {
@@ -33,7 +51,9 @@ pub trait RouteDef: 'static {
 pub struct AnyData(pub Arc<dyn std::any::Any + Send + Sync>);
 
 impl PartialEq for AnyData {
-    fn eq(&self, _other: &Self) -> bool { false }
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
 }
 
 impl std::fmt::Debug for AnyData {
@@ -60,7 +80,8 @@ impl<T: PartialEq> PartialEq for LoaderOutcome<T> {
     }
 }
 
-type LoaderFactory = Arc<dyn Fn(&HashMap<String, String>) -> Query<LoaderOutcome<AnyData>> + Send + Sync>;
+type LoaderFactory =
+    Arc<dyn Fn(&HashMap<String, String>) -> Query<LoaderOutcome<AnyData>> + Send + Sync>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoaderState {
@@ -124,7 +145,13 @@ impl RouterState {
         window_handle: AnyWindowHandle,
         route_tree: Rc<RouteTree>,
     ) -> Self {
-        Self::new_with_options(initial, window_id, window_handle, route_tree, RouterOptions::default())
+        Self::new_with_options(
+            initial,
+            window_id,
+            window_handle,
+            route_tree,
+            RouterOptions::default(),
+        )
     }
 
     pub fn new_with_options(
@@ -160,11 +187,21 @@ impl RouterState {
     }
 
     // History delegates
-    pub fn back(&mut self) -> bool { self.core.back() }
-    pub fn forward(&mut self) -> bool { self.core.forward() }
-    pub fn go(&mut self, delta: isize) { self.core.go(delta); }
-    pub fn can_go_back(&self) -> bool { self.core.history().can_go_back() }
-    pub fn can_go_forward(&self) -> bool { self.core.history().can_go_forward() }
+    pub fn back(&mut self) -> bool {
+        self.core.back()
+    }
+    pub fn forward(&mut self) -> bool {
+        self.core.forward()
+    }
+    pub fn go(&mut self, delta: isize) {
+        self.core.go(delta);
+    }
+    pub fn can_go_back(&self) -> bool {
+        self.core.history().can_go_back()
+    }
+    pub fn can_go_forward(&self) -> bool {
+        self.core.history().can_go_forward()
+    }
 
     pub fn set_root_view(&mut self, view_id: EntityId) {
         self.root_view = Some(view_id);
@@ -201,7 +238,8 @@ impl RouterState {
                         });
                     }
                 }
-            }).detach();
+            })
+            .detach();
             return;
         }
 
@@ -225,7 +263,11 @@ impl RouterState {
             .route_tree
             .ancestors(&matched_node.id)
             .iter()
-            .filter_map(|node| node.before_load.as_ref().map(|f| (node.id.clone(), f.clone())))
+            .filter_map(|node| {
+                node.before_load
+                    .as_ref()
+                    .map(|f| (node.id.clone(), f.clone()))
+            })
             .collect();
 
         if !before_load_fns.is_empty() {
@@ -272,7 +314,8 @@ impl RouterState {
                         });
                     });
                 }
-            }).detach();
+            })
+            .detach();
             return;
         }
 
@@ -300,10 +343,17 @@ impl RouterState {
                                 match (fetch_fn)().await {
                                     Ok(outcome) => match outcome {
                                         LoaderOutcome::Data(data) => {
-                                            client.set_query_data(&key, data, query_options.clone());
+                                            client.set_query_data(
+                                                &key,
+                                                data,
+                                                query_options.clone(),
+                                            );
                                             let _ = cx.update(|cx| {
-                                                RouterState::update(cx, |_, cx| cx.refresh_windows());
-                                                let _ = window_handle.update(cx, |_, window, _| window.refresh());
+                                                RouterState::update(cx, |_, cx| {
+                                                    cx.refresh_windows()
+                                                });
+                                                let _ = window_handle
+                                                    .update(cx, |_, window, _| window.refresh());
                                             });
                                         }
                                         LoaderOutcome::Redirect(redirect) => {
@@ -316,7 +366,8 @@ impl RouterState {
                                             let _ = cx.update(|cx| {
                                                 RouterState::update(cx, |state, cx| {
                                                     state.not_found_data = not_found.data;
-                                                    let nav = crate::Navigator::new(state.window_handle);
+                                                    let nav =
+                                                        crate::Navigator::new(state.window_handle);
                                                     nav.push("/404", cx);
                                                 });
                                             });
@@ -326,7 +377,8 @@ impl RouterState {
                                         log::error!("Loader error for {}: {:?}", route_id, e);
                                         let _ = cx.update(|cx| {
                                             RouterState::update(cx, |_, cx| cx.refresh_windows());
-                                            let _ = window_handle.update(cx, |_, window, _| window.refresh());
+                                            let _ = window_handle
+                                                .update(cx, |_, window, _| window.refresh());
                                         });
                                     }
                                 }
@@ -352,7 +404,9 @@ impl RouterState {
                 }
                 NavigationEffect::NotifyListeners => {
                     cx.refresh_windows();
-                    let _ = self.window_handle.update(cx, |_, window, _| window.refresh());
+                    let _ = self
+                        .window_handle
+                        .update(cx, |_, window, _| window.refresh());
                 }
             }
         }
@@ -364,23 +418,23 @@ impl RouterState {
             && let Some(factory) = self.loader_factories.get(&node.id)
         {
             let stale_time = node.loader_stale_time.unwrap_or(std::time::Duration::ZERO);
-            let gc_time = node.loader_gc_time.unwrap_or(std::time::Duration::from_secs(300));
+            let gc_time = node
+                .loader_gc_time
+                .unwrap_or(std::time::Duration::from_secs(300));
             let query = factory(&params).stale_time(stale_time).gc_time(gc_time);
             let key = query.key.clone();
             let client = self.query_client.clone();
             let fetch_fn = query.fetch_fn.clone();
             let options = query.options.clone();
             let node_id = node.id.clone();
-            cx.spawn(|_cx: &mut gpui::AsyncApp| {
-                async move {
-                    match (fetch_fn)().await {
-                        Ok(LoaderOutcome::Data(data)) => {
-                            client.set_query_data(&key, data, options);
-                        }
-                        Ok(LoaderOutcome::Redirect(_)) | Ok(LoaderOutcome::NotFound(_)) => {}
-                        Err(e) => {
-                            log::error!("Preload error for {}: {}", node_id, e);
-                        }
+            cx.spawn(|_cx: &mut gpui::AsyncApp| async move {
+                match (fetch_fn)().await {
+                    Ok(LoaderOutcome::Data(data)) => {
+                        client.set_query_data(&key, data, options);
+                    }
+                    Ok(LoaderOutcome::Redirect(_)) | Ok(LoaderOutcome::NotFound(_)) => {}
+                    Err(e) => {
+                        log::error!("Preload error for {}: {}", node_id, e);
                     }
                 }
             })
@@ -417,7 +471,10 @@ impl RouterState {
         if let Some(loc) = self.pending_navigation.take() {
             self.navigate(
                 loc,
-                NavigateOptions { ignore_blocker: true, ..Default::default() },
+                NavigateOptions {
+                    ignore_blocker: true,
+                    ..Default::default()
+                },
                 cx,
             );
         }
@@ -458,7 +515,10 @@ impl RouterState {
             .with("route", node.id.as_str())
             .with("params", params_str);
         if !deps_json.is_null() {
-            key_builder = key_builder.with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
+            key_builder = key_builder.with(
+                "deps",
+                serde_json::to_string(&deps_json).unwrap_or_default(),
+            );
         }
         let key = key_builder;
         let any_data: AnyData = self.query_client.get_query_data(&key)?;
@@ -488,7 +548,10 @@ impl RouterState {
             .with("route", node.id.as_str())
             .with("params", params_str);
         if !deps_json.is_null() {
-            key_builder = key_builder.with("deps", serde_json::to_string(&deps_json).unwrap_or_default());
+            key_builder = key_builder.with(
+                "deps",
+                serde_json::to_string(&deps_json).unwrap_or_default(),
+            );
         }
         let key = key_builder;
         if self.query_client.is_in_flight(&key) {

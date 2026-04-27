@@ -3,7 +3,7 @@ use gpui_component::Root;
 use gpui_component_assets::Assets;
 use navi_devtools::DevtoolsState;
 use navi_router::{
-    Location, RouterState, RouterOptions, NotFoundMode,
+    Location, NotFoundMode, RouterOptions, RouterState,
     components::{Outlet, RouterProvider},
 };
 
@@ -44,7 +44,12 @@ fn main() {
             for node in tree.all_nodes() {
                 let ancestors = tree.ancestors(&node.id);
                 if ancestors.len() > 50 {
-                    eprintln!("Warning: Deep ancestor chain for {} (len {}): {:?}", node.id, ancestors.len(), ancestors.iter().map(|n| n.id.clone()).collect::<Vec<_>>());
+                    eprintln!(
+                        "Warning: Deep ancestor chain for {} (len {}): {:?}",
+                        node.id,
+                        ancestors.len(),
+                        ancestors.iter().map(|n| n.id.clone()).collect::<Vec<_>>()
+                    );
                 }
             }
             eprintln!("Route tree validation complete.");

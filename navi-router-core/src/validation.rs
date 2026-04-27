@@ -173,8 +173,52 @@ where
 fn obj_to_query(obj: &serde_json::Map<String, serde_json::Value>) -> HashMap<String, String> {
     obj.iter()
         .filter_map(|(k, v)| {
-            v.as_str().map(|s| (k.clone(), s.to_string()))
+            v.as_str()
+                .map(|s| (k.clone(), s.to_string()))
                 .or_else(|| Some((k.clone(), v.to_string())))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[derive(Debug, Default)]
+    struct MySearch;
+
+    impl ValidateSearch for MySearch {
+        fn validate(_raw: &HashMap<String, String>) -> ValidationResult<Self> {
+            Ok(MySearch)
+        }
+        fn to_query(&self) -> HashMap<String, String> {
+            HashMap::new()
+        }
+    }
+
+    #[test]
+    fn test_custom_validate_search_works() {
+        let raw = HashMap::new();
+        let result = MySearch::validate(&raw);
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "validator")]
+    #[test]
+    fn test_validator_integration() {
+        use serde::{Deserialize, Serialize};
+        use validator::Validate;
+        #[derive(Debug, Validate, Default, Serialize, Deserialize)]
+        struct ValidatedSearch {
+            #[validate(range(min = 1, max = 10))]
+            page: Option<u32>,
+        }
+        let raw: HashMap<String, String> = [("page".to_string(), "5".to_string())]
+            .into_iter()
+            .collect();
+        let result = ValidatedSearch::validate(&raw);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().page, Some(5));
+    }
 }

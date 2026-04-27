@@ -1,7 +1,10 @@
-use gpui::Styled;
 use crate::RouterState;
 use crate::state::NotFoundMode;
-use gpui::{InteractiveElement, AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, Window, div};
+use gpui::Styled;
+use gpui::{
+    AnyElement, App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, Window,
+    div,
+};
 use navi_core::context;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -67,7 +70,10 @@ impl RenderOnce for Outlet {
             .unwrap_or(0);
 
         if depth > 20 {
-            log::error!("Outlet depth {} exceeded limit - possible cycle in route tree", depth);
+            log::error!(
+                "Outlet depth {} exceeded limit - possible cycle in route tree",
+                depth
+            );
             return div()
                 .size_full()
                 .flex()
@@ -99,10 +105,12 @@ impl RenderOnce for Outlet {
 
         // The wrapper MUST fill the parent and act as a flex column.
         let wrapper = div()
-            .size_full()                     // Take all available space
-            .flex()                          // Enable flex layout
-            .flex_col()                      // Column direction
-            .id(ElementId::Name(format!("outlet-{}-{}", leaf_node_id, depth).into()));
+            .size_full() // Take all available space
+            .flex() // Enable flex layout
+            .flex_col() // Column direction
+            .id(ElementId::Name(
+                format!("outlet-{}-{}", leaf_node_id, depth).into(),
+            ));
 
         if let Some(constructor) = constructor_opt {
             context::provide(window_id, OutletDepth(depth + 1));
@@ -113,13 +121,15 @@ impl RenderOnce for Outlet {
                 .into_any_element()
         } else {
             let not_found_component = match state.not_found_mode {
-                NotFoundMode::Root => {
-                    REGISTRY.lock().unwrap().get("__not_found_root__").cloned()
-                }
+                NotFoundMode::Root => REGISTRY.lock().unwrap().get("__not_found_root__").cloned(),
                 NotFoundMode::Fuzzy => {
                     let ancestors = state.route_tree.ancestors(&leaf_node_id);
                     ancestors.iter().rev().find_map(|ancestor| {
-                        REGISTRY.lock().unwrap().get(&format!("__not_found_{}", ancestor.id)).cloned()
+                        REGISTRY
+                            .lock()
+                            .unwrap()
+                            .get(&format!("__not_found_{}", ancestor.id))
+                            .cloned()
                     })
                 }
             };

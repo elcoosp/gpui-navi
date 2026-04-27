@@ -1,9 +1,9 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
+    Expr, Ident, LitBool, LitStr, Token, Type,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
-    Expr, Ident, LitBool, LitStr, Token, Type,
 };
 
 struct RouteDefInput {
@@ -30,7 +30,11 @@ impl Parse for RouteDefInput {
         let name = input.parse()?;
         let _comma = input.parse()?;
         let fields = Punctuated::parse_terminated(input)?;
-        Ok(RouteDefInput { name, _comma, fields })
+        Ok(RouteDefInput {
+            name,
+            _comma,
+            fields,
+        })
     }
 }
 
@@ -50,7 +54,12 @@ impl Parse for FieldValue {
             Ok(FieldValue::LitStr(input.parse()?))
         } else if input.peek(LitBool) {
             Ok(FieldValue::LitBool(input.parse()?))
-        } else if input.peek(Ident) && (input.peek2(Token![<]) || input.peek2(Token![::]) || input.peek2(Token![,]) || input.is_empty()) {
+        } else if input.peek(Ident)
+            && (input.peek2(Token![<])
+                || input.peek2(Token![::])
+                || input.peek2(Token![,])
+                || input.is_empty())
+        {
             Ok(FieldValue::Type(input.parse()?))
         } else {
             Ok(FieldValue::Expr(input.parse()?))
@@ -195,15 +204,29 @@ pub fn define_route(input: TokenStream) -> TokenStream {
         }
     };
 
-    let on_enter_impl = on_enter.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
-    let on_leave_impl = on_leave.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
-    let loader_deps_impl = loader_deps.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
-    let context_fn_impl = context_fn.map(|e| quote! { Some(::std::sync::Arc::new(#e)) }).unwrap_or(quote! { None });
-    let meta_impl = meta.map(|e| quote! { #e }).unwrap_or(quote! { ::std::collections::HashMap::new() });
+    let on_enter_impl = on_enter
+        .map(|e| quote! { Some(::std::sync::Arc::new(#e)) })
+        .unwrap_or(quote! { None });
+    let on_leave_impl = on_leave
+        .map(|e| quote! { Some(::std::sync::Arc::new(#e)) })
+        .unwrap_or(quote! { None });
+    let loader_deps_impl = loader_deps
+        .map(|e| quote! { Some(::std::sync::Arc::new(#e)) })
+        .unwrap_or(quote! { None });
+    let context_fn_impl = context_fn
+        .map(|e| quote! { Some(::std::sync::Arc::new(#e)) })
+        .unwrap_or(quote! { None });
+    let meta_impl = meta
+        .map(|e| quote! { #e })
+        .unwrap_or(quote! { ::std::collections::HashMap::new() });
 
     let (has_loader, loader_factory_impl) = if let Some(loader_closure) = loader_closure {
-        let stale_time_expr = stale_time.clone().unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
-        let gc_time_expr = gc_time.clone().unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
+        let stale_time_expr = stale_time
+            .clone()
+            .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
+        let gc_time_expr = gc_time
+            .clone()
+            .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
         let factory = quote! {
             pub fn loader_factory(executor: ::gpui::BackgroundExecutor) -> std::sync::Arc<
                 dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::LoaderOutcome<::navi_router::AnyData>>
@@ -214,7 +237,7 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                 serde_json::from_value(serde_json::Value::Null).unwrap()
             } else {
                 serde_json::from_value(
-    
+
                         serde_json::to_value(params_map).unwrap()
                     ).expect("Failed to deserialize route params")
             };
@@ -272,8 +295,12 @@ pub fn define_route(input: TokenStream) -> TokenStream {
         quote! { None }
     };
 
-    let stale_time_impl = stale_time.map(|e| quote! { Some(#e) }).unwrap_or(quote! { None });
-    let gc_time_impl = gc_time.map(|e| quote! { Some(#e) }).unwrap_or(quote! { None });
+    let stale_time_impl = stale_time
+        .map(|e| quote! { Some(#e) })
+        .unwrap_or(quote! { None });
+    let gc_time_impl = gc_time
+        .map(|e| quote! { Some(#e) })
+        .unwrap_or(quote! { None });
 
     let expanded = quote! {
         pub struct #name;

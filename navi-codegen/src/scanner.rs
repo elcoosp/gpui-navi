@@ -100,7 +100,10 @@ pub fn scan_routes(config: &NaviConfig) -> Result<Vec<RouteInfo>> {
     }
     for (pattern, routes_with_pattern) in pattern_map {
         if routes_with_pattern.len() > 1 {
-            eprintln!("Warning: Duplicate route pattern '{}' detected. Ensure layout/index are properly nested.", pattern);
+            eprintln!(
+                "Warning: Duplicate route pattern '{}' detected. Ensure layout/index are properly nested.",
+                pattern
+            );
         }
     }
 
@@ -199,12 +202,11 @@ fn file_stem_to_module_ident(stem: &str) -> String {
 
 fn escape_rust_keyword(s: String) -> String {
     match s.as_str() {
-        "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern"
-        | "false" | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match"
-        | "mod" | "move" | "mut" | "pub" | "ref" | "return" | "self" | "Self"
-        | "static" | "struct" | "super" | "trait" | "true" | "type" | "unsafe"
-        | "use" | "where" | "while" | "async" | "await" | "dyn" | "union"
-        => format!("r#{}", s),
+        "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern" | "false"
+        | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod" | "move"
+        | "mut" | "pub" | "ref" | "return" | "self" | "Self" | "static" | "struct" | "super"
+        | "trait" | "true" | "type" | "unsafe" | "use" | "where" | "while" | "async" | "await"
+        | "dyn" | "union" => format!("r#{}", s),
         _ => s,
     }
 }

@@ -35,7 +35,10 @@ impl Location {
         Ok(Self {
             pathname: parsed.path().to_string(),
             search,
-            hash: parsed.fragment().map(|s| format!("#{}", s)).unwrap_or_default(),
+            hash: parsed
+                .fragment()
+                .map(|s| format!("#{}", s))
+                .unwrap_or_default(),
             state: serde_json::Value::Null,
         })
     }

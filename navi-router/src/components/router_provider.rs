@@ -1,5 +1,5 @@
 use crate::components::outlet::OutletDepth;
-use crate::{Location, RouteTree, RouterState, RouterOptions};
+use crate::{Location, RouteTree, RouterOptions, RouterState};
 use gpui::{
     AnyElement, AnyWindowHandle, App, IntoElement, ParentElement, RenderOnce, Window, WindowId, div,
 };
@@ -22,7 +22,14 @@ impl RouterProvider {
         route_tree: RouteTree,
         cx: &mut App,
     ) -> Self {
-        Self::new_with_options(window_id, window_handle, initial_location, route_tree, RouterOptions::default(), cx)
+        Self::new_with_options(
+            window_id,
+            window_handle,
+            initial_location,
+            route_tree,
+            RouterOptions::default(),
+            cx,
+        )
     }
 
     pub fn new_with_options(

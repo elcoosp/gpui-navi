@@ -1,9 +1,9 @@
 use crate::config::NaviConfig;
 use crate::scanner::scan_routes;
 use anyhow::Result;
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
-use std::collections::BTreeSet;
 
 fn sanitize_ident(s: &str) -> String {
     let replaced = s.replace(['(', ')', '-', '.', '$', '{', '}'], "_");
@@ -24,7 +24,8 @@ fn sanitize_ident(s: &str) -> String {
 }
 
 fn is_snake_case(s: &str) -> bool {
-    s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    s.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
@@ -49,7 +50,10 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
         let mod_decl = if is_snake_case(&mod_ident) {
             format!("#[path = \"routes/{}\"] pub mod {};", file_path, mod_ident)
         } else {
-            format!("#[allow(non_snake_case)]\n#[path = \"routes/{}\"] pub mod {};", file_path, mod_ident)
+            format!(
+                "#[allow(non_snake_case)]\n#[path = \"routes/{}\"] pub mod {};",
+                file_path, mod_ident
+            )
         };
         module_decls.insert(mod_decl);
 
@@ -79,7 +83,10 @@ pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
         }
 
         let register_line = if let Some(feature) = &route.cfg_feature {
-            format!("#[cfg(feature = \"{}\")] {}::{}::register(cx);\n", feature, mod_ident, route_type)
+            format!(
+                "#[cfg(feature = \"{}\")] {}::{}::register(cx);\n",
+                feature, mod_ident, route_type
+            )
         } else {
             format!("{}::{}::register(cx);\n", mod_ident, route_type)
         };

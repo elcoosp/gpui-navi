@@ -14,7 +14,6 @@ pub enum SuspenseState<T> {
     Error(String),
 }
 
-
 impl<T: Clone> Clone for SuspenseState<T> {
     fn clone(&self) -> Self {
         match self {

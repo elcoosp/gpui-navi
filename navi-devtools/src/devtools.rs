@@ -2096,7 +2096,6 @@ impl DevtoolsState {
                                                 })),
                                         ),
                                 )
-
                                 // Enhanced: Pending Navigation
                                 .child(
                                     div()
@@ -2419,62 +2418,65 @@ impl Render for DevtoolsState {
             }));
         }
 
-        panel = panel
-            .on_action(cx.listener(|this, _: &FocusTimelineSearch, window, cx| {
-                this.set_selected_tab(DevtoolsTab::Timeline, cx);
-                this.ensure_timeline_search(window, cx);
-                if let Some(search) = &this.timeline_search {
-                    search.update(cx, |state, cx| state.focus(window, cx));
-                }
-            }))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px_2()
-                    .py_1()
-                    .bg(theme.secondary.opacity(0.95))
-                    .rounded_tl(px(8.0))
-                    .border_b_1()
-                    .border_color(theme.border)
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap_1()
-                                    .child(Icon::new(IconName::Info))
-                                    .child(" Devtools"),
-                            )
-                            .child(
-                                Button::new("close-devtools")
-                                    .icon(IconName::Close)
-                                    .ghost()
-                                    .small()
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.toggle_expanded(window, cx);
-                                    })),
-                            ),
-                    ),
-            )
-            .child(tab_bar)
-            .child(div().flex_1().p_3().overflow_y_scrollbar().child(
-                match self.selected_tab {
-                    DevtoolsTab::Routes => self.render_routes_tab(window, cx).into_any_element(),
-                    DevtoolsTab::Cache => self.render_cache_tab(window, cx).into_any_element(),
-                    DevtoolsTab::Timeline => {
-                        self.render_timeline_tab(window, cx).into_any_element()
+        panel =
+            panel
+                .on_action(cx.listener(|this, _: &FocusTimelineSearch, window, cx| {
+                    this.set_selected_tab(DevtoolsTab::Timeline, cx);
+                    this.ensure_timeline_search(window, cx);
+                    if let Some(search) = &this.timeline_search {
+                        search.update(cx, |state, cx| state.focus(window, cx));
                     }
-                    DevtoolsTab::State => self.render_state_tab(cx).into_any_element(),
-                    #[cfg(feature = "nexum")]
-                    DevtoolsTab::DeepLinks => self.deep_link_view.clone().into_any_element(),
-                },
-            ));
+                }))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .px_2()
+                        .py_1()
+                        .bg(theme.secondary.opacity(0.95))
+                        .rounded_tl(px(8.0))
+                        .border_b_1()
+                        .border_color(theme.border)
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_1()
+                                        .child(Icon::new(IconName::Info))
+                                        .child(" Devtools"),
+                                )
+                                .child(
+                                    Button::new("close-devtools")
+                                        .icon(IconName::Close)
+                                        .ghost()
+                                        .small()
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.toggle_expanded(window, cx);
+                                        })),
+                                ),
+                        ),
+                )
+                .child(tab_bar)
+                .child(div().flex_1().p_3().overflow_y_scrollbar().child(
+                    match self.selected_tab {
+                        DevtoolsTab::Routes => {
+                            self.render_routes_tab(window, cx).into_any_element()
+                        }
+                        DevtoolsTab::Cache => self.render_cache_tab(window, cx).into_any_element(),
+                        DevtoolsTab::Timeline => {
+                            self.render_timeline_tab(window, cx).into_any_element()
+                        }
+                        DevtoolsTab::State => self.render_state_tab(cx).into_any_element(),
+                        #[cfg(feature = "nexum")]
+                        DevtoolsTab::DeepLinks => self.deep_link_view.clone().into_any_element(),
+                    },
+                ));
         panel.into_any_element()
     }
 }

@@ -173,7 +173,8 @@ where
 fn obj_to_query(obj: &serde_json::Map<String, serde_json::Value>) -> HashMap<String, String> {
     obj.iter()
         .filter_map(|(k, v)| {
-            v.as_str().map(|s| (k.clone(), s.to_string()))
+            v.as_str()
+                .map(|s| (k.clone(), s.to_string()))
                 .or_else(|| Some((k.clone(), v.to_string())))
         })
         .collect()
@@ -206,14 +207,16 @@ mod tests {
     #[cfg(feature = "validator")]
     #[test]
     fn test_validator_integration() {
+        use serde::{Deserialize, Serialize};
         use validator::Validate;
-        use serde::{Serialize, Deserialize};
         #[derive(Debug, Validate, Default, Serialize, Deserialize)]
         struct ValidatedSearch {
             #[validate(range(min = 1, max = 10))]
             page: Option<u32>,
         }
-        let raw: HashMap<String, String> = [("page".to_string(), "5".to_string())].into_iter().collect();
+        let raw: HashMap<String, String> = [("page".to_string(), "5".to_string())]
+            .into_iter()
+            .collect();
         let result = ValidatedSearch::validate(&raw);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().page, Some(5));

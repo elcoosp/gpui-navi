@@ -169,6 +169,7 @@ where
 }
 
 // Utility to convert a JSON object into query params
+#[allow(dead_code)]
 fn obj_to_query(obj: &serde_json::Map<String, serde_json::Value>) -> HashMap<String, String> {
     obj.iter()
         .filter_map(|(k, v)| {

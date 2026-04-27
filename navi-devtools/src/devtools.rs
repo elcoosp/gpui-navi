@@ -1854,8 +1854,8 @@ impl DevtoolsState {
                 .all_nodes()
                 .filter(|n| n.has_loader)
                 .count();
-            let can_back = state.history.can_go_back();
-            let can_forward = state.history.can_go_forward();
+            let can_back = state.can_go_back();
+            let can_forward = state.can_go_forward();
             let blocker_count = state.blockers.len();
             let has_blockers = !state.blockers.is_empty();
             let is_blocked = state.is_blocked();

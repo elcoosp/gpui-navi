@@ -114,6 +114,7 @@ pub fn register_routes(cx: &mut gpui::App) {{
     Ok(output)
 }
 
+#[allow(dead_code)]
 fn ensure_stub_files_exist(
     _config: &NaviConfig,
     _routes: &[crate::scanner::RouteInfo],
@@ -122,6 +123,7 @@ fn ensure_stub_files_exist(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn generate_stub_content(_route: &crate::scanner::RouteInfo) -> String {
     String::new()
 }

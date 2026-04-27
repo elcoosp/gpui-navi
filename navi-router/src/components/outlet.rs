@@ -1,5 +1,6 @@
 use gpui::Styled;
 use crate::RouterState;
+use crate::state::NotFoundMode;
 use gpui::{InteractiveElement, AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, Window, div};
 use navi_core::context;
 use once_cell::sync::Lazy;
@@ -112,10 +113,10 @@ impl RenderOnce for Outlet {
                 .into_any_element()
         } else {
             let not_found_component = match state.not_found_mode {
-                crate::NotFoundMode::Root => {
+                NotFoundMode::Root => {
                     REGISTRY.lock().unwrap().get("__not_found_root__").cloned()
                 }
-                crate::NotFoundMode::Fuzzy => {
+                NotFoundMode::Fuzzy => {
                     let ancestors = state.route_tree.ancestors(&leaf_node_id);
                     ancestors.iter().rev().find_map(|ancestor| {
                         REGISTRY.lock().unwrap().get(&format!("__not_found_{}", ancestor.id)).cloned()

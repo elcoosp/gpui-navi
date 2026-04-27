@@ -1,6 +1,6 @@
 [package]
 name = "navi-router"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 
 [dependencies]
@@ -32,6 +32,7 @@ rs-query = { git = "https://github.com/elcoosp/rs-query", features = ["devtools"
 nexum-core = { path = "../../nexum/nexum-core", optional = true }
 nexum-gpui = { path = "../../nexum/nexum-gpui", optional = true }
 tokio = { version = "1", features = ["sync", "rt"], optional = true }
+navi-router-core = { path = "../navi-router-core" }
 
 [features]
 default = []

@@ -29,7 +29,6 @@ fn is_snake_case(s: &str) -> bool {
 
 pub fn generate_route_tree(config: &NaviConfig) -> Result<String> {
     let routes = scan_routes(config)?;
-    ensure_stub_files_exist(config, &routes)?;
 
     let mut route_nodes = String::new();
     let mut module_decls = BTreeSet::new();
@@ -115,72 +114,18 @@ pub fn register_routes(cx: &mut gpui::App) {{
     Ok(output)
 }
 
+#[allow(dead_code)]
 fn ensure_stub_files_exist(
-    config: &NaviConfig,
-    routes: &[crate::scanner::RouteInfo],
+    _config: &NaviConfig,
+    _routes: &[crate::scanner::RouteInfo],
 ) -> Result<()> {
-    let routes_dir = Path::new(&config.routes_directory);
-    for route in routes {
-        let file_path = routes_dir.join(&route.relative_path);
-        if !file_path.exists() {
-            continue;
-        }
-        let content = fs::read_to_string(&file_path)?;
-        if content.contains("define_route!") {
-            continue;
-        }
-
-        let stub = generate_stub_content(route);
-        fs::write(&file_path, stub)?;
-        println!("Generated stub for {:?}", route.relative_path);
-    }
+    // Stub generation not used in this version
     Ok(())
 }
 
-fn generate_stub_content(route: &crate::scanner::RouteInfo) -> String {
-    let route_type = &route.route_type_name;
-    let pattern = &route.route_pattern;
-    let is_layout = route.is_layout;
-    let is_index = route.is_index;
-
-    let mut content = format!(
-        r#"// Generated stub for route {route_type}
-use gpui::*;
-use navi_macros::define_route;
-
-#[derive(Clone, IntoElement)]
-struct Placeholder;
-
-impl RenderOnce for Placeholder {{
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {{
-        div().child("Placeholder for {route_type}")
-    }}
-}}
-
-"#,
-        route_type = route_type,
-    );
-
-    if let Some(feature) = &route.cfg_feature {
-        content.push_str(&format!("#[cfg(feature = \"{}\")]\n", feature));
-    }
-
-    content.push_str(&format!(
-        r#"define_route!(
-    {route_type},
-    path: "{pattern}",
-    is_layout: {is_layout},
-    is_index: {is_index},
-    component: Placeholder,
-);
-"#,
-        route_type = route_type,
-        pattern = pattern,
-        is_layout = is_layout,
-        is_index = is_index,
-    ));
-
-    content
+#[allow(dead_code)]
+fn generate_stub_content(_route: &crate::scanner::RouteInfo) -> String {
+    String::new()
 }
 
 pub fn write_route_tree(config: &NaviConfig) -> Result<()> {

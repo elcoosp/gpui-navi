@@ -1,7 +1,7 @@
 # navi-codegen/Cargo.toml
 [package]
 name = "navi-codegen"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 
 [[bin]]

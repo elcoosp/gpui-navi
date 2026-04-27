@@ -1,22 +1,33 @@
-pub mod blocker;
+// Re-export all core types for backward compatibility
+pub use navi_router_core::{
+    Blocker, BlockerId, History, Location, NavigateOptions, NotFound,
+    Redirect, RouteNode, RoutePattern, RouteTree, ScrollIntoViewOptions, Segment,
+    ValidateSearch, ValidationError, ValidationResult, ViewTransitionOptions,
+    not_found, redirect,
+};
+
+// Re-export route_tree items that are used via path in macros / route files
+pub mod route_tree {
+    pub use navi_router_core::route_tree::{
+        BeforeLoadContext, BeforeLoadResult, RouteContextArgs, RouteNode, RoutePattern,
+        RouteTree, Segment,
+    };
+    pub use navi_router_core::route_tree::BeforeLoadFn;
+}
+
+// Re-export commonly used items at crate root too
+pub use navi_router_core::route_tree::{BeforeLoadContext, BeforeLoadResult, RouteContextArgs};
+
+// Adapter-specific modules and types
 pub mod components;
 pub mod event_bus;
-pub mod history;
-pub mod location;
 pub mod navigator;
-pub mod radix_tree;
-pub mod redirect;
-pub mod route_tree;
 pub mod state;
-pub mod validation;
+#[cfg(feature = "nexum")]
+pub mod deep_link;
 
-pub use blocker::{Blocker, BlockerId};
-pub use history::History;
-pub use location::{Location, NavigateOptions, ScrollIntoViewOptions, ViewTransitionOptions};
+pub use components::{Link, Outlet, RouterProvider, register_route_component};
 pub use navigator::Navigator;
-pub use redirect::{NotFound, Redirect, not_found, redirect};
-pub use route_tree::{
-    BeforeLoadContext, BeforeLoadResult, RouteNode, RoutePattern, RouteTree, Segment,
+pub use state::{
+    RouterState, RouterEvent, RouterOptions, RouteDef, LoaderOutcome, AnyData, NotFoundMode,
 };
-pub use state::{AnyData, LoaderOutcome, RouteDef, RouterEvent, RouterState, RouterOptions, NotFoundMode};
-pub use validation::{ValidateSearch, ValidationError, ValidationResult};

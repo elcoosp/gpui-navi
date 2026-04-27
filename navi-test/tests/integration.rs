@@ -1,9 +1,11 @@
-use gpui::*;
+#![recursion_limit = "256"]
+
+use futures::executor::block_on;
 use navi_router::*;
 use std::collections::HashMap;
 
-#[gpui::test]
-async fn test_route_matching() {
+#[test]
+fn test_route_matching() {
     let mut tree = RouteTree::new();
     let node = RouteNode {
         id: "test".to_string(),
@@ -33,6 +35,6 @@ fn test_navigation_blocker_sync() {
     let blocker = Blocker::new_sync(|_, _| true);
     let from = Location::new("/from");
     let to = Location::new("/to");
-    let allow = futures::executor::block_on(blocker.should_allow(&from, &to));
+    let allow = block_on(blocker.should_allow(&from, &to));
     assert!(!allow);
 }

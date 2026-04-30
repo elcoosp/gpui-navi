@@ -13,7 +13,7 @@ parking_lot = "0.12"
 log = "0.4"
 seahash = "4.1"
 url = "2.5"
-serde_qs = "0.12"
+serde_qs = "0.15"
 history-navigation = { path = "../stubs/history-navigation" }
 
 # Validation crate integrations (optional)

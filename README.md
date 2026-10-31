@@ -1,40 +1,56 @@
-# Navi Router
+<div align="center">
+  <img src="docs/logo.png" alt="Navi Router Logo" width="120"/>
+  <p>
+    <strong>A powerful file‑based router for GPUI</strong><br/>
+    Featuring loaders, suspense, devtools, and full TanStack Router feature parity.
+  </p>
+  <p>
+    <img src="https://img.shields.io/badge/Rust-1.94%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
+    <img src="https://img.shields.io/badge/GPUI-0.2-000000?style=flat-square" alt="GPUI"/>
+    <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT"/>
+  </p>
+</div>
 
-A powerful file‑based router for [GPUI](https://github.com/zed-industries/zed) with loaders, suspense, devtools, and full TanStack Router feature parity.
+---
 
 ## Features
 
-- **File‑based routing** – Define routes via the filesystem.
-- **Nested layouts** – Hierarchical layouts with `<Outlet>`.
-- **Loaders** – Data fetching with caching, stale‑time, and GC.
-- **Suspense boundaries** – Granular loading states with `Awaited`.
-- **`beforeLoad` hooks** – Route guards with redirect/notFound.
-- **Navigation blockers** – Async/sync blockers for unsaved changes.
-- **Scroll restoration** – Automatic scroll position memory.
-- **Devtools** – Inspect routes, cache, timeline, and state.
-- **Validation** – Integrates with `validator`, `garde`, `validify`, `valico`.
-- **Codegen** – Automatic route tree generation from `src/routes`.
-- **Type‑safe hooks** – `use_params!`, `use_search!`, `use_loader_data!`, `use_navigate!`, etc.
+- **File‑based routing**: Define routes intuitively via the filesystem.
+- **Nested layouts**: Hierarchical layouts powered by `<Outlet>`.
+- **Loaders**: Built-in data fetching with caching, stale-time, and garbage collection.
+- **Suspense boundaries**: Granular loading states using `Awaited`.
+- **`beforeLoad` hooks**: Robust route guards with redirect/notFound support.
+- **Navigation blockers**: Async/sync blockers to prevent data loss from unsaved changes.
+- **Scroll restoration**: Automatic memory and restoration of scroll positions.
+- **Devtools**: Inspect routes, cache, timeline, and state directly in your app.
+- **Validation**: Seamless integration with `validator`, `garde`, `validify`, and `valico`.
+- **Codegen**: Automatic route tree generation from `src/routes`.
+- **Type‑safe hooks**: Macros like `use_params!`, `use_search!`, and `use_loader_data!`.
 
 ## Quick Start
 
-Add to your `Cargo.toml`:
+### 1. Add Dependencies
+
+Add `navi-router` and `navi-macros` to your `Cargo.toml`:
 
 ```toml
+[dependencies]
 navi-router = { path = "navi-router" }
 navi-macros = { path = "navi-macros" }
 ```
 
-Create a root layout:
+### 2. Define Routes
+
+Create a root layout (`src/routes/__root.rs`):
 
 ```rust
-// src/routes/__root.rs
 use gpui::*;
 use navi_macros::define_route;
 use navi_router::components::{Link, Outlet};
 
 #[derive(Clone, IntoElement)]
 struct RootLayout;
+
 impl RenderOnce for RootLayout {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         div()
@@ -46,15 +62,15 @@ impl RenderOnce for RootLayout {
 define_route!(RootRoute, path: "/", is_layout: true, component: RootLayout);
 ```
 
-Add an index route:
+Add an index route (`src/routes/index.rs`):
 
 ```rust
-// src/routes/index.rs
 use gpui::*;
 use navi_macros::define_route;
 
 #[derive(Clone, IntoElement)]
 struct HomePage;
+
 impl RenderOnce for HomePage {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         div().child("Welcome!")
@@ -64,7 +80,9 @@ impl RenderOnce for HomePage {
 define_route!(IndexRoute, path: "/", is_index: true, component: HomePage);
 ```
 
-Configure code generation in `build.rs`:
+### 3. Configure Code Generation
+
+Set up `build.rs` to generate the route tree:
 
 ```rust
 fn main() {
@@ -74,10 +92,16 @@ fn main() {
 }
 ```
 
-In `main.rs`:
+> [!NOTE]
+> Ensure `navi.config.json` is present in your project root (see [Configuration](#configuration)).
+
+### 4. Initialize the Router
+
+In your `main.rs`:
 
 ```rust
 use navi_router::{RouterProvider, Location, RouterOptions, NotFoundMode};
+
 mod route_tree { include!("route_tree.gen.rs"); }
 
 let tree = route_tree::build_route_tree();
@@ -97,7 +121,7 @@ route_tree::register_routes(cx);
 
 ## Configuration
 
-`navi.config.json`:
+Control code generation behavior via `navi.config.json`:
 
 ```json
 {
@@ -109,7 +133,9 @@ route_tree::register_routes(cx);
 }
 ```
 
-## Route Definition Macro
+## Route Definition API
+
+The `define_route!` macro provides a comprehensive, type-safe way to configure routes:
 
 ```rust
 define_route!(
@@ -118,56 +144,59 @@ define_route!(
     params: UserParams,
     search: UserSearch,
     data: User,
-    loader: |params, executor| async move { ... },
+    loader: |params, executor| async move { /* fetch data */ },
     before_load: |ctx| async move { BeforeLoadResult::Ok },
     on_enter: |loc| log::info!("entered"),
     on_leave: |loc| log::info!("left"),
     stale_time: Duration::from_secs(60),
     gc_time: Duration::from_secs(300),
-    meta: { ... },
+    meta: { /* custom metadata */ },
     component: MyComponent,
 );
 ```
 
-## Hooks
+## Hooks & Components
 
-- `use_params!(MyRoute)`
-- `use_search!(MyRoute)`
-- `use_loader_data!(MyRoute)`
-- `use_navigate!()`
-- `use_matched_route!(MyRoute)`
-- `use_route_context!(MyRoute)`
+### Hooks
+| Macro | Description |
+| :--- | :--- |
+| `use_params!(MyRoute)` | Extracts typed path parameters. |
+| `use_search!(MyRoute)` | Extracts typed search/query parameters. |
+| `use_loader_data!(MyRoute)` | Accesses data returned by the route's loader. |
+| `use_navigate!()` | Programmatically navigate between routes. |
+| `use_matched_route!(MyRoute)` | Gets context about the currently matched route. |
+| `use_route_context!(MyRoute)` | Accesses the full route context. |
 
-## Components
-
-- `Link` – Navigation links with active styling.
-- `Outlet` – Renders nested routes.
-- `SuspenseBoundary` – Shows fallback while loading.
-- `Awaited` – Waits for loader data.
-- `ScrollRestoration` – Saves/restores scroll position.
+### Components
+| Component | Description |
+| :--- | :--- |
+| `Link` | Navigation links with built-in active styling. |
+| `Outlet` | Renders the matched child route within a layout. |
+| `SuspenseBoundary` | Displays a fallback UI while nested routes load. |
+| `Awaited` | Waits for and renders loader data. |
+| `ScrollRestoration` | Automatically saves and restores scroll positions. |
 
 ## Devtools
 
-Press `Cmd+Shift+D` to open. Tabs:
-- **Routes** – Tree view, test navigation.
-- **Cache** – Inspect/invalidate rs‑query cache.
-- **Timeline** – Event log with search/filter/export.
-- **State** – Router state, blockers, meta.
+> [!TIP]
+> Press `Cmd+Shift+D` (or `Ctrl+Shift+D` on Windows/Linux) to open the Devtools panel.
+
+The Devtools interface provides four main tabs:
+- **Routes**: Visual tree view and test navigation.
+- **Cache**: Inspect and invalidate the `rs-query` cache.
+- **Timeline**: Event log with search, filter, and export capabilities.
+- **State**: Overview of router state, navigation blockers, and metadata.
 
 ## Feature Comparison
 
 | Feature | Navi Router | TanStack Router |
-|---------|-------------|-----------------|
+| :--- | :---: | :---: |
 | File‑based routing | ✅ | ✅ |
 | Nested layouts | ✅ | ✅ |
-| Loaders | ✅ | ✅ |
-| `beforeLoad` | ✅ | ✅ |
-| Async blockers | ✅ | ✅ |
+| Loaders & Caching | ✅ | ✅ |
+| `beforeLoad` guards | ✅ | ✅ |
+| Async navigation blockers | ✅ | ✅ |
 | Scroll restoration | ✅ | ✅ |
-| Devtools | ✅ | ✅ |
+| Built-in Devtools | ✅ | ✅ |
 | Type‑safe search params | ✅ | ✅ |
 | Route context | ✅ | ✅ |
-
-## License
-
-MIT

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/logo.png" alt="Navi Router Logo" width="120"/>
+  <img src="docs/logo.png" alt="Navi Router Logo" width="300"/>
   <p>
     <strong>A powerful file‑based router for GPUI</strong><br/>
     Featuring loaders, suspense, devtools, and full TanStack Router feature parity.

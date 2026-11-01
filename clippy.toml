@@ -1,0 +1,10 @@
+# Clippy configuration for the workspace.
+#
+# The devtools UI module contains large render methods (a single function
+# builds a whole tab of the inspector panel), multi-argument tree renderers
+# and display structs with several independent flags. These thresholds
+# calibrate the pedantic shape lints for that reality instead of scattering
+# `#[allow]` attributes through the code.
+too-many-lines-threshold = 500
+too-many-arguments-threshold = 12
+max-struct-bools = 5

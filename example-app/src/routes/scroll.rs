@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, ElementId, ScrollHandle, div};
 use gpui_component::{v_flex, scroll::ScrollableElement};
 use navi_macros::define_route;
 use navi_router::components::ScrollRestoration;
@@ -34,7 +34,7 @@ impl RenderOnce for ScrollPage {
                     .child(
                         v_flex()
                             .child("Scroll Restoration Demo")
-                            .children((0..100).map(|i| div().h_8().child(format!("Item {}", i))))
+                            .children((0..100).map(|i| div().h_8().child(format!("Item {i}"))))
                     ),
             )
             .child(ScrollRestoration::new(scroll_handle))

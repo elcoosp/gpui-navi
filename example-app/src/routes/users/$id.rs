@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div};
 use navi_macros::{define_route, use_loader_data};
 use serde::{Deserialize, Serialize};
 
@@ -25,8 +25,8 @@ define_route!(
         executor.timer(std::time::Duration::from_millis(800)).await;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(UserData {
             id: id.clone(),
-            name: format!("User {}", id),
-            email: format!("user{}@example.com", id),
+            name: format!("User {id}"),
+            email: format!("user{id}@example.com"),
         }))
     },
     component: UserDetailPage,

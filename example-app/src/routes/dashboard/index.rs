@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div};
 use navi_macros::{define_route, use_loader_data};
 use std::time::Duration;
 
@@ -13,7 +13,7 @@ define_route!(
     path: "/dashboard",
     is_index: true,
     data: OverviewData,
-    loader: |_: (), executor: gpui::BackgroundExecutor| async move {
+    loader: |(): (), executor: gpui::BackgroundExecutor| async move {
         log::info!("[Overview] Loader started");
         executor.timer(Duration::from_millis(600)).await;
         log::info!("[Overview] Loader completed");
@@ -34,9 +34,7 @@ struct DashboardOverview;
 impl RenderOnce for DashboardOverview {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let data = use_loader_data!(DashboardIndexRoute);
-        let stats = data
-            .map(|d| d.stats.clone())
-            .unwrap_or_else(|| vec!["⏳ Loading overview...".to_string()]);
+        let stats = data.map_or_else(|| vec!["⏳ Loading overview...".to_string()], |d| d.stats.clone());
         div()
             .p_4()
             .child("📈 Overview")

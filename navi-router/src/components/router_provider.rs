@@ -41,10 +41,7 @@ impl RouterProvider {
         cx: &mut App,
     ) -> Self {
         crate::event_bus::init_event_log(cx);
-        log::info!(
-            "RouterProvider::new: initializing context for window {:?}",
-            window_id
-        );
+        log::info!("RouterProvider::new: initializing context for window {window_id:?}");
         context::init_window(window_id);
         let route_tree = Rc::new(route_tree);
         let state = RouterState::new_with_options(

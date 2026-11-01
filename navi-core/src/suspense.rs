@@ -41,3 +41,52 @@ impl Default for SuspenseConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_suspense_state_default_is_idle() {
+        let state: SuspenseState<u8> = SuspenseState::default();
+        assert!(matches!(state, SuspenseState::Idle));
+    }
+
+    #[test]
+    fn test_suspense_state_transitions() {
+        let mut state = SuspenseState::<String>::Idle;
+        assert!(matches!(state, SuspenseState::Idle));
+        state = SuspenseState::Pending;
+        assert!(matches!(state, SuspenseState::Pending));
+        state = SuspenseState::Ready("data".to_string());
+        assert!(matches!(state, SuspenseState::Ready(ref v) if v == "data"));
+        state = SuspenseState::Error("boom".to_string());
+        assert!(matches!(state, SuspenseState::Error(ref e) if e == "boom"));
+    }
+
+    #[test]
+    fn test_suspense_state_clone() {
+        let ready = SuspenseState::Ready(vec![1_u8, 2]);
+        let cloned = ready.clone();
+        assert!(matches!(cloned, SuspenseState::Ready(v) if v == vec![1_u8, 2]));
+        let error = SuspenseState::<u8>::Error("e".into());
+        assert!(matches!(error.clone(), SuspenseState::Error(ref e) if e == "e"));
+    }
+
+    #[test]
+    fn test_suspense_config_defaults() {
+        let config = SuspenseConfig::default();
+        assert_eq!(config.pending_ms, 1000);
+        assert_eq!(config.pending_min_ms, 500);
+    }
+
+    #[test]
+    fn test_suspense_config_custom() {
+        let config = SuspenseConfig {
+            pending_ms: 10,
+            pending_min_ms: 5,
+        };
+        assert_eq!(config.pending_ms, 10);
+        assert_eq!(config.pending_min_ms, 5);
+    }
+}

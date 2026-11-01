@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div, FontWeight, rgb, px};
 use gpui_component::scroll::ScrollableElement;
 use navi_macros::define_route;
 
@@ -24,13 +24,13 @@ impl RenderOnce for HomePage {
             .child(
                 div()
                     .text_sm()
-                    .text_color(rgb(0xa6adc8))
+                    .text_color(rgb(0x00a6_adc8))
                     .child("This demo showcases nested layouts, dynamic routes, loaders, and more."),
             )
             .child(
                 div()
                     .max_w(px(600.0))
-                    .text_color(rgb(0xbac2de))
+                    .text_color(rgb(0x00ba_c2de))
                     .child("Scroll down to see the long list. Then navigate to another page and come back – your scroll position will be restored!")
             )
             .child(
@@ -47,7 +47,7 @@ impl RenderOnce for HomePage {
                             .children((0..100).map(|i| {
                                 div()
                                     .p_2()
-                                    .bg(if i % 2 == 0 { rgb(0x2a2a3e) } else { rgb(0x1e1e2e) })
+                                    .bg(if i % 2 == 0 { rgb(0x002a_2a3e) } else { rgb(0x001e_1e2e) })
                                     .rounded_md()
                                     .child(format!("Item #{}: Lorem ipsum dolor sit amet, consectetur adipiscing elit.", i + 1))
                             }))

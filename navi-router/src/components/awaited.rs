@@ -12,6 +12,7 @@ pub struct Awaited<R: RouteDef> {
 }
 
 impl<R: RouteDef> Awaited<R> {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             fallback: None,
@@ -20,14 +21,22 @@ impl<R: RouteDef> Awaited<R> {
         }
     }
 
+    #[must_use]
     pub fn fallback(mut self, f: impl Fn() -> AnyElement + 'static) -> Self {
         self.fallback = Some(Box::new(f));
         self
     }
 
+    #[must_use]
     pub fn child(mut self, f: impl Fn(R::LoaderData) -> AnyElement + 'static) -> Self {
         self.child = Some(Box::new(f));
         self
+    }
+}
+
+impl<R: RouteDef> Default for Awaited<R> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -56,7 +65,7 @@ impl<R: RouteDef> Element for Awaited<R> {
     ) -> (LayoutId, Self::RequestLayoutState) {
         let state = RouterState::try_global(cx);
         log::debug!("Awaited::request_layout for {}", std::any::type_name::<R>());
-        let data = state.and_then(|s| s.get_loader_data::<R>());
+        let data = state.and_then(super::super::state::RouterState::get_loader_data::<R>);
         log::debug!("Awaited data present: {}", data.is_some());
 
         if let Some(data) = data {
@@ -90,10 +99,7 @@ impl<R: RouteDef> Element for Awaited<R> {
         cx: &mut App,
     ) {
         match state {
-            AwaitedChild::Fallback(elem) => {
-                let _ = elem.prepaint(window, cx);
-            }
-            AwaitedChild::Data(elem, _) => {
+            AwaitedChild::Fallback(elem) | AwaitedChild::Data(elem, _) => {
                 let _ = elem.prepaint(window, cx);
             }
         }
@@ -110,8 +116,7 @@ impl<R: RouteDef> Element for Awaited<R> {
         cx: &mut App,
     ) {
         match state {
-            AwaitedChild::Fallback(elem) => elem.paint(window, cx),
-            AwaitedChild::Data(elem, _) => elem.paint(window, cx),
+            AwaitedChild::Fallback(elem) | AwaitedChild::Data(elem, _) => elem.paint(window, cx),
         }
     }
 }

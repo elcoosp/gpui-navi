@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui::{IntoElement, RenderOnce, Window, App, ParentElement, Styled, div};
 use navi_macros::define_route;
 
 define_route!(

@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
     Expr, Ident, LitBool, LitStr, Token, Type,
@@ -8,13 +9,11 @@ use syn::{
 
 struct RouteDefInput {
     name: Ident,
-    _comma: Token![,],
     fields: Punctuated<Field, Token![,]>,
 }
 
 struct Field {
     key: Ident,
-    _colon: Token![:],
     value: FieldValue,
 }
 
@@ -28,245 +27,249 @@ enum FieldValue {
 impl Parse for RouteDefInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let name = input.parse()?;
-        let _comma = input.parse()?;
+        input.parse::<Token![,]>()?;
         let fields = Punctuated::parse_terminated(input)?;
-        Ok(RouteDefInput {
-            name,
-            _comma,
-            fields,
-        })
+        Ok(RouteDefInput { name, fields })
     }
 }
 
 impl Parse for Field {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(Field {
-            key: input.parse()?,
-            _colon: input.parse()?,
-            value: input.parse()?,
-        })
+        let key: Ident = input.parse()?;
+        input.parse::<Token![:]>()?;
+        // Parse the value according to the key so that paths like
+        // `std::time::Duration::from_secs(30)` parse as expressions while
+        // `params: MyParams` still parses as a type.
+        let value = match key.to_string().as_str() {
+            "path" | "parent" => FieldValue::LitStr(input.parse()?),
+            "is_layout" | "is_index" => FieldValue::LitBool(input.parse()?),
+            "params" | "search" | "data" | "component" => FieldValue::Type(input.parse()?),
+            _ => FieldValue::Expr(input.parse()?),
+        };
+        Ok(Field { key, value })
     }
 }
 
-impl Parse for FieldValue {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.peek(LitStr) {
-            Ok(FieldValue::LitStr(input.parse()?))
-        } else if input.peek(LitBool) {
-            Ok(FieldValue::LitBool(input.parse()?))
-        } else if input.peek(Ident)
-            && (input.peek2(Token![<])
-                || input.peek2(Token![::])
-                || input.peek2(Token![,])
-                || input.is_empty())
+/// All accepted `define_route!` arguments with defaults applied.
+struct RouteArgs {
+    path: LitStr,
+    params_ty: Type,
+    search_ty: Type,
+    data_ty: Type,
+    loader: Option<Expr>,
+    component: Option<Type>,
+    stale_time: Option<Expr>,
+    gc_time: Option<Expr>,
+    is_layout: bool,
+    is_index: bool,
+    parent: Option<LitStr>,
+    before_load: Option<Expr>,
+    on_enter: Option<Expr>,
+    on_leave: Option<Expr>,
+    loader_deps: Option<Expr>,
+    context_fn: Option<Expr>,
+    meta: Option<Expr>,
+}
+
+fn parse_route_args(name: &Ident, fields: Punctuated<Field, Token![,]>) -> syn::Result<RouteArgs> {
+    let mut path: Option<LitStr> = None;
+    let mut params_ty: Option<Type> = None;
+    let mut search_ty: Option<Type> = None;
+    let mut data_ty: Option<Type> = None;
+    let mut loader: Option<Expr> = None;
+    let mut component: Option<Type> = None;
+    let mut stale_time: Option<Expr> = None;
+    let mut gc_time: Option<Expr> = None;
+    let mut is_layout: Option<LitBool> = None;
+    let mut is_index: Option<LitBool> = None;
+    let mut parent: Option<LitStr> = None;
+    let mut before_load: Option<Expr> = None;
+    let mut on_enter: Option<Expr> = None;
+    let mut on_leave: Option<Expr> = None;
+    let mut loader_deps: Option<Expr> = None;
+    let mut context_fn: Option<Expr> = None;
+    let mut meta: Option<Expr> = None;
+
+    macro_rules! assign {
+        ($field:ident, $key:literal, $slot:ident, $variant:ident) => {
+            if $field.key == $key {
+                if let FieldValue::$variant(value) = $field.value {
+                    $slot = Some(value);
+                    continue;
+                }
+            }
+        };
+    }
+    for field in fields {
+        assign!(field, "path", path, LitStr);
+        assign!(field, "parent", parent, LitStr);
+        assign!(field, "params", params_ty, Type);
+        assign!(field, "search", search_ty, Type);
+        assign!(field, "data", data_ty, Type);
+        assign!(field, "component", component, Type);
+        assign!(field, "stale_time", stale_time, Expr);
+        assign!(field, "gc_time", gc_time, Expr);
+        assign!(field, "is_layout", is_layout, LitBool);
+        assign!(field, "is_index", is_index, LitBool);
+        assign!(field, "before_load", before_load, Expr);
+        assign!(field, "on_enter", on_enter, Expr);
+        assign!(field, "on_leave", on_leave, Expr);
+        assign!(field, "loader_deps", loader_deps, Expr);
+        assign!(field, "context", context_fn, Expr);
+        assign!(field, "meta", meta, Expr);
+        if field.key == "loader"
+            && let FieldValue::Expr(expr) = field.value
         {
-            Ok(FieldValue::Type(input.parse()?))
-        } else {
-            Ok(FieldValue::Expr(input.parse()?))
+            loader = Some(expr);
+            continue;
+        }
+        return Err(syn::Error::new(
+            field.key.span(),
+            format!("unknown `define_route!` field `{}`", field.key),
+        ));
+    }
+
+    let Some(path) = path else {
+        return Err(syn::Error::new(name.span(), "`path` is required"));
+    };
+    Ok(RouteArgs {
+        path,
+        params_ty: params_ty.unwrap_or_else(|| syn::parse_quote!(())),
+        search_ty: search_ty.unwrap_or_else(|| syn::parse_quote!(())),
+        data_ty: data_ty.unwrap_or_else(|| syn::parse_quote!(())),
+        loader,
+        component,
+        stale_time,
+        gc_time,
+        is_layout: is_layout.is_some_and(|b| b.value),
+        is_index: is_index.is_some_and(|b| b.value),
+        parent,
+        before_load,
+        on_enter,
+        on_leave,
+        loader_deps,
+        context_fn,
+        meta,
+    })
+}
+
+fn before_load_impl(args: &RouteArgs) -> TokenStream2 {
+    let Some(before_load) = &args.before_load else {
+        return quote! {
+            pub fn before_load_fn() -> Option<::navi_router::route_tree::BeforeLoadFn> { None }
+        };
+    };
+    quote! {
+        pub fn before_load_fn() -> Option<::navi_router::route_tree::BeforeLoadFn> {
+            Some(::std::sync::Arc::new(|ctx| {
+                let closure = #before_load;
+                // `Box::pin` instead of `futures::FutureExt::boxed` keeps
+                // downstream crates free of a hard `futures` dependency.
+                ::std::boxed::Box::pin(closure(ctx))
+            }))
         }
     }
 }
 
-pub fn define_route(input: TokenStream) -> TokenStream {
-    let input = syn::parse_macro_input!(input as RouteDefInput);
-    let name = input.name;
-    let mut path = None;
-    let mut params_ty = None;
-    let mut search_ty = None;
-    let mut data_ty = None;
-    let mut loader_closure = None;
-    let mut component_ty = None;
-    let mut stale_time = None;
-    let mut gc_time = None;
-    let mut is_layout = None;
-    let mut is_index = None;
-    let mut parent = None;
-    let mut before_load_closure = None;
-    let mut on_enter = None;
-    let mut on_leave = None;
-    let mut loader_deps = None;
-    let mut context_fn = None;
-    let mut meta = None;
-
-    for field in input.fields {
-        let key_str = field.key.to_string();
-        match key_str.as_str() {
-            "path" => {
-                if let FieldValue::LitStr(lit) = field.value {
-                    path = Some(lit);
-                }
-            }
-            "params" => {
-                if let FieldValue::Type(ty) = field.value {
-                    params_ty = Some(ty);
-                }
-            }
-            "search" => {
-                if let FieldValue::Type(ty) = field.value {
-                    search_ty = Some(ty);
-                }
-            }
-            "data" => {
-                if let FieldValue::Type(ty) = field.value {
-                    data_ty = Some(ty);
-                }
-            }
-            "loader" => {
-                if let FieldValue::Expr(expr) = field.value {
-                    loader_closure = Some(expr);
-                }
-            }
-            "component" => {
-                if let FieldValue::Type(ty) = field.value {
-                    component_ty = Some(ty);
-                }
-            }
-            "stale_time" => {
-                if let FieldValue::Expr(expr) = field.value {
-                    stale_time = Some(expr);
-                }
-            }
-            "gc_time" => {
-                if let FieldValue::Expr(expr) = field.value {
-                    gc_time = Some(expr);
-                }
-            }
-            "is_layout" => {
-                if let FieldValue::LitBool(lit) = field.value {
-                    is_layout = Some(lit);
-                }
-            }
-            "is_index" => {
-                if let FieldValue::LitBool(lit) = field.value {
-                    is_index = Some(lit);
-                }
-            }
-            "parent" => {
-                if let FieldValue::LitStr(lit) = field.value {
-                    parent = Some(lit);
-                }
-            }
-            "before_load" => {
-                if let FieldValue::Expr(expr) = field.value {
-                    before_load_closure = Some(expr);
-                }
-            }
-            "on_enter" => {
-                if let FieldValue::Expr(expr) = field.value {
-                    on_enter = Some(expr);
-                }
-            }
-            "on_leave" => {
-                if let FieldValue::Expr(expr) = field.value {
-                    on_leave = Some(expr);
-                }
-            }
-            "loader_deps" => {
-                if let FieldValue::Expr(expr) = field.value {
-                    loader_deps = Some(expr);
-                }
-            }
-            "context" => {
-                if let FieldValue::Expr(expr) = field.value {
-                    context_fn = Some(expr);
-                }
-            }
-            "meta" => {
-                if let FieldValue::Expr(expr) = field.value {
-                    meta = Some(expr);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let path = path.expect("path is required");
-    let params_ty = params_ty.unwrap_or_else(|| syn::parse_quote!(()));
-    let search_ty = search_ty.unwrap_or_else(|| syn::parse_quote!(()));
-    let data_ty = data_ty.unwrap_or_else(|| syn::parse_quote!(()));
-    let component_ty = component_ty;
-    let is_layout = is_layout.map(|b| b.value).unwrap_or(false);
-    let is_index = is_index.map(|b| b.value).unwrap_or(false);
-    let parent = parent.map(|s| s.value());
-
-    let before_load_impl = if let Some(before_load) = before_load_closure {
-        quote! {
-            pub fn before_load_fn() -> Option<::navi_router::route_tree::BeforeLoadFn> {
-                Some(::std::sync::Arc::new(|ctx| {
-                    let closure = #before_load;
-                    ::futures::future::FutureExt::boxed(closure(ctx))
-                }))
-            }
-        }
-    } else {
-        quote! {
-            pub fn before_load_fn() -> Option<::navi_router::route_tree::BeforeLoadFn> { None }
+fn loader_factory_impl(name: &Ident, args: &RouteArgs) -> (bool, TokenStream2) {
+    let Some(loader_closure) = &args.loader else {
+        return (false, quote! {});
+    };
+    let stale_time_expr = args
+        .stale_time
+        .clone()
+        .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
+    let gc_time_expr = args
+        .gc_time
+        .clone()
+        .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
+    let params_ty = &args.params_ty;
+    let factory = quote! {
+        pub fn loader_factory(executor: ::gpui::BackgroundExecutor) -> std::sync::Arc<
+            dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::LoaderOutcome<::navi_router::AnyData>>
+            + Send + Sync
+        > {
+            std::sync::Arc::new(move |params_map: &std::collections::HashMap<String, String>| {
+                let params: #params_ty = if std::any::TypeId::of::<#params_ty>() == std::any::TypeId::of::<()>() {
+                    serde_json::from_value(serde_json::Value::Null).unwrap()
+                } else {
+                    serde_json::from_value(
+                        serde_json::to_value(params_map).unwrap()
+                    ).expect("Failed to deserialize route params")
+                };
+                let params_clone = params.clone();
+                let loader = #loader_closure;
+                let executor = executor.clone();
+                let key = ::rs_query::QueryKey::new("navi_loader")
+                    .with("route", <#name as ::navi_router::RouteDef>::name())
+                    .with("params", serde_json::to_string(&params).unwrap());
+                ::rs_query::Query::new(key, move || {
+                    let params = params_clone.clone();
+                    let loader = loader.clone();
+                    let executor = executor.clone();
+                    async move {
+                        let data = loader(params, executor).await
+                            .map_err(|e| ::rs_query::QueryError::custom(e.to_string()))?;
+                        Ok(::navi_router::LoaderOutcome::Data(::navi_router::AnyData(std::sync::Arc::new(data) as std::sync::Arc<dyn std::any::Any + Send + Sync>)))
+                    }
+                })
+                .stale_time(#stale_time_expr)
+                .gc_time(#gc_time_expr)
+                .structural_sharing(true)
+            })
         }
     };
+    (true, factory)
+}
 
-    let on_enter_impl = on_enter
-        .map(|e| quote! { Some(::std::sync::Arc::new(#e)) })
-        .unwrap_or(quote! { None });
-    let on_leave_impl = on_leave
-        .map(|e| quote! { Some(::std::sync::Arc::new(#e)) })
-        .unwrap_or(quote! { None });
-    let loader_deps_impl = loader_deps
-        .map(|e| quote! { Some(::std::sync::Arc::new(#e)) })
-        .unwrap_or(quote! { None });
-    let context_fn_impl = context_fn
-        .map(|e| quote! { Some(::std::sync::Arc::new(#e)) })
-        .unwrap_or(quote! { None });
-    let meta_impl = meta
+fn optional_arc_impl(expr: Option<&Expr>) -> TokenStream2 {
+    expr.map_or(
+        quote! { None },
+        |e| quote! { Some(::std::sync::Arc::new(#e)) },
+    )
+}
+
+fn event_fns_impl(args: &RouteArgs) -> (TokenStream2, TokenStream2) {
+    let enter = optional_arc_impl(args.on_enter.as_ref());
+    let leave = optional_arc_impl(args.on_leave.as_ref());
+    (enter, leave)
+}
+
+fn expand(name: &Ident, args: &RouteArgs) -> TokenStream2 {
+    let path = &args.path;
+    let params_ty = &args.params_ty;
+    let search_ty = &args.search_ty;
+    let data_ty = &args.data_ty;
+    let parent_field = if let Some(p) = &args.parent {
+        quote! { Some(#p.to_string()) }
+    } else {
+        quote! { None }
+    };
+    let is_layout = args.is_layout;
+    let is_index = args.is_index;
+
+    let (on_enter_impl, on_leave_impl) = event_fns_impl(args);
+    let loader_deps_impl = optional_arc_impl(args.loader_deps.as_ref());
+    let context_fn_impl = optional_arc_impl(args.context_fn.as_ref());
+    let meta_impl = args
+        .meta
+        .as_ref()
         .map(|e| quote! { #e })
         .unwrap_or(quote! { ::std::collections::HashMap::new() });
 
-    let (has_loader, loader_factory_impl) = if let Some(loader_closure) = loader_closure {
-        let stale_time_expr = stale_time
-            .clone()
-            .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::ZERO });
-        let gc_time_expr = gc_time
-            .clone()
-            .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
-        let factory = quote! {
-            pub fn loader_factory(executor: ::gpui::BackgroundExecutor) -> std::sync::Arc<
-                dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::LoaderOutcome<::navi_router::AnyData>>
-                + Send + Sync
-            > {
-                std::sync::Arc::new(move |params_map: &std::collections::HashMap<String, String>| {
-                    let params: #params_ty = if std::any::TypeId::of::<#params_ty>() == std::any::TypeId::of::<()>() {
-                serde_json::from_value(serde_json::Value::Null).unwrap()
-            } else {
-                serde_json::from_value(
+    let (has_loader, loader_factory_impl) = loader_factory_impl(name, args);
+    let before_load_impl = before_load_impl(args);
 
-                        serde_json::to_value(params_map).unwrap()
-                    ).expect("Failed to deserialize route params")
-            };
-                    let params_clone = params.clone();
-                    let loader = #loader_closure;
-                    let executor = executor.clone();
-                    let key = ::rs_query::QueryKey::new("navi_loader")
-                        .with("route", <#name as ::navi_router::RouteDef>::name())
-                        .with("params", serde_json::to_string(&params).unwrap());
-                    ::rs_query::Query::new(key, move || {
-                        let params = params_clone.clone();
-                        let loader = loader.clone();
-                        let executor = executor.clone();
-                        async move {
-                            let data = loader(params, executor).await
-                                .map_err(|e| ::rs_query::QueryError::custom(e.to_string()))?;
-                            Ok(::navi_router::LoaderOutcome::Data(::navi_router::AnyData(std::sync::Arc::new(data) as std::sync::Arc<dyn std::any::Any + Send + Sync>)))
-                        }
-                    })
-                    .stale_time(#stale_time_expr)
-                    .gc_time(#gc_time_expr)
-                    .structural_sharing(true)
-                })
-            }
-        };
-        (true, factory)
-    } else {
-        (false, quote! {})
-    };
+    let stale_time_impl = args
+        .stale_time
+        .as_ref()
+        .map(|e| quote! { Some(#e) })
+        .unwrap_or(quote! { None });
+    let gc_time_impl = args
+        .gc_time
+        .as_ref()
+        .map(|e| quote! { Some(#e) })
+        .unwrap_or(quote! { None });
 
     let register_loader_call = if has_loader {
         quote! {
@@ -279,30 +282,16 @@ pub fn define_route(input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    let component_registration = if let Some(comp_ty) = component_ty {
-        quote! {
+    let component_registration = match &args.component {
+        Some(comp_ty) => quote! {
             navi_router::components::register_route_component(<Self as ::navi_router::RouteDef>::name(), |_cx| {
                 gpui::Component::new(#comp_ty).into_any_element()
             });
-        }
-    } else {
-        quote! {}
+        },
+        None => quote! {},
     };
 
-    let parent_field = if let Some(p) = parent {
-        quote! { Some(#p.to_string()) }
-    } else {
-        quote! { None }
-    };
-
-    let stale_time_impl = stale_time
-        .map(|e| quote! { Some(#e) })
-        .unwrap_or(quote! { None });
-    let gc_time_impl = gc_time
-        .map(|e| quote! { Some(#e) })
-        .unwrap_or(quote! { None });
-
-    let expanded = quote! {
+    quote! {
         pub struct #name;
 
         impl ::navi_router::RouteDef for #name {
@@ -351,7 +340,14 @@ pub fn define_route(input: TokenStream) -> TokenStream {
                 #register_loader_call
             }
         }
-    };
+    }
+}
 
-    TokenStream::from(expanded)
+pub fn define_route(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as RouteDefInput);
+    let name = input.name;
+    match parse_route_args(&name, input.fields).map(|args| expand(&name, &args)) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
 }

@@ -1,4 +1,7 @@
-use gpui::*;
+use gpui::{
+    App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Styled, Window,
+    WindowBounds, WindowOptions, div, px, size,
+};
 use gpui_component::Root;
 use gpui_component_assets::Assets;
 use navi_devtools::DevtoolsState;

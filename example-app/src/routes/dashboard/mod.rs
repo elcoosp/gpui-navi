@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div, rgb, FontWeight};
 use navi_macros::{define_route, use_loader_data};
 use navi_router::components::Outlet;
 use std::time::Duration;
@@ -14,7 +14,7 @@ define_route!(
     path: "/dashboard",
     is_layout: true,
     data: DashboardData,
-    loader: |_: (), executor: gpui::BackgroundExecutor| async move {
+    loader: |(): (), executor: gpui::BackgroundExecutor| async move {
         log::info!("[Dashboard Layout] Loader started");
         executor.timer(Duration::from_millis(400)).await;
         log::info!("[Dashboard Layout] Loader completed");
@@ -37,8 +37,8 @@ impl RenderOnce for DashboardLayout {
         };
         div()
             .p_4()
-            .bg(rgb(0x1a1a2e))
-            .text_color(rgb(0xeeeeee))
+            .bg(rgb(0x001a_1a2e))
+            .text_color(rgb(0x00ee_eeee))
             .child(
                 div()
                     .text_lg()

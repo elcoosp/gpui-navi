@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div};
 use navi_macros::define_route;
 use navi_router::{BeforeLoadResult, redirect, components::Outlet};
 

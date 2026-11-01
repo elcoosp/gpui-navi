@@ -6,22 +6,25 @@ use gpui::{
     div,
 };
 use navi_core::context;
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 type ComponentConstructor = Arc<dyn Fn(&mut App) -> AnyElement + Send + Sync>;
 
-static REGISTRY: Lazy<Mutex<HashMap<String, ComponentConstructor>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static REGISTRY: LazyLock<Mutex<HashMap<String, ComponentConstructor>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// Register the element constructor rendered by an [`Outlet`] for a route id.
+///
+/// # Panics
+/// Panics if the global route registry mutex is poisoned.
 pub fn register_route_component<F>(route_id: &str, constructor: F)
 where
     F: Fn(&mut App) -> AnyElement + Send + Sync + 'static,
 {
     REGISTRY
         .lock()
-        .unwrap()
+        .expect("route registry lock")
         .insert(route_id.to_string(), Arc::new(constructor));
 }
 
@@ -34,10 +37,12 @@ pub struct Outlet {
 }
 
 impl Outlet {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub fn child(mut self, child: impl IntoElement) -> Self {
         self.children.push(child.into_any_element());
         self
@@ -65,15 +70,10 @@ impl RenderOnce for Outlet {
         let state = state.unwrap();
 
         let window_id = window.window_handle().window_id();
-        let depth = context::consume::<OutletDepth>(window_id)
-            .map(|d| d.0)
-            .unwrap_or(0);
+        let depth = context::consume::<OutletDepth>(window_id).map_or(0, |d| d.0);
 
         if depth > 20 {
-            log::error!(
-                "Outlet depth {} exceeded limit - possible cycle in route tree",
-                depth
-            );
+            log::error!("Outlet depth {depth} exceeded limit - possible cycle in route tree");
             return div()
                 .size_full()
                 .flex()
@@ -86,11 +86,15 @@ impl RenderOnce for Outlet {
             if let Some((_params, leaf_node)) = state.current_match.as_ref() {
                 let ancestors = state.route_tree.ancestors(&leaf_node.id);
                 if depth >= ancestors.len() {
-                    log::warn!("Outlet depth {} exceeds ancestors length", depth);
+                    log::warn!("Outlet depth {depth} exceeds ancestors length");
                     return div().size_full().flex().flex_col().into_any_element();
                 }
                 let node = ancestors[depth];
-                let constructor = REGISTRY.lock().unwrap().get(&node.id).cloned();
+                let constructor = REGISTRY
+                    .lock()
+                    .expect("route registry lock")
+                    .get(&node.id)
+                    .cloned();
                 (node.id.clone(), constructor)
             } else {
                 log::warn!("Outlet: no matching route");
@@ -109,7 +113,7 @@ impl RenderOnce for Outlet {
             .flex() // Enable flex layout
             .flex_col() // Column direction
             .id(ElementId::Name(
-                format!("outlet-{}-{}", leaf_node_id, depth).into(),
+                format!("outlet-{leaf_node_id}-{depth}").into(),
             ));
 
         if let Some(constructor) = constructor_opt {
@@ -121,13 +125,17 @@ impl RenderOnce for Outlet {
                 .into_any_element()
         } else {
             let not_found_component = match state.not_found_mode {
-                NotFoundMode::Root => REGISTRY.lock().unwrap().get("__not_found_root__").cloned(),
+                NotFoundMode::Root => REGISTRY
+                    .lock()
+                    .expect("route registry lock")
+                    .get("__not_found_root__")
+                    .cloned(),
                 NotFoundMode::Fuzzy => {
                     let ancestors = state.route_tree.ancestors(&leaf_node_id);
                     ancestors.iter().rev().find_map(|ancestor| {
                         REGISTRY
                             .lock()
-                            .unwrap()
+                            .expect("route registry lock")
                             .get(&format!("__not_found_{}", ancestor.id))
                             .cloned()
                     })

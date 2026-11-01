@@ -26,14 +26,14 @@ impl RenderOnce for RootLayout {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0x1e1e2e))
-            .text_color(rgb(0xcdd6f4))
+            .bg(rgb(0x001e_1e2e))
+            .text_color(rgb(0x00cd_d6f4))
             .child(
                 div()
                     .flex()
                     .gap_4()
                     .p_4()
-                    .bg(rgb(0x313244))
+                    .bg(rgb(0x0031_3244))
                     .child(Link::new("/").child("🏠 Home"))
                     .child(Link::new("/about").child("ℹ️ About"))
                     .child(Link::new("/users").child("👥 Users"))
@@ -71,7 +71,7 @@ impl RenderOnce for HomePage {
             .child(
                 div()
                     .text_sm()
-                    .text_color(rgb(0xa6adc8))
+                    .text_color(rgb(0x00a6_adc8))
                     .child("This demo showcases nested layouts, dynamic routes, loaders, and more."),
             )
             .child(
@@ -80,7 +80,7 @@ impl RenderOnce for HomePage {
                     .flex()
                     .flex_col()
                     .gap_4()
-                    .text_color(rgb(0xbac2de))
+                    .text_color(rgb(0x00ba_c2de))
                     .child(
                         "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
                     )
@@ -322,9 +322,9 @@ impl RenderOnce for UsersIndexPage {
                             .px_2()
                             .py_1()
                             .bg(if current_sort == SortDirection::Asc {
-                                rgb(0x2563eb)
+                                rgb(0x0025_63eb)
                             } else {
-                                rgb(0x6b7280)
+                                rgb(0x006b_7280)
                             })
                             .text_color(white())
                             .rounded_md()
@@ -337,9 +337,9 @@ impl RenderOnce for UsersIndexPage {
                             .px_2()
                             .py_1()
                             .bg(if current_sort == SortDirection::Desc {
-                                rgb(0x2563eb)
+                                rgb(0x0025_63eb)
                             } else {
-                                rgb(0x6b7280)
+                                rgb(0x006b_7280)
                             })
                             .text_color(white())
                             .rounded_md()
@@ -362,15 +362,8 @@ impl RenderOnce for UsersIndexPage {
 #[derive(Clone, IntoElement)]
 struct SettingsPage;
 impl RenderOnce for SettingsPage {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let block_navigation = cx.new(|cx| {
-            let focus_handle = cx.focus_handle();
-            focus_handle.focus(window, cx);
-            BlockerState {
-                block: false,
-                focus_handle,
-            }
-        });
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let block_navigation = cx.new(|_| BlockerState { block: false });
 
         div()
             .child("⚙️ Settings Page")
@@ -401,8 +394,6 @@ impl RenderOnce for SettingsPage {
 
 struct BlockerState {
     block: bool,
-    #[allow(dead_code)]
-    focus_handle: FocusHandle,
 }
 
 impl Render for BlockerState {

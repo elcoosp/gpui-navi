@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui::{IntoElement, RenderOnce, Window, App, ParentElement, Styled, div};
 use navi_macros::define_route;
 use navi_router::RouterState;
 
@@ -23,6 +23,6 @@ impl RenderOnce for MetaDemoPage {
         div()
             .p_4()
             .child("Meta Demo Page")
-            .child(format!("Current meta: {:?}", meta))
+            .child(format!("Current meta: {meta:?}"))
     }
 }

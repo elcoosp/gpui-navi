@@ -5,9 +5,10 @@
     Featuring loaders, suspense, devtools, and full TanStack Router feature parity.
   </p>
   <p>
-    <img src="https://img.shields.io/badge/Rust-1.94%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
+    <img src="https://img.shields.io/badge/Rust-1.99%20%7C%20edition%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
     <img src="https://img.shields.io/badge/GPUI-0.2-000000?style=flat-square" alt="GPUI"/>
     <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT"/>
+    <a href=".github/workflows/ci.yml"><img src="https://img.shields.io/badge/CI-clippy%20pedantic%20%2B%20tests-brightgreen?style=flat-square&logo=githubactions" alt="CI"/></a>
   </p>
 </div>
 
@@ -21,11 +22,25 @@
 - **Suspense boundaries**: Granular loading states using `Awaited`.
 - **`beforeLoad` hooks**: Robust route guards with redirect/notFound support.
 - **Navigation blockers**: Async/sync blockers to prevent data loss from unsaved changes.
-- **Scroll restoration**: Automatic memory and restoration of scroll positions.
+- **Scroll restoration**: Automatic memory and restoration of scroll positions,
+  keyed by path + normalized query, capacity-bounded, opt-out via
+  `scroll_restoration: false`, with per-navigation `reset_scroll`.
+- **Navigation transactions**: Batch `Push`/`Replace`/`Back`/`Forward`/`Go`
+  (`NavOp`) applied atomically with a single re-render (`Navigator::transact`).
+- **External links**: `http(s):`, `mailto:` and `tel:` hrefs on `<Link>` are
+  handed to the OS instead of the router.
 - **Devtools**: Inspect routes, cache, timeline, and state directly in your app.
 - **Validation**: Seamless integration with `validator`, `garde`, `validify`, and `valico`.
+- **Nested search params** (`nested-search` feature): typed, bracket-nested
+  query strings (`filter[status]=open&tags[0]=rust`) via `serde_qs`.
 - **Codegen**: Automatic route tree generation from `src/routes`.
 - **Type‑safe hooks**: Macros like `use_params!`, `use_search!`, and `use_loader_data!`.
+- **Deterministic matching**: Static segments always win over dynamic ones,
+  with a ranked radix trie and structural route-tree validation.
+- **Link preloading**: `Render` / `Intent` (hover + delay) / `Viewport`
+  strategies with per-href de-duplication.
+- **Event timeline**: `BeforeNavigate → BeforeLoad → Resolved` events feed the
+  devtools timeline and subscriber callbacks.
 
 ## Quick Start
 
@@ -200,3 +215,33 @@ The Devtools interface provides four main tabs:
 | Built-in Devtools | ✅ | ✅ |
 | Type‑safe search params | ✅ | ✅ |
 | Route context | ✅ | ✅ |
+| Deterministic route ranking | ✅ | ✅ |
+| Link preloading (render/intent) | ✅ | ✅ |
+
+## Development
+
+```sh
+just test        # workspace tests
+just clippy      # workspace lints (pedantic), zero warnings, per optional feature
+just fmt         # rustfmt check
+just verify      # fmt + clippy + tests
+just coverage    # cargo-llvm-cov summary
+```
+
+Quality gates (also enforced in CI):
+
+- `cargo clippy --workspace --all-targets -- -W clippy::pedantic -D warnings`
+  — zero warnings, no `#[allow]` attributes in the codebase.
+- The four validation integrations (`validator`, `garde`, `validify`,
+  `valico`) are mutually exclusive blanket impls, so they are linted and
+  tested **per feature** instead of under `--all-features`.
+- `clippy.toml` calibrates a few shape thresholds for the devtools UI module
+  (large render methods) instead of scattering allow attributes.
+- The `xattr` crate is vendored under `vendor/xattr` with a tiny patch:
+  upstream 0.2.3 no longer builds against libc ≥ 0.2.187 on Linux
+  (`ENOATTR` was removed), and the `1.x` patch does not satisfy
+  `async-tar`'s `"0.2"` version requirement.
+
+See [docs/BRAINSTORM.md](docs/BRAINSTORM.md) for the full improvement
+brainstorm (performance, DRY/KISS, features) and the documented follow-ups
+(gpui-kit migration, deep-links re-introduction).

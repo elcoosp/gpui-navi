@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{AppContext, Window, App, div, MouseButton};
 use navi_macros::define_route;
 use navi_router::{Blocker, RouterState};
 
@@ -7,15 +7,8 @@ use navi_router::{Blocker, RouterState};
 struct SettingsPage;
 
 impl RenderOnce for SettingsPage {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let block_navigation = cx.new(|cx| {
-            let focus_handle = cx.focus_handle();
-            focus_handle.focus(window, cx);
-            BlockerState {
-                block: false,
-                focus_handle,
-            }
-        });
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let block_navigation = cx.new(|_| BlockerState { block: false });
 
         div()
             .child("⚙️ Settings Page")
@@ -46,8 +39,6 @@ impl RenderOnce for SettingsPage {
 
 struct BlockerState {
     block: bool,
-    #[allow(dead_code)]
-    focus_handle: FocusHandle,
 }
 
 impl Render for BlockerState {

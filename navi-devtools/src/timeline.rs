@@ -23,6 +23,7 @@ pub enum DevtoolsEvent {
 
 impl DevtoolsEvent {
     /// Short label for the event type badge.
+    #[must_use]
     pub fn badge(&self) -> &'static str {
         match self {
             Self::Navigate { .. } => "NAV",
@@ -37,37 +38,37 @@ impl DevtoolsEvent {
     }
 
     /// RGB color for the badge.
+    #[must_use]
     pub fn badge_color(&self) -> u32 {
         match self {
-            Self::Navigate { .. } => 0x569cd6,
-            Self::NavigateComplete { .. } => 0x4ec9b0,
-            Self::LoaderStart { .. } => 0xdcdcaa,
-            Self::LoaderComplete { .. } => 0x6a9955,
-            Self::LoaderError { .. } => 0xf44747,
-            Self::Match { .. } => 0x4ec9b0,
-            Self::NoMatch { .. } => 0xf44747,
-            Self::Preload { .. } => 0xc586c0,
+            Self::Navigate { .. } => 0x0056_9cd6,
+            Self::NavigateComplete { .. } | Self::Match { .. } => 0x004e_c9b0,
+            Self::LoaderStart { .. } => 0x00dc_dcaa,
+            Self::LoaderComplete { .. } => 0x006a_9955,
+            Self::LoaderError { .. } | Self::NoMatch { .. } => 0x00f4_4747,
+            Self::Preload { .. } => 0x00c5_86c0,
         }
     }
 
     /// Human-readable description of the event.
+    #[must_use]
     pub fn description(&self) -> String {
         match self {
-            Self::Navigate { from, to } => format!("{} → {}", from, to),
+            Self::Navigate { from, to } => format!("{from} → {to}"),
             Self::NavigateComplete { path, route_id } => {
-                format!("{} → [{}]", path, route_id)
+                format!("{path} → [{route_id}]")
             }
-            Self::LoaderStart { route_id } => format!("Loading [{}]", route_id),
+            Self::LoaderStart { route_id } => format!("Loading [{route_id}]"),
             Self::LoaderComplete {
                 route_id,
                 duration_ms,
-            } => format!("[{}] loaded in {}ms", route_id, duration_ms),
+            } => format!("[{route_id}] loaded in {duration_ms}ms"),
             Self::LoaderError { route_id, error } => {
-                format!("[{}] error: {}", route_id, error)
+                format!("[{route_id}] error: {error}")
             }
-            Self::Match { path, route_id } => format!("{} matched [{}]", path, route_id),
-            Self::NoMatch { path } => format!("No match for {}", path),
-            Self::Preload { route_id } => format!("Preloading [{}]", route_id),
+            Self::Match { path, route_id } => format!("{path} matched [{route_id}]"),
+            Self::NoMatch { path } => format!("No match for {path}"),
+            Self::Preload { route_id } => format!("Preloading [{route_id}]"),
         }
     }
 }
@@ -82,6 +83,7 @@ pub struct LoggedEvent {
 }
 
 impl LoggedEvent {
+    #[must_use]
     pub fn new(event: DevtoolsEvent) -> Self {
         Self {
             timestamp_millis: Local::now().timestamp_millis(),
@@ -90,9 +92,11 @@ impl LoggedEvent {
     }
 
     /// Format the timestamp as `HH:MM:SS.mmm`.
+    #[must_use]
     pub fn formatted_time(&self) -> String {
-        chrono::DateTime::from_timestamp_millis(self.timestamp_millis)
-            .map(|dt| dt.format("%H:%M:%S%.3f").to_string())
-            .unwrap_or_else(|| "—".to_string())
+        chrono::DateTime::from_timestamp_millis(self.timestamp_millis).map_or_else(
+            || "—".to_string(),
+            |dt| dt.format("%H:%M:%S%.3f").to_string(),
+        )
     }
 }

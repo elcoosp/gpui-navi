@@ -2,7 +2,7 @@
 
 // Module declarations for discovered routes
 #[path = "routes/$.rs"] pub mod splat;
-#[path = "routes/(marketing)/about.rs"] pub mod _marketing_about;
+#[path = "routes/(marketing)/about.rs"] pub mod marketing_about;
 #[path = "routes/__root.rs"] pub mod _root;
 #[path = "routes/_auth/mod.rs"] pub mod _auth;
 #[path = "routes/_auth/profile.rs"] pub mod _auth_profile;
@@ -35,10 +35,10 @@
 
 /// Build the route tree with all discovered routes.
 pub fn build_route_tree() -> navi_router::RouteTree {
-    let mut tree = navi_router::RouteTree::new();
+let mut tree = navi_router::RouteTree::new();
 
     {
-        let mut node = about::AboutRoute::build_node();
+        let mut node = splat::GlobalNotFoundRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -50,37 +50,7 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
-        let mut node = scroll::ScrollRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
-        let mut node = index::IndexRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
-        let mut node = splat::GlobalNotFoundRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
-        let mut node = meta::MetaDemoRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
-        let mut node = login::LoginRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
-        let mut node = blocking::BlockingRoute::build_node();
+        let mut node = about::AboutRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -92,7 +62,43 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
+        let mut node = blocking::BlockingRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = context::ContextDemoRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = index::IndexRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
         let mut node = lifecycle::LifecycleRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = login::LoginRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = meta::MetaDemoRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = scroll::ScrollRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -104,45 +110,13 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
-        let mut node = context::ContextDemoRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-#[cfg(feature = "garde")]
-
-    {
-        let mut node = validation_test_garde::GardeTestRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-#[cfg(feature = "validify")]
-
-    {
-        let mut node = validation_test_validify::ValidifyTestRoute::build_node();
+        let mut node = marketing_about::MarketingAboutRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
 
     {
-        let mut node = validation_test_index::ValidationTestIndexRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-#[cfg(feature = "validator")]
-
-    {
-        let mut node = validation_test_validator::ValidatorTestRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-#[cfg(feature = "valico")]
-
-    {
-        let mut node = validation_test_valico::ValicoTestRoute::build_node();
+        let mut node = _auth::AuthLayoutRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -154,8 +128,8 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
-        let mut node = _auth::AuthLayoutRoute::build_node();
-        node.parent = Some("RootRoute".into());
+        let mut node = admin_dashboard::AdminDashboardRoute::build_node();
+        node.parent = Some("AdminRoute".into());
         tree.add_route(node);
     }
 
@@ -166,26 +140,14 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
-        let mut node = admin_dashboard::AdminDashboardRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
-        let mut node = docs_splat::DocsRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
-        let mut node = _marketing_about::MarketingAboutRoute::build_node();
-        node.parent = Some("RootRoute".into());
+        let mut node = dashboard_analytics::DashboardAnalyticsRoute::build_node();
+        node.parent = Some("DashboardRoute".into());
         tree.add_route(node);
     }
 
     {
         let mut node = dashboard_index::DashboardIndexRoute::build_node();
-        node.parent = Some("RootRoute".into());
+        node.parent = Some("DashboardRoute".into());
         tree.add_route(node);
     }
 
@@ -196,25 +158,13 @@ pub fn build_route_tree() -> navi_router::RouteTree {
     }
 
     {
-        let mut node = dashboard_analytics::DashboardAnalyticsRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
         let mut node = dashboard_settings::DashboardSettingsRoute::build_node();
-        node.parent = Some("RootRoute".into());
+        node.parent = Some("DashboardRoute".into());
         tree.add_route(node);
     }
 
     {
-        let mut node = users_index::UsersIndexRoute::build_node();
-        node.parent = Some("RootRoute".into());
-        tree.add_route(node);
-    }
-
-    {
-        let mut node = users::OptionalUserRoute::build_node();
+        let mut node = docs_splat::DocsRoute::build_node();
         node.parent = Some("RootRoute".into());
         tree.add_route(node);
     }
@@ -231,41 +181,86 @@ pub fn build_route_tree() -> navi_router::RouteTree {
         tree.add_route(node);
     }
 
+    {
+        let mut node = users_index::UsersIndexRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = users::OptionalUserRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+#[cfg(feature = "garde")]
+    {
+        let mut node = validation_test_garde::GardeTestRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+    {
+        let mut node = validation_test_index::ValidationTestIndexRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+#[cfg(feature = "valico")]
+    {
+        let mut node = validation_test_valico::ValicoTestRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+#[cfg(feature = "validator")]
+    {
+        let mut node = validation_test_validator::ValidatorTestRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
+#[cfg(feature = "validify")]
+    {
+        let mut node = validation_test_validify::ValidifyTestRoute::build_node();
+        node.parent = Some("RootRoute".into());
+        tree.add_route(node);
+    }
+
     tree
 }
 
 /// Register all route components and loaders.
 pub fn register_routes(cx: &mut gpui::App) {
-about::AboutRoute::register(cx);
-_root::RootRoute::register(cx);
-scroll::ScrollRoute::register(cx);
-index::IndexRoute::register(cx);
 splat::GlobalNotFoundRoute::register(cx);
-meta::MetaDemoRoute::register(cx);
-login::LoginRoute::register(cx);
-blocking::BlockingRoute::register(cx);
+_root::RootRoute::register(cx);
+about::AboutRoute::register(cx);
 awaited::AwaitedDemoRoute::register(cx);
-lifecycle::LifecycleRoute::register(cx);
-settings::SettingsRoute::register(cx);
+blocking::BlockingRoute::register(cx);
 context::ContextDemoRoute::register(cx);
-#[cfg(feature = "garde")] validation_test_garde::GardeTestRoute::register(cx);
-#[cfg(feature = "validify")] validation_test_validify::ValidifyTestRoute::register(cx);
-validation_test_index::ValidationTestIndexRoute::register(cx);
-#[cfg(feature = "validator")] validation_test_validator::ValidatorTestRoute::register(cx);
-#[cfg(feature = "valico")] validation_test_valico::ValicoTestRoute::register(cx);
-_auth_profile::ProfileRoute::register(cx);
+index::IndexRoute::register(cx);
+lifecycle::LifecycleRoute::register(cx);
+login::LoginRoute::register(cx);
+meta::MetaDemoRoute::register(cx);
+scroll::ScrollRoute::register(cx);
+settings::SettingsRoute::register(cx);
+marketing_about::MarketingAboutRoute::register(cx);
 _auth::AuthLayoutRoute::register(cx);
-admin::AdminRoute::register(cx);
+_auth_profile::ProfileRoute::register(cx);
 admin_dashboard::AdminDashboardRoute::register(cx);
-docs_splat::DocsRoute::register(cx);
-_marketing_about::MarketingAboutRoute::register(cx);
+admin::AdminRoute::register(cx);
+dashboard_analytics::DashboardAnalyticsRoute::register(cx);
 dashboard_index::DashboardIndexRoute::register(cx);
 dashboard::DashboardRoute::register(cx);
-dashboard_analytics::DashboardAnalyticsRoute::register(cx);
 dashboard_settings::DashboardSettingsRoute::register(cx);
-users_index::UsersIndexRoute::register(cx);
-users::OptionalUserRoute::register(cx);
+docs_splat::DocsRoute::register(cx);
 users_splat::UsersNotFoundRoute::register(cx);
 users_param_id::UsersParamIdRoute::register(cx);
-
+users_index::UsersIndexRoute::register(cx);
+users::OptionalUserRoute::register(cx);
+#[cfg(feature = "garde")] validation_test_garde::GardeTestRoute::register(cx);
+validation_test_index::ValidationTestIndexRoute::register(cx);
+#[cfg(feature = "valico")] validation_test_valico::ValicoTestRoute::register(cx);
+#[cfg(feature = "validator")] validation_test_validator::ValidatorTestRoute::register(cx);
+#[cfg(feature = "validify")] validation_test_validify::ValidifyTestRoute::register(cx);
 }

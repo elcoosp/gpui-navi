@@ -4,14 +4,18 @@ use std::sync::Arc;
 
 pub type BlockerId = usize;
 
+/// Async predicate deciding whether a navigation should be blocked.
+pub type ShouldBlockFn =
+    Arc<dyn Fn(&Location, &Location) -> BoxFuture<'static, bool> + Send + Sync>;
+
 #[derive(Clone)]
 pub struct Blocker {
-    pub should_block_fn:
-        Arc<dyn Fn(&Location, &Location) -> BoxFuture<'static, bool> + Send + Sync>,
+    pub should_block_fn: ShouldBlockFn,
     pub enable_before_unload: bool,
 }
 
 impl Blocker {
+    #[must_use]
     pub fn new<F, Fut>(f: F) -> Self
     where
         F: Fn(&Location, &Location) -> Fut + Send + Sync + 'static,
@@ -22,6 +26,7 @@ impl Blocker {
             enable_before_unload: false,
         }
     }
+    #[must_use]
     pub fn new_sync<F>(f: F) -> Self
     where
         F: Fn(&Location, &Location) -> bool + Send + Sync + 'static,
@@ -35,6 +40,7 @@ impl Blocker {
         let fut = (self.should_block_fn)(a, b);
         Box::pin(async move { !fut.await })
     }
+    #[must_use]
     pub fn with_before_unload(mut self) -> Self {
         self.enable_before_unload = true;
         self

@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div};
 use navi_macros::define_route;
 use navi_router::RouterState;
 
@@ -13,7 +13,7 @@ impl RenderOnce for DocsSplatPage {
             .unwrap_or_default();
         let slug = path.strip_prefix("/docs/").unwrap_or("unknown");
         div()
-            .child(format!("📄 Documentation: {}", slug))
+            .child(format!("📄 Documentation: {slug}"))
             .child("This is a catch‑all splat route.")
     }
 }

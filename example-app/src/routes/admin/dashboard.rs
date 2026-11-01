@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div};
 use navi_macros::define_route;
 
 define_route!(
@@ -25,7 +25,7 @@ impl RenderOnce for DashboardPage {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let data = navi_macros::use_loader_data!(AdminDashboardRoute);
         match data {
-            Some(d) => div().child(format!("Dashboard: {}", d)),
+            Some(d) => div().child(format!("Dashboard: {d}")),
             None => div().child("Loading or not found..."),
         }
     }

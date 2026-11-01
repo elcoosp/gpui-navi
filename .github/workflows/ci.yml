@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # Keep disk usage sane on runners.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+
+jobs:
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy (pedantic, zero warnings)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux dependencies (gpui)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # Pedantic is enabled repo-wide via `[workspace.lints]`; `-D warnings`
+      # turns every warning (pedantic included) into a hard failure.
+      - name: Clippy with workspace lints (warnings are errors)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      # The four validation integrations are mutually exclusive blanket impls;
+      # lint each configuration separately instead of --all-features.
+      - name: Clippy per optional feature
+        run: |
+          for feature in validator garde validify valico nested-search; do
+            cargo clippy -p navi-router-core --features "$feature" --all-targets -- -D warnings
+            cargo clippy -p navi-router --features "$feature" --all-targets -- -D warnings
+          done
+
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux dependencies (gpui)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run all tests (default features)
+        run: cargo test --workspace
+      - name: Test each optional feature
+        if: runner.os == 'Linux'
+        run: |
+          for feature in validator garde validify valico nested-search; do
+            cargo test -p navi-router-core --features "$feature"
+            cargo test -p navi-router --features "$feature"
+          done
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux dependencies (gpui)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+      - name: Generate coverage
+        run: |
+          cargo llvm-cov --workspace \
+            --lcov --output-path lcov.info \
+            --summary-only | tee coverage-summary.txt
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: |
+            lcov.info
+            coverage-summary.txt
+
+  build-example:
+    name: Build example app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux dependencies (gpui)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build example app (debug)
+        run: cargo build -p example-app
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux dependencies (gpui)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build docs (deny broken intra-doc links)
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings

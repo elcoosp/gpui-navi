@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui::{IntoElement, RenderOnce, Window, App, ParentElement, Styled, div};
 use navi_macros::define_route;
 use navi_router::route_tree::RouteContextArgs;
 
@@ -6,17 +6,16 @@ define_route!(
     ContextDemoRoute,
     path: "/context",
     data: String,
-    loader: |_, _| async move {
+    loader: |(), _| async move {
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new("Loader data".to_string()))
     },
     context: |args: RouteContextArgs| {
         let mut map = serde_json::Map::new();
         map.insert("from_context".to_string(), serde_json::json!("Hello from context!"));
-        if let Some(data) = args.loader_data {
-            if let Some(s) = data.0.downcast_ref::<std::sync::Arc<String>>() {
+        if let Some(data) = args.loader_data
+            && let Some(s) = data.0.downcast_ref::<std::sync::Arc<String>>() {
                 map.insert("loader_data".to_string(), serde_json::json!(**s));
             }
-        }
         serde_json::Value::Object(map)
     },
     component: ContextDemoPage,
@@ -31,6 +30,6 @@ impl RenderOnce for ContextDemoPage {
         div()
             .p_4()
             .child("Context Demo Page")
-            .child(format!("Route context: {:?}", context))
+            .child(format!("Route context: {context:?}"))
     }
 }

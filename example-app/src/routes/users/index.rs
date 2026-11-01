@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div, MouseButton, rgb};
 use navi_macros::{define_route, use_search};
 use navi_router::{Navigator, ValidateSearch, ValidationError, ValidationResult};
 use navi_router::components::Link;
@@ -72,7 +72,7 @@ impl RenderOnce for UsersIndexPage {
         let current_sort = search.sort.unwrap_or_default();
         let mut user_ids = vec![1, 2, 42];
         match current_sort {
-            SortDirection::Asc => user_ids.sort(),
+            SortDirection::Asc => user_ids.sort_unstable(),
             SortDirection::Desc => user_ids.sort_by(|a, b| b.cmp(a)),
         }
 
@@ -81,7 +81,7 @@ impl RenderOnce for UsersIndexPage {
             .flex_col()
             .gap_2()
             .child("Select a user (sorting by ID):")
-            .child(format!("Current sort: {:?}", current_sort))
+            .child(format!("Current sort: {current_sort:?}"))
             .child(
                 div().flex().gap_2()
                     .child(div().child("↑ Asc").on_mouse_up(MouseButton::Left, {
@@ -94,9 +94,9 @@ impl RenderOnce for UsersIndexPage {
                     }))
             )
             .children(user_ids.into_iter().map(|id| {
-                Link::new(format!("/users/{}", id))
-                    .active_style(|el| el.bg(rgb(0x2563eb)).text_color(gpui::white()))
-                    .child(format!("User {}", id))
+                Link::new(format!("/users/{id}"))
+                    .active_style(|el| el.bg(rgb(0x0025_63eb)).text_color(gpui::white()))
+                    .child(format!("User {id}"))
             }))
     }
 }

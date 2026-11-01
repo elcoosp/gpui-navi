@@ -19,7 +19,7 @@ impl Parse for RouterDefInput {
     }
 }
 
-/// Generate a Route enum, route tree builder, and register_routes function from a list of route types.
+/// Generate a Route enum, route tree builder, and `register_routes` function from a list of route types.
 pub fn define_router(input: TokenStream) -> TokenStream {
     let input = match syn::parse::<RouterDefInput>(input) {
         Ok(input) => input,
@@ -77,9 +77,15 @@ pub fn define_router(input: TokenStream) -> TokenStream {
         pub fn build_router(
             initial: navi_router::Location,
             window_id: gpui::WindowId,
+            window_handle: gpui::AnyWindowHandle,
         ) -> navi_router::RouterState {
             let tree = build_route_tree();
-            navi_router::RouterState::new(initial, window_id, tree)
+            navi_router::RouterState::new(
+                initial,
+                window_id,
+                window_handle,
+                std::rc::Rc::new(tree),
+            )
         }
     };
 

@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div};
 use navi_macros::{define_route, use_loader_data};
 use std::time::Duration;
 
@@ -12,7 +12,7 @@ define_route!(
     DashboardAnalyticsRoute,
     path: "/dashboard/analytics",
     data: AnalyticsData,
-    loader: |_: (), executor: gpui::BackgroundExecutor| async move {
+    loader: |(): (), executor: gpui::BackgroundExecutor| async move {
         log::info!("[Analytics] Loader started");
         executor.timer(Duration::from_millis(800)).await;
         log::info!("[Analytics] Loader completed, returning data");
@@ -29,13 +29,13 @@ struct DashboardAnalytics;
 impl RenderOnce for DashboardAnalytics {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let data = use_loader_data!(DashboardAnalyticsRoute);
-        log::debug!("[Analytics] Render: data = {:?}", data);
+        log::debug!("[Analytics] Render: data = {data:?}");
         match data {
             Some(d) => {
                 div()
                     .p_4()
                     .child("📊 Analytics")
-                    .children(d.chart_data.into_iter().map(|v| div().child(format!("Value: {}", v))))
+                    .children(d.chart_data.into_iter().map(|v| div().child(format!("Value: {v}"))))
             }
             None => {
                 div().p_4().child("📊 Analytics").child("⏳ Loading analytics...")

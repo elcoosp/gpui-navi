@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui::{IntoElement, RenderOnce, Window, App, ParentElement, Styled, div, rgb};
 use navi_macros::define_route;
 use navi_router::components::{Link, Outlet};
 use navi_router::RouterState;
@@ -18,16 +18,16 @@ impl RenderOnce for RootLayout {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0x1e1e2e))
-            .text_color(rgb(0xcdd6f4))
+            .bg(rgb(0x001e_1e2e))
+            .text_color(rgb(0x00cd_d6f4))
             .child(
                 div()
                     .flex()
                     .flex_wrap()
                     .gap_2()
                     .p_4()
-                    .bg(rgb(0x313244))
-                    .child(format!("🌐 {}", title))
+                    .bg(rgb(0x0031_3244))
+                    .child(format!("🌐 {title}"))
                     .child(Link::new("/").child("🏠 Home"))
                     .child(Link::new("/about").child("ℹ️ About"))
                     .child(Link::new("/users").child("👥 Users"))

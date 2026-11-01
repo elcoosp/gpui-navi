@@ -1,5 +1,5 @@
 use crate::state::RouterState;
-use crate::{Location, NavigateOptions};
+use crate::{Location, NavOp, NavigateOptions};
 use gpui::{AnyWindowHandle, App};
 
 #[derive(Clone)]
@@ -9,6 +9,7 @@ pub struct Navigator {
 }
 
 impl Navigator {
+    #[must_use]
     pub fn new(window: AnyWindowHandle) -> Self {
         Self { window, base: None }
     }
@@ -23,8 +24,14 @@ impl Navigator {
         self.push_location(loc, cx);
     }
     pub fn push_location(&self, loc: Location, cx: &mut App) {
+        self.push_location_with(loc, &NavigateOptions::default(), cx);
+    }
+
+    /// Push with explicit navigation options (scroll reset, view transition,
+    /// blocker override, ...).
+    pub fn push_location_with(&self, loc: Location, options: &NavigateOptions, cx: &mut App) {
         RouterState::update(cx, |state, cx| {
-            state.navigate(loc, NavigateOptions::default(), cx);
+            state.navigate(loc, options, cx);
             cx.refresh_windows();
         });
     }
@@ -33,15 +40,29 @@ impl Navigator {
         self.replace_location(loc, cx);
     }
     pub fn replace_location(&self, loc: Location, cx: &mut App) {
+        self.replace_location_with(loc, &NavigateOptions::default(), cx);
+    }
+
+    /// Replace with explicit navigation options.
+    pub fn replace_location_with(&self, loc: Location, options: &NavigateOptions, cx: &mut App) {
         RouterState::update(cx, |state, cx| {
             state.navigate(
                 loc,
-                NavigateOptions {
+                &NavigateOptions {
                     replace: true,
-                    ..Default::default()
+                    ..options.clone()
                 },
                 cx,
             );
+            cx.refresh_windows();
+        });
+    }
+
+    /// Apply a batch of navigation operations atomically (one re-render).
+    pub fn transact(&self, ops: impl IntoIterator<Item = NavOp>, cx: &mut App) {
+        let ops: Vec<NavOp> = ops.into_iter().collect();
+        RouterState::update(cx, |state, cx| {
+            state.transact(&ops, cx);
             cx.refresh_windows();
         });
     }
@@ -76,9 +97,10 @@ impl Navigator {
     pub fn preload(&self, path: impl Into<String>, cx: &mut App) {
         let loc = self.to_location(path);
         RouterState::update(cx, |state, cx| {
-            state.preload_location(loc, cx);
+            state.preload_location(&loc, cx);
         });
     }
+    #[must_use]
     pub fn window(&self) -> AnyWindowHandle {
         self.window
     }

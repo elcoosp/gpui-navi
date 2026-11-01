@@ -26,9 +26,6 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
-#[cfg(feature = "nexum")]
-use crate::deep_link_view::DeepLinkView;
-
 actions!(
     devtools,
     [
@@ -37,7 +34,6 @@ actions!(
         SwitchToTab2,
         SwitchToTab3,
         SwitchToTab4,
-        SwitchToTab5,
         FocusTimelineSearch
     ]
 );
@@ -65,7 +61,7 @@ impl RouterEventType {
         }
     }
 
-    fn label(&self) -> &'static str {
+    fn label(self) -> &'static str {
         match self {
             Self::All => "All Events",
             Self::BeforeNavigate => "BeforeNavigate",
@@ -84,8 +80,6 @@ pub enum DevtoolsTab {
     Cache,
     Timeline,
     State,
-    #[cfg(feature = "nexum")]
-    DeepLinks,
 }
 
 // ---------------------------------------------------------------------------
@@ -109,12 +103,12 @@ fn format_search(search: &serde_json::Value) -> String {
         }
         let pairs: Vec<String> = map
             .iter()
-            .filter_map(|(k, v)| {
+            .map(|(k, v)| {
                 let val = match v {
                     serde_json::Value::String(s) => s.clone(),
                     other => other.to_string(),
                 };
-                Some(format!("{}={}", k, val))
+                format!("{k}={val}")
             })
             .collect();
         if pairs.is_empty() {
@@ -186,12 +180,12 @@ struct EventDisplay {
 fn format_event_text(event: &RouterEvent) -> String {
     match event {
         RouterEvent::BeforeNavigate { from, to } => {
-            let from_path = from
-                .as_ref()
-                .map(|l| format!("{}{}", l.pathname, format_search(&l.search)))
-                .unwrap_or_else(|| "?".to_string());
+            let from_path = from.as_ref().map_or_else(
+                || "?".to_string(),
+                |l| format!("{}{}", l.pathname, format_search(&l.search)),
+            );
             let to_path = format!("{}{}", to.pathname, format_search(&to.search));
-            format!("{} → {}", from_path, to_path)
+            format!("{from_path} → {to_path}")
         }
         RouterEvent::BeforeLoad { to, .. }
         | RouterEvent::Load { to, .. }
@@ -212,16 +206,16 @@ fn build_event_display(
 
     match event {
         RouterEvent::BeforeNavigate { from, to } => {
-            let from_path = from
-                .as_ref()
-                .map(|l| format!("{}{}", l.pathname, format_search(&l.search)))
-                .unwrap_or_else(|| "?".to_string());
+            let from_path = from.as_ref().map_or_else(
+                || "?".to_string(),
+                |l| format!("{}{}", l.pathname, format_search(&l.search)),
+            );
             let to_path = format!("{}{}", to.pathname, format_search(&to.search));
             EventDisplay {
                 timestamp_str,
                 badge: "NAV",
                 badge_color: colors.primary,
-                text: format!("{} → {}", from_path, to_path),
+                text: format!("{from_path} → {to_path}"),
                 detail,
             }
         }
@@ -279,8 +273,6 @@ struct CacheEntryRow {
     key: String,
     age: Duration,
     is_stale: bool,
-    #[allow(dead_code)]
-    type_id: std::any::TypeId,
 }
 
 struct CacheTableDelegate {
@@ -388,7 +380,7 @@ impl TableDelegate for CacheTableDelegate {
                     } else {
                         cx.theme().foreground
                     })
-                    .child(format!("{:.1}s", age_secs))
+                    .child(format!("{age_secs:.1}s"))
                     .into_any_element()
             }
             "stale" => {
@@ -411,7 +403,7 @@ impl TableDelegate for CacheTableDelegate {
                 h_flex()
                     .gap_1()
                     .child(
-                        Button::new(format!("invalidate-{}", key))
+                        Button::new(format!("invalidate-{key}"))
                             .icon(IconName::Loader)
                             .ghost()
                             .xsmall()
@@ -429,7 +421,7 @@ impl TableDelegate for CacheTableDelegate {
                             }),
                     )
                     .child(
-                        Button::new(format!("remove-{}", key))
+                        Button::new(format!("remove-{key}"))
                             .icon(IconName::Delete)
                             .ghost()
                             .xsmall()
@@ -474,9 +466,197 @@ pub struct DevtoolsState {
     route_test_params: Option<Entity<InputState>>,
     query_client: QueryClient,
     cache_table_state: Option<Entity<TableState<CacheTableDelegate>>>,
+}
 
-    #[cfg(feature = "nexum")]
-    deep_link_view: Entity<DeepLinkView>,
+fn render_node(
+    id: &str,
+    depth: usize,
+    node_details: &HashMap<String, EnhancedNodeInfo>,
+    children_map: &HashMap<String, Vec<String>>,
+    collapsed: &HashSet<String>,
+    matched_chain: &HashSet<String>,
+    matched_leaf_id: Option<&str>,
+    window_handle: AnyWindowHandle,
+    cx: &mut Context<DevtoolsState>,
+) -> Vec<Div> {
+    let theme = cx.theme();
+    let mut rows = Vec::new();
+    let info = node_details.get(id).unwrap();
+    let pattern = &info.pattern;
+    let is_layout = info.is_layout;
+    let is_index = info.is_index;
+    let has_loader = info.has_loader;
+    let is_in_chain = matched_chain.contains(id);
+    let is_leaf_match = matched_leaf_id == Some(id);
+    let indent_px = px(16.0 * f32::from(u16::try_from(depth).unwrap_or(u16::MAX)));
+
+    let has_children = children_map.get(id).is_some_and(|v| !v.is_empty());
+    let is_collapsed = collapsed.contains(id);
+
+    let mut row = div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .pl(indent_px)
+        .pr_2()
+        .py(px(3.0))
+        .rounded(px(4.0))
+        .when(is_in_chain, |d| {
+            d.bg(if is_leaf_match {
+                theme.primary.opacity(0.2)
+            } else {
+                theme.success.opacity(0.1)
+            })
+        })
+        .hover(|style| style.bg(theme.secondary.opacity(0.5)));
+
+    if has_children {
+        let id_clone = id.to_string();
+        let entity = cx.entity().clone();
+        row = row.child(
+            Button::new(format!("toggle-{id}"))
+                .icon(if is_collapsed {
+                    IconName::ChevronRight
+                } else {
+                    IconName::ChevronDown
+                })
+                .ghost()
+                .xsmall()
+                .on_click(move |_, _window, cx| {
+                    entity.update(cx, |this, cx| {
+                        this.toggle_route_node(id_clone.clone(), cx);
+                    });
+                }),
+        );
+    } else {
+        row = row.child(div().w(px(20.0)));
+    }
+
+    let pattern_clone = pattern.clone();
+    let window_handle_clone = window_handle;
+    row = row
+        .child(
+            div()
+                .min_w(px(90.0))
+                .text_color(if is_leaf_match {
+                    theme.primary
+                } else if is_in_chain {
+                    theme.success
+                } else {
+                    theme.foreground
+                })
+                .text_size(px(11.0))
+                .font_weight(if is_leaf_match {
+                    FontWeight::MEDIUM
+                } else {
+                    FontWeight::NORMAL
+                })
+                .cursor_pointer()
+                .on_mouse_down(MouseButton::Left, move |_ev, _window, cx| {
+                    let nav = Navigator::new(window_handle_clone);
+                    nav.push(&pattern_clone, cx);
+                })
+                .child(id.to_string()),
+        )
+        .child(
+            div()
+                .flex_1()
+                .text_color(theme.muted_foreground)
+                .text_size(px(11.0))
+                .cursor_pointer()
+                .on_mouse_down(MouseButton::Left, {
+                    let pattern = pattern.clone();
+                    let wh = window_handle;
+                    move |_ev, _window, cx| {
+                        let nav = Navigator::new(wh);
+                        nav.push(&pattern, cx);
+                    }
+                })
+                .child(pattern.clone()),
+        )
+        .when(is_layout || is_index || has_loader, |d| {
+            let mut tags = Vec::new();
+            if is_layout {
+                tags.push("layout");
+            }
+            if is_index {
+                tags.push("index");
+            }
+            if has_loader {
+                tags.push("loader");
+            }
+            d.child(div().flex().gap_1().children(tags.into_iter().map(|tag| {
+                div()
+                    .px_1()
+                    .rounded(px(2.0))
+                    .bg(theme.muted_foreground.opacity(0.1))
+                    .text_color(theme.muted_foreground)
+                    .text_size(px(9.0))
+                    .child(tag)
+            })))
+        });
+
+    // Enhanced details: meta, stale/gc times, before_load
+    if !info.meta.is_empty() {
+        let meta_str = info
+            .meta
+            .iter()
+            .map(|(k, v)| format!("{k}:{v}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        row = row.child(
+            div()
+                .text_size(px(9.0))
+                .text_color(theme.muted_foreground)
+                .child(format!("meta: {{{meta_str}}}")),
+        );
+    }
+    if let Some(st) = info.stale_time {
+        row = row.child(
+            div()
+                .text_size(px(9.0))
+                .text_color(theme.muted_foreground)
+                .child(format!("stale:{st:?}")),
+        );
+    }
+    if let Some(gc) = info.gc_time {
+        row = row.child(
+            div()
+                .text_size(px(9.0))
+                .text_color(theme.muted_foreground)
+                .child(format!("gc:{gc:?}")),
+        );
+    }
+    if info.before_load {
+        row = row.child(
+            div()
+                .text_size(px(9.0))
+                .text_color(theme.warning)
+                .child("🔒 beforeLoad"),
+        );
+    }
+
+    rows.push(row);
+
+    if !is_collapsed && let Some(children) = children_map.get(id) {
+        let mut sorted_children = children.clone();
+        sorted_children.sort();
+        for child_id in sorted_children {
+            rows.extend(render_node(
+                &child_id,
+                depth + 1,
+                node_details,
+                children_map,
+                collapsed,
+                matched_chain,
+                matched_leaf_id,
+                window_handle,
+                cx,
+            ));
+        }
+    }
+
+    rows
 }
 
 impl EventEmitter<()> for DevtoolsState {}
@@ -512,12 +692,6 @@ impl DevtoolsState {
         cx.bind_keys([KeyBinding::new("cmd-4", SwitchToTab4, Some("Devtools"))]);
         cx.bind_keys([KeyBinding::new("ctrl-4", SwitchToTab4, Some("Devtools"))]);
 
-        #[cfg(feature = "nexum")]
-        {
-            cx.bind_keys([KeyBinding::new("cmd-5", SwitchToTab5, Some("Devtools"))]);
-            cx.bind_keys([KeyBinding::new("ctrl-5", SwitchToTab5, Some("Devtools"))]);
-        }
-
         cx.bind_keys([KeyBinding::new(
             "cmd-f",
             FocusTimelineSearch,
@@ -550,9 +724,6 @@ impl DevtoolsState {
             route_test_params: None,
             query_client,
             cache_table_state: None,
-
-            #[cfg(feature = "nexum")]
-            deep_link_view: cx.new(|_| DeepLinkView::new()),
         };
         this.refresh_log(cx);
         this
@@ -642,19 +813,13 @@ impl DevtoolsState {
             DevtoolsTab::Cache => 1,
             DevtoolsTab::Timeline => 2,
             DevtoolsTab::State => 3,
-            #[cfg(feature = "nexum")]
-            DevtoolsTab::DeepLinks => 4,
         }
     }
 
-    fn tab_from_index(&self, idx: usize) -> DevtoolsTab {
+    fn tab_from_index(idx: usize) -> DevtoolsTab {
         match idx {
-            0 => DevtoolsTab::Routes,
             1 => DevtoolsTab::Cache,
-            2 => DevtoolsTab::Timeline,
             3 => DevtoolsTab::State,
-            #[cfg(feature = "nexum")]
-            4 => DevtoolsTab::DeepLinks,
             _ => DevtoolsTab::Timeline,
         }
     }
@@ -809,7 +974,7 @@ impl DevtoolsState {
             let matched_info = state
                 .current_match
                 .as_ref()
-                .map(|(params, node)| (node.id.clone(), format!("{:?}", params)));
+                .map(|(params, node)| (node.id.clone(), format!("{params:?}")));
 
             let node_infos: Vec<(String, String, bool, bool, bool, Option<String>)> = state
                 .route_tree
@@ -894,199 +1059,6 @@ impl DevtoolsState {
             let layout_count = node_infos.iter().filter(|(_, _, l, _, _, _)| *l).count();
             let loader_count = node_infos.iter().filter(|(_, _, _, _, ld, _)| *ld).count();
 
-            fn render_node(
-                id: &str,
-                depth: usize,
-                node_details: &HashMap<String, EnhancedNodeInfo>,
-                children_map: &HashMap<String, Vec<String>>,
-                collapsed: &HashSet<String>,
-                matched_chain: &HashSet<String>,
-                matched_leaf_id: Option<&str>,
-                window_handle: AnyWindowHandle,
-                cx: &mut Context<DevtoolsState>,
-                _window: &mut Window,
-            ) -> Vec<Div> {
-                let theme = cx.theme();
-                let mut rows = Vec::new();
-                let info = node_details.get(id).unwrap();
-                let pattern = &info.pattern;
-                let is_layout = info.is_layout;
-                let is_index = info.is_index;
-                let has_loader = info.has_loader;
-                let is_in_chain = matched_chain.contains(id);
-                let is_leaf_match = matched_leaf_id == Some(id);
-                let indent_px = px(16.0 * depth as f32);
-
-                let has_children = children_map.get(id).map(|v| !v.is_empty()).unwrap_or(false);
-                let is_collapsed = collapsed.contains(id);
-
-                let mut row = div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .pl(indent_px)
-                    .pr_2()
-                    .py(px(3.0))
-                    .rounded(px(4.0))
-                    .when(is_in_chain, |d| {
-                        d.bg(if is_leaf_match {
-                            theme.primary.opacity(0.2)
-                        } else {
-                            theme.success.opacity(0.1)
-                        })
-                    })
-                    .hover(|style| style.bg(theme.secondary.opacity(0.5)));
-
-                if has_children {
-                    let id_clone = id.to_string();
-                    let entity = cx.entity().clone();
-                    row = row.child(
-                        Button::new(format!("toggle-{}", id))
-                            .icon(if is_collapsed {
-                                IconName::ChevronRight
-                            } else {
-                                IconName::ChevronDown
-                            })
-                            .ghost()
-                            .xsmall()
-                            .on_click(move |_, _window, cx| {
-                                entity.update(cx, |this, cx| {
-                                    this.toggle_route_node(id_clone.clone(), cx);
-                                });
-                            }),
-                    );
-                } else {
-                    row = row.child(div().w(px(20.0)));
-                }
-
-                let pattern_clone = pattern.clone();
-                let window_handle_clone = window_handle;
-                row = row
-                    .child(
-                        div()
-                            .min_w(px(90.0))
-                            .text_color(if is_leaf_match {
-                                theme.primary
-                            } else if is_in_chain {
-                                theme.success
-                            } else {
-                                theme.foreground
-                            })
-                            .text_size(px(11.0))
-                            .font_weight(if is_leaf_match {
-                                FontWeight::MEDIUM
-                            } else {
-                                FontWeight::NORMAL
-                            })
-                            .cursor_pointer()
-                            .on_mouse_down(MouseButton::Left, move |_ev, _window, cx| {
-                                let nav = Navigator::new(window_handle_clone);
-                                nav.push(&pattern_clone, cx);
-                            })
-                            .child(id.to_string()),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_color(theme.muted_foreground)
-                            .text_size(px(11.0))
-                            .cursor_pointer()
-                            .on_mouse_down(MouseButton::Left, {
-                                let pattern = pattern.clone();
-                                let wh = window_handle;
-                                move |_ev, _window, cx| {
-                                    let nav = Navigator::new(wh);
-                                    nav.push(&pattern, cx);
-                                }
-                            })
-                            .child(pattern.clone()),
-                    )
-                    .when(is_layout || is_index || has_loader, |d| {
-                        let mut tags = Vec::new();
-                        if is_layout {
-                            tags.push("layout");
-                        }
-                        if is_index {
-                            tags.push("index");
-                        }
-                        if has_loader {
-                            tags.push("loader");
-                        }
-                        d.child(div().flex().gap_1().children(tags.into_iter().map(|tag| {
-                            div()
-                                .px_1()
-                                .rounded(px(2.0))
-                                .bg(theme.muted_foreground.opacity(0.1))
-                                .text_color(theme.muted_foreground)
-                                .text_size(px(9.0))
-                                .child(tag)
-                        })))
-                    });
-
-                // Enhanced details: meta, stale/gc times, before_load
-                if !info.meta.is_empty() {
-                    let meta_str = info
-                        .meta
-                        .iter()
-                        .map(|(k, v)| format!("{}:{}", k, v))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    row = row.child(
-                        div()
-                            .text_size(px(9.0))
-                            .text_color(theme.muted_foreground)
-                            .child(format!("meta: {{{}}}", meta_str)),
-                    );
-                }
-                if let Some(st) = info.stale_time {
-                    row = row.child(
-                        div()
-                            .text_size(px(9.0))
-                            .text_color(theme.muted_foreground)
-                            .child(format!("stale:{:?}", st)),
-                    );
-                }
-                if let Some(gc) = info.gc_time {
-                    row = row.child(
-                        div()
-                            .text_size(px(9.0))
-                            .text_color(theme.muted_foreground)
-                            .child(format!("gc:{:?}", gc)),
-                    );
-                }
-                if info.before_load {
-                    row = row.child(
-                        div()
-                            .text_size(px(9.0))
-                            .text_color(theme.warning)
-                            .child("🔒 beforeLoad"),
-                    );
-                }
-
-                rows.push(row);
-
-                if !is_collapsed && let Some(children) = children_map.get(id) {
-                    let mut sorted_children = children.clone();
-                    sorted_children.sort();
-                    for child_id in sorted_children {
-                        rows.extend(render_node(
-                            &child_id,
-                            depth + 1,
-                            node_details,
-                            children_map,
-                            collapsed,
-                            matched_chain,
-                            matched_leaf_id,
-                            window_handle,
-                            cx,
-                            _window,
-                        ));
-                    }
-                }
-
-                rows
-            }
-
             container = container
                 .child(
                     div()
@@ -1108,8 +1080,7 @@ impl DevtoolsState {
                                 .text_color(theme.muted_foreground)
                                 .text_size(px(11.0))
                                 .child(format!(
-                                    "{} routes · {} layouts · {} with loaders",
-                                    total_routes, layout_count, loader_count
+                                    "{total_routes} routes · {layout_count} layouts · {loader_count} with loaders"
                                 )),
                         ),
                 )
@@ -1128,7 +1099,6 @@ impl DevtoolsState {
                                 matched_leaf_id.as_deref(),
                                 window_handle_for_tree,
                                 cx,
-                                window,
                             )
                         })),
                 );
@@ -1168,7 +1138,10 @@ impl DevtoolsState {
             deltas.push(0.0);
             for i in 1..filtered.len() {
                 let delta = filtered[i].timestamp - filtered[i - 1].timestamp;
-                deltas.push(delta.num_milliseconds() as f64);
+                let clamped_ms = delta
+                    .num_milliseconds()
+                    .clamp(i64::from(i32::MIN), i64::from(i32::MAX));
+                deltas.push(f64::from(i32::try_from(clamped_ms).unwrap_or(0)));
             }
         }
         filtered.reverse();
@@ -1276,20 +1249,18 @@ impl DevtoolsState {
                                                 RouterEventType::Resolved,
                                                 RouterEventType::Rendered,
                                             ] {
-                                                let is_checked = weak_self
-                                                    .upgrade()
-                                                    .map(|this| {
+                                                let is_checked =
+                                                    weak_self.upgrade().is_some_and(|this| {
                                                         this.read(cx)
                                                             .filter_event_types
                                                             .contains(&event_type)
-                                                    })
-                                                    .unwrap_or(false);
+                                                    });
                                                 menu = menu.item(
                                                     PopupMenuItem::new(event_type.label())
                                                         .checked(is_checked)
                                                         .on_click({
                                                             let weak_self = weak_self.clone();
-                                                            let event_type = event_type;
+
                                                             move |_, _window, cx| {
                                                                 weak_self
                                                                     .update(cx, |this, cx| {
@@ -1414,8 +1385,7 @@ impl DevtoolsState {
                                                 let is_new = ix < highlight_count;
                                                 let is_selected = selected_detail_inner
                                                     .as_ref()
-                                                    .map(|d| d == &display.detail)
-                                                    .unwrap_or(false);
+                                                    .is_some_and(|d| d == &display.detail);
                                                 let event_text = &display.text;
                                                 let text_len = event_text.len();
 
@@ -1478,7 +1448,7 @@ impl DevtoolsState {
                                                 let delta_text = if ix == 0 {
                                                     "—".to_string()
                                                 } else {
-                                                    format!("+{:.0}ms", delta)
+                                                    format!("+{delta:.0}ms")
                                                 };
 
                                                 let is_rendered = display.badge == "REN";
@@ -1543,7 +1513,7 @@ impl DevtoolsState {
                                                         div().overflow_hidden().child(styled_text),
                                                     )
                                                     .child(
-                                                        Button::new(format!("select-event-{}", ix))
+                                                        Button::new(format!("select-event-{ix}"))
                                                             .icon(IconName::Info)
                                                             .ghost()
                                                             .xsmall()
@@ -1575,7 +1545,7 @@ impl DevtoolsState {
                                                         let path = jump_path.clone().unwrap();
                                                         let window_handle = window_handle_for_jump;
                                                         d.child(
-                                                            Button::new(format!("jump-btn-{}", ix))
+                                                            Button::new(format!("jump-btn-{ix}"))
                                                                 .icon(IconName::Play)
                                                                 .ghost()
                                                                 .xsmall()
@@ -1604,8 +1574,7 @@ impl DevtoolsState {
         let theme = cx.theme();
         let detail = self
             .selected_event_detail
-            .as_ref()
-            .cloned()
+            .clone()
             .unwrap_or_else(|| EventDetail {
                 from_pathname: None,
                 from_search: None,
@@ -1746,7 +1715,6 @@ impl DevtoolsState {
                     key: entry.key().clone(),
                     age: cached.fetched_at.elapsed(),
                     is_stale: cached.is_stale,
-                    type_id: cached.type_id,
                 }
             })
             .collect();
@@ -1783,7 +1751,7 @@ impl DevtoolsState {
                             .text_color(info_color)
                             .font_weight(FontWeight::MEDIUM)
                             .child(Icon::new(IconName::Inbox))
-                            .child(format!("rs-query Cache ({} entries)", row_count)),
+                            .child(format!("rs-query Cache ({row_count} entries)")),
                     )
                     .child(
                         Button::new("clear-cache")
@@ -1840,7 +1808,7 @@ impl DevtoolsState {
     // State tab - ENHANCED with pending nav, NotFoundMode, default timings, meta
     // -----------------------------------------------------------------------
 
-    fn render_state_tab(&self, cx: &Context<Self>) -> impl IntoElement {
+    fn render_state_tab(cx: &Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let state = RouterState::try_global(cx);
         let mut container = div().gap_3().flex().flex_col();
@@ -2116,11 +2084,10 @@ impl DevtoolsState {
                                                 })
                                                 .text_size(px(11.0))
                                                 .child(
-                                                    state
-                                                        .pending_navigation
-                                                        .as_ref()
-                                                        .map(|l| l.pathname.clone())
-                                                        .unwrap_or_else(|| "None".to_string()),
+                                                    state.pending_navigation.as_ref().map_or_else(
+                                                        || "None".to_string(),
+                                                        |l| l.pathname.clone(),
+                                                    ),
                                                 ),
                                         ),
                                 )
@@ -2348,7 +2315,7 @@ impl Render for DevtoolsState {
         let tab_bar = TabBar::new("devtools-tabs")
             .selected_index(self.tab_index())
             .on_click(cx.listener(|this, index, _, cx| {
-                this.set_selected_tab(this.tab_from_index(*index), cx);
+                this.set_selected_tab(Self::tab_from_index(*index), cx);
             }))
             .child(
                 Tab::new()
@@ -2370,13 +2337,6 @@ impl Render for DevtoolsState {
                     .label("State")
                     .prefix(Icon::new(IconName::Settings).ml_1()),
             );
-
-        #[cfg(feature = "nexum")]
-        let tab_bar = tab_bar.child(
-            Tab::new()
-                .label("Deep Links")
-                .prefix(Icon::new(IconName::Globe).ml_1()),
-        );
 
         let mut panel = div()
             .absolute()
@@ -2410,13 +2370,6 @@ impl Render for DevtoolsState {
             .on_action(cx.listener(|this, _: &SwitchToTab4, _window, cx| {
                 this.set_selected_tab(DevtoolsTab::State, cx);
             }));
-
-        #[cfg(feature = "nexum")]
-        {
-            panel = panel.on_action(cx.listener(|this, _: &SwitchToTab5, _window, cx| {
-                this.set_selected_tab(DevtoolsTab::DeepLinks, cx);
-            }));
-        }
 
         panel =
             panel
@@ -2472,9 +2425,7 @@ impl Render for DevtoolsState {
                         DevtoolsTab::Timeline => {
                             self.render_timeline_tab(window, cx).into_any_element()
                         }
-                        DevtoolsTab::State => self.render_state_tab(cx).into_any_element(),
-                        #[cfg(feature = "nexum")]
-                        DevtoolsTab::DeepLinks => self.deep_link_view.clone().into_any_element(),
+                        DevtoolsTab::State => Self::render_state_tab(cx).into_any_element(),
                     },
                 ));
         panel.into_any_element()

@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{ Window, App, div};
 use navi_macros::{define_route, use_loader_data};
 use std::time::Duration;
 
@@ -12,7 +12,7 @@ define_route!(
     DashboardSettingsRoute,
     path: "/dashboard/settings",
     data: SettingsData,
-    loader: |_: (), executor: gpui::BackgroundExecutor| async move {
+    loader: |(): (), executor: gpui::BackgroundExecutor| async move {
         log::info!("[Settings] Loader started");
         executor.timer(Duration::from_millis(300)).await;
         log::info!("[Settings] Loader completed");
@@ -29,7 +29,7 @@ struct DashboardSettings;
 impl RenderOnce for DashboardSettings {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let data = use_loader_data!(DashboardSettingsRoute);
-        let theme = data.map(|d| d.theme.clone()).unwrap_or_else(|| "⏳ Loading...".to_string());
-        div().p_4().child("⚙️ Settings").child(format!("Theme: {}", theme))
+        let theme = data.map_or_else(|| "⏳ Loading...".to_string(), |d| d.theme.clone());
+        div().p_4().child("⚙️ Settings").child(format!("Theme: {theme}"))
     }
 }

@@ -12,9 +12,9 @@ define_route!(
     DashboardSettingsRoute,
     path: "/dashboard/settings",
     data: SettingsData,
-    loader: |(): (), executor: gpui::BackgroundExecutor| async move {
+    loader: |(): ()| async move {
         log::info!("[Settings] Loader started");
-        executor.timer(Duration::from_millis(300)).await;
+        navi_router::sleep(Duration::from_millis(300)).await;
         log::info!("[Settings] Loader completed");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(SettingsData {
             theme: "dark".to_string(),
@@ -27,7 +27,7 @@ define_route!(
 struct DashboardSettings;
 
 impl RenderOnce for DashboardSettings {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let data = use_loader_data!(DashboardSettingsRoute);
         let theme = data.map_or_else(|| "⏳ Loading...".to_string(), |d| d.theme.clone());
         div().p_4().child("⚙️ Settings").child(format!("Theme: {theme}"))

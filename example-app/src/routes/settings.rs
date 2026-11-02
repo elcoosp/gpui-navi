@@ -1,7 +1,7 @@
 use gpui::prelude::*;
 use gpui::{AppContext, Window, App, div, MouseButton};
 use navi_macros::define_route;
-use navi_router::{Blocker, RouterState};
+use navi_router::{Blocker, RouterHandle};
 
 #[derive(Clone, IntoElement)]
 struct SettingsPage;
@@ -42,11 +42,13 @@ struct BlockerState {
 }
 
 impl Render for BlockerState {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         if self.block {
-            RouterState::update(cx, |state, _| {
+            let handle = RouterHandle::current();
+            handle.update(|state| {
                 state.add_blocker(Blocker::new_sync(move |_from, _to| true));
             });
+            handle.refresh();
         }
         div()
     }

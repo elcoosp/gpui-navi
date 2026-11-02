@@ -1,14 +1,13 @@
-use crate::{RouteDef, RouterState};
-use gpui::{
-    AnyElement, App, Element, GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels,
-    Window,
-};
+//! Awaited: suspense-style loader-data boundary rendering a `Node`.
+
+use crate::{RouteDef, RouterHandle};
+use quoin_ui::Node;
 use std::marker::PhantomData;
 
 pub struct Awaited<R: RouteDef> {
-    fallback: Option<Box<dyn Fn() -> AnyElement>>,
-    child: Option<Box<dyn Fn(R::LoaderData) -> AnyElement>>,
-    _phantom: PhantomData<R>,
+    fallback: Option<Box<dyn Fn() -> Node>>,
+    child: Option<Box<dyn Fn(R::LoaderData) -> Node>>,
+    _phantom: PhantomData<fn() -> R>,
 }
 
 impl<R: RouteDef> Awaited<R> {
@@ -22,108 +21,41 @@ impl<R: RouteDef> Awaited<R> {
     }
 
     #[must_use]
-    pub fn fallback(mut self, f: impl Fn() -> AnyElement + 'static) -> Self {
+    pub fn fallback(mut self, f: impl Fn() -> Node + 'static) -> Self {
         self.fallback = Some(Box::new(f));
         self
     }
 
     #[must_use]
-    pub fn child(mut self, f: impl Fn(R::LoaderData) -> AnyElement + 'static) -> Self {
+    pub fn child(mut self, f: impl Fn(R::LoaderData) -> Node + 'static) -> Self {
         self.child = Some(Box::new(f));
         self
+    }
+
+    /// Builds the boundary's node tree: the child when loader data is
+    /// present, otherwise the fallback (or an empty node).
+    #[must_use]
+    pub fn build(self) -> Node {
+        log::debug!("Awaited::build for {}", std::any::type_name::<R>());
+        let data =
+            RouterHandle::try_current().and_then(|handle| handle.read().get_loader_data::<R>());
+        log::debug!("Awaited data present: {}", data.is_some());
+
+        if let Some(data) = data {
+            if let Some(child_fn) = &self.child {
+                return child_fn(data.clone());
+            }
+            return Node::div().build();
+        }
+        if let Some(fallback_fn) = &self.fallback {
+            return fallback_fn();
+        }
+        Node::div().build()
     }
 }
 
 impl<R: RouteDef> Default for Awaited<R> {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-pub enum AwaitedChild<R: RouteDef> {
-    Fallback(AnyElement),
-    Data(AnyElement, R::LoaderData),
-}
-
-impl<R: RouteDef> Element for Awaited<R> {
-    type RequestLayoutState = AwaitedChild<R>;
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<gpui::ElementId> {
-        None
-    }
-    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        let state = RouterState::try_global(cx);
-        log::debug!("Awaited::request_layout for {}", std::any::type_name::<R>());
-        let data = state.and_then(super::super::state::RouterState::get_loader_data::<R>);
-        log::debug!("Awaited data present: {}", data.is_some());
-
-        if let Some(data) = data {
-            if let Some(child_fn) = &self.child {
-                let mut element = child_fn(data.clone());
-                let layout_id = element.request_layout(window, cx);
-                (layout_id, AwaitedChild::Data(element, data))
-            } else {
-                let mut empty = gpui::Empty.into_any_element();
-                let layout_id = empty.request_layout(window, cx);
-                (layout_id, AwaitedChild::Data(empty, data))
-            }
-        } else if let Some(fallback_fn) = &self.fallback {
-            let mut element = fallback_fn();
-            let layout_id = element.request_layout(window, cx);
-            (layout_id, AwaitedChild::Fallback(element))
-        } else {
-            let mut empty = gpui::Empty.into_any_element();
-            let layout_id = empty.request_layout(window, cx);
-            (layout_id, AwaitedChild::Fallback(empty))
-        }
-    }
-
-    fn prepaint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        _bounds: gpui::Bounds<Pixels>,
-        state: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        match state {
-            AwaitedChild::Fallback(elem) | AwaitedChild::Data(elem, _) => {
-                let _ = elem.prepaint(window, cx);
-            }
-        }
-    }
-
-    fn paint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        _bounds: gpui::Bounds<Pixels>,
-        state: &mut Self::RequestLayoutState,
-        _prepaint: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        match state {
-            AwaitedChild::Fallback(elem) | AwaitedChild::Data(elem, _) => elem.paint(window, cx),
-        }
-    }
-}
-
-impl<R: RouteDef> IntoElement for Awaited<R> {
-    type Element = Self;
-    fn into_element(self) -> Self::Element {
-        self
     }
 }

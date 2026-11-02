@@ -817,10 +817,14 @@ impl DevtoolsState {
     }
 
     fn tab_from_index(idx: usize) -> DevtoolsTab {
+        // Mirror of [`Self::tab_index`]: the TabBar reports 0-based indices in
+        // child order (Routes, Cache, Timeline, State). Routes/Timeline used to
+        // fall into the catch-all and silently land on Timeline.
         match idx {
+            0 => DevtoolsTab::Routes,
             1 => DevtoolsTab::Cache,
-            3 => DevtoolsTab::State,
-            _ => DevtoolsTab::Timeline,
+            2 => DevtoolsTab::Timeline,
+            _ => DevtoolsTab::State,
         }
     }
 
@@ -2429,5 +2433,27 @@ impl Render for DevtoolsState {
                     },
                 ));
         panel.into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The TabBar reports 0-based child indices; `tab_from_index` must be the
+    // exact inverse of `tab_index`. A regression here silently routes mouse
+    // clicks on the Routes/Timeline tabs to the wrong panel (the match used to
+    // fall through to a Timeline catch-all).
+    #[test]
+    fn tab_from_index_is_inverse_of_tab_index() {
+        let expected = [
+            (0, DevtoolsTab::Routes),
+            (1, DevtoolsTab::Cache),
+            (2, DevtoolsTab::Timeline),
+            (3, DevtoolsTab::State),
+        ];
+        for (idx, tab) in expected {
+            assert_eq!(DevtoolsState::tab_from_index(idx), tab, "index {idx}");
+        }
     }
 }

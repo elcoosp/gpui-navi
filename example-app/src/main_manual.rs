@@ -1,9 +1,8 @@
 // example-app/src/main.rs
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::Root;
-use gpui_component::scroll::ScrollableElement;
-use gpui_component_assets::Assets;
+use gpui_kit::component::scroll::ScrollableElement;
+use gpui_kit::assets::Assets;
 use navi_devtools::DevtoolsState;
 use navi_macros::{define_route, use_loader_data, use_search};
 use navi_router::{
@@ -681,9 +680,8 @@ impl Render for AppView {
             .relative()
             .child(self.router_provider.clone().child(Outlet::new()))
             .child(self.devtools.clone())
-            .children(Root::render_dialog_layer(window, cx))
-            .children(Root::render_sheet_layer(window, cx))
-            .children(Root::render_notification_layer(window, cx))
+            // Dialog, sheet and notification layers are mounted by the kit's
+            // Root itself in the post-restructure stack.
     }
 }
 
@@ -697,32 +695,32 @@ fn main() {
     // The `define_route!` macro now automatically registers components via the `register` method.
     // We only need to manually register non-route components (like RootLayout, AboutPage, etc.)
     register_route_component("__root__", |_| {
-        Component::new(RootLayout).into_any_element()
+        RootLayout.into_any_element()
     });
-    register_route_component("index", |_| Component::new(HomePage).into_any_element());
-    register_route_component("about", |_| Component::new(AboutPage).into_any_element());
-    register_route_component("users", |_| Component::new(UsersLayout).into_any_element());
+    register_route_component("index", |_| HomePage.into_any_element());
+    register_route_component("about", |_| AboutPage.into_any_element());
+    register_route_component("users", |_| UsersLayout.into_any_element());
     register_route_component("settings", |_| {
-        Component::new(SettingsPage).into_any_element()
+        SettingsPage.into_any_element()
     });
     register_route_component("docs_splat", |_| {
-        Component::new(DocsSplatPage).into_any_element()
+        DocsSplatPage.into_any_element()
     });
     register_route_component("not_found", |_| {
-        Component::new(NotFoundPage).into_any_element()
+        NotFoundPage.into_any_element()
     });
     register_route_component("validation_index", |_| {
-        Component::new(ValidationTestIndex).into_any_element()
+        ValidationTestIndex.into_any_element()
     });
 
     // For routes defined with `define_route!`, we'll call their `register` method later.
     // Validation test routes are conditionally compiled, we'll register them similarly.
 
-    gpui_platform::application()
+    gpui_kit::application()
         .with_assets(Assets)
         .run(|cx: &mut App| {
             cx.init_colors();
-            gpui_component::init(cx);
+            gpui_kit::init(cx);
             log::info!("Building route tree");
             let mut tree = RouteTree::new();
             // --- Build route tree with proper parent relationships ---
@@ -901,7 +899,7 @@ fn main() {
                     });
 
                     RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
-                    cx.new(|cx| Root::new(root_view, window, cx))
+                    cx.new(|cx| gpui_kit::component::Root::new(root_view, window, cx))
                 },
             )
             .unwrap();

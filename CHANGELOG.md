@@ -51,6 +51,23 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(vendor)* Include Apache-2.0 license for vendored xattr  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truec08e946e7be88d982647144931edc2b7011c1858))
 - *(vendor)* Include MIT license for vendored xattr  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true0da49a22b9a351f0f1cc7585c220d1650797403f))
 - *(vendor)* Include README for vendored xattr  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truebbee4a667a4face64b79cc321d33e344de98a4ff))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/trued02a9fb1dbdada13dc6458305cd3e0c9eda2dfdf))
+- *(example-app)* Migrate dependencies to gpui-kit facade  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueca965623a30aa05bc72250a7b8f0019180368537))
+- *(test)* Explicitly enable gpui test-support feature  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true13608b3aa9ba4ff9363d7a6634daa3ca84262df5))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true13e33ce2353aa6bf6508cd9197a854c7bfea7875))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1eef04b0c38b616326ea3aa5bf6c191bd24d829c))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true7e665a3768571351e9f4776e2cd6f39fb906ea46))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1ee2f1ae0282ff1483ddf32a5bcd54d73d187cd5))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true75ab68ea1d2741ca2ff7a8c6bff2ed95d38a561a))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truefafe70790f3ea21fcfdb8f13cd5639d99d934e0c))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true5fdf21065c180f1ec901dea6aea788c95520522d))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trued8fda51e18f0f0bed69d2149e75b82b567aed77c))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trued386579b1472dc50ccd714de2d32323ef9278947))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truee2e17433570c7b3cf342a7123c6987efbc28d35e))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true2a6c7132cb5763fa8d2a7e19be91549dd96550cf))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truec2cb2b3547ec4414d1c4e6b7c4d3de922f05c9a2))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true62ea5b1fdf3968f2f4cdd35b66ecfec764404eba))
+- *(vendor)* Remove vendored xattr patch  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truee061e9f7b4c1b33bdc9f6d7bc1ab6909b4541cf6))
 
 ### 🐛 Bug Fixes
 
@@ -117,6 +134,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(vendor)* Patch xattr platform dispatch: define ENOATTR as ENODATA on Linux/Android  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true65654453d19dedaeb609cec1909608282e3d2885))
 - *(vendor)* Include xattr unsupported-platform stub (unchanged from upstream)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true131b6667d0919b2e348779048b285ee0b0fe3124))
 - *(vendor)* Include xattr utility module (unchanged from upstream)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true4974ea8254030ee33d8ce1a39f5798e9d82bf42a))
+- *(devtools)* Correct tab index mapping and add regression test  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true62a58d6611bc64760ff03a79f0433865a0f34267))
 
 ### 👷 CI/CD
 
@@ -134,6 +152,8 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(changelog)* Add initial CHANGELOG.md with Unreleased section  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true4796d4f07c5f7ceeb8c2d4d3980601dbef2b62d7))
 - *(brainstorm)* Add improvement brainstorm and implementation changelog  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueb0334a85207d55eaae3f551d4688f74556010e9c))
 - *(readme)* Update README with new features, development workflow and quality gates  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true5530ac7e57450fe1736c2e0c47b4721f30b71224))
+- *(readme)* Update dependency stack documentation for gpui-kit migration  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true9d61a86ed18daac9dfbdb2ab9f15709caabdc5cb))
+- *(brainstorm)* Mark gpui-kit migration as complete and detail API deltas  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true8af69790a9f7e4204938598879d592fb00681dab))
 
 ### 🚀 Features
 
@@ -255,6 +275,11 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(navi-router)* Remove duplicate location.rs (canonical version in navi-router-core)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truee1a887e407a82cb0fb39c4ffa8d183b5068d2886))
 - *(navi-router)* Remove duplicate redirect.rs (canonical version in navi-router-core)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueee78821e9f7d40e6f8288f66dae08ae8e59f8425))
 - *(navi-router)* Remove duplicate validation.rs (canonical version in navi-router-core)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true4d55b17cc9730bc78784a379bfb3ac0a317a86eb))
+- *(example-app)* Adapt main entry point to gpui-kit application facade  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueca07729709c15515863bf78976ca82a9c38868fe))
+- *(example-app)* Update manual route registration for gpui-pre stack  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truee0fc8a8050cad4e73504f3395d3a64f095f61f5e))
+- *(example-app)* Update scroll import to gpui_kit  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true646e5a2f19bbbf0351ea7c3ba1cb296ce3870d52))
+- *(example-app)* Update component imports to gpui_kit  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueec4232a37e391a6d4ffe0b0bd712aceda0c83ed3))
+- *(macros)* Use IntoElement for route component registration  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truef0b8603a8681899600c0e5075e99c1fecd44cee3))
 
 ### 🧪 Testing
 
@@ -268,4 +293,5 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 
 ### 💞 New Contributors
 - @elcoosp made their first contribution
+- @github-actions[bot] made their first contribution
 - @renovate[bot] made their first contribution<!-- generated by git-cliff -->

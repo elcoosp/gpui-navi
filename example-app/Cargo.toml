@@ -17,11 +17,13 @@ osx_url_schemes = ["naviapp"]
 
 [dependencies]
 gpui = { workspace = true }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui-component = { workspace = true }
+# The application facade: GPUI + gpui-base + gpui-component + bundled assets,
+# with `application()` / `init()` / `open_window()` entry points.
+gpui-kit = { workspace = true }
+# Platform backend features (font-kit, X11, Wayland, runtime shaders) that
+# gpui-kit leaves off by default; additive across the shared gpui-pre-platform.
+gpui_platform = { workspace = true }
 rs-query = { workspace = true }
-
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
 navi-core = { path = "../navi-core" }
 navi-router = { path = "../navi-router" }
 navi-devtools = { path = "../navi-devtools" }

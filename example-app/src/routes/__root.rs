@@ -1,14 +1,15 @@
 use gpui::{IntoElement, RenderOnce, Window, App, ParentElement, Styled, div, rgb};
 use navi_macros::define_route;
 use navi_router::components::{Link, Outlet};
-use navi_router::RouterState;
+use navi_router::RouterHandle;
+use quoin_ui_gpui::NodeElement;
 
 #[derive(Clone, IntoElement)]
 struct RootLayout;
 
 impl RenderOnce for RootLayout {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let meta = RouterState::global(cx).current_meta();
+    fn render(self, window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let meta = RouterHandle::current().read().current_meta();
         let title = meta.get("title").and_then(|v| v.as_str()).unwrap_or("Navi App");
 
         // Update the window title
@@ -28,26 +29,26 @@ impl RenderOnce for RootLayout {
                     .p_4()
                     .bg(rgb(0x0031_3244))
                     .child(format!("🌐 {title}"))
-                    .child(Link::new("/").child("🏠 Home"))
-                    .child(Link::new("/about").child("ℹ️ About"))
-                    .child(Link::new("/users").child("👥 Users"))
-                    .child(Link::new("/users/1").child("User 1"))
-                    .child(Link::new("/users/2").child("User 2"))
-                    .child(Link::new("/users/42").child("User 42"))
-                    .child(Link::new("/settings").child("⚙️ Settings"))
-                    .child(Link::new("/docs/getting-started").child("📄 Docs"))
-                    .child(Link::new("/validation-test").child("🧪 Validation"))
-                    .child(Link::new("/admin").child("🔒 Admin"))
-                    .child(Link::new("/lifecycle").child("🔄 Lifecycle"))
-                    .child(Link::new("/blocking").child("🚫 Blocking"))
-                    .child(Link::new("/scroll").child("📜 Scroll"))
-                    .child(Link::new("/awaited").child("⏳ Awaited"))
-                    .child(Link::new("/meta").child("🏷️ Meta"))
-                    .child(Link::new("/context").child("📦 Context"))
-                    .child(Link::new("/profile").child("👤 Profile (pathless)"))
-                    .child(Link::new("/nonexistent").child("❌ 404 Test")),
+                    .child(NodeElement(Link::new("/").child("🏠 Home").build()))
+                    .child(NodeElement(Link::new("/about").child("ℹ️ About").build()))
+                    .child(NodeElement(Link::new("/users").child("👥 Users").build()))
+                    .child(NodeElement(Link::new("/users/1").child("User 1").build()))
+                    .child(NodeElement(Link::new("/users/2").child("User 2").build()))
+                    .child(NodeElement(Link::new("/users/42").child("User 42").build()))
+                    .child(NodeElement(Link::new("/settings").child("⚙️ Settings").build()))
+                    .child(NodeElement(Link::new("/docs/getting-started").child("📄 Docs").build()))
+                    .child(NodeElement(Link::new("/validation-test").child("🧪 Validation").build()))
+                    .child(NodeElement(Link::new("/admin").child("🔒 Admin").build()))
+                    .child(NodeElement(Link::new("/lifecycle").child("🔄 Lifecycle").build()))
+                    .child(NodeElement(Link::new("/blocking").child("🚫 Blocking").build()))
+                    .child(NodeElement(Link::new("/scroll").child("📜 Scroll").build()))
+                    .child(NodeElement(Link::new("/awaited").child("⏳ Awaited").build()))
+                    .child(NodeElement(Link::new("/meta").child("🏷️ Meta").build()))
+                    .child(NodeElement(Link::new("/context").child("📦 Context").build()))
+                    .child(NodeElement(Link::new("/profile").child("👤 Profile (pathless)").build()))
+                    .child(NodeElement(Link::new("/nonexistent").child("❌ 404 Test").build())),
             )
-            .child(div().flex_1().p_4().child(Outlet::new()))
+            .child(div().flex_1().p_4().child(NodeElement(Outlet::new().build())))
     }
 }
 

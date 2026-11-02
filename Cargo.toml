@@ -36,7 +36,7 @@ gpui-component = "0.8.1"
 # zed-git gpui, which stays a leaf in the graph because none of its used APIs
 # expose gpui types. Its optional `devtools` feature remains OFF — it drags
 # the new-layout gpui-component, and Navi ships its own devtools UI.
-rs-query = { git = "https://github.com/elcoosp/rs-query", rev = "ee416b8db255eb34bb29d4a9663e66135f39609d" }
+rs-query = { git = "https://github.com/elcoosp/rs-query", rev = "87b3742cbbf1938bcee0fe0c84c99bdf60a03a01" }
 
 # Lean dev profile: line tables only (backtraces still work) and no
 # incremental caches. Cuts target/ size by well over half, which matters

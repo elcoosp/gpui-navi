@@ -1,118 +1,163 @@
-use crate::state::RouterState;
+use crate::state::RouterHandle;
 use crate::{Location, NavOp, NavigateOptions};
-use gpui::{AnyWindowHandle, App};
 
+/// Imperative navigation API.
+///
+/// A `Navigator` is a cheap handle to the thread-current (or explicitly
+/// provided) [`RouterHandle`]; all methods mutate the shared state and
+/// request a repaint through the router host.
 #[derive(Clone)]
 pub struct Navigator {
-    window: AnyWindowHandle,
-    base: Option<String>,
+    handle: RouterHandle,
 }
 
 impl Navigator {
+    /// A navigator over the thread-current router.
+    ///
+    /// # Panics
+    /// Panics when no router is installed on this thread.
     #[must_use]
-    pub fn new(window: AnyWindowHandle) -> Self {
-        Self { window, base: None }
-    }
-    pub fn from_route(window: AnyWindowHandle, base: impl Into<String>) -> Self {
+    pub fn new() -> Self {
         Self {
-            window,
-            base: Some(base.into()),
+            handle: RouterHandle::current(),
         }
     }
-    pub fn push(&self, path: impl Into<String>, cx: &mut App) {
-        let loc = self.to_location(path);
-        self.push_location(loc, cx);
+
+    /// A navigator over the thread-current router with a path base
+    /// (relative pushes resolve against `base`).
+    ///
+    /// # Panics
+    /// Panics when no router is installed on this thread.
+    #[must_use]
+    pub fn from_route(base: impl Into<String>) -> Self {
+        let handle = RouterHandle::current();
+        handle.write().current_base = Some(base.into());
+        Self { handle }
     }
-    pub fn push_location(&self, loc: Location, cx: &mut App) {
-        self.push_location_with(loc, &NavigateOptions::default(), cx);
+
+    /// A navigator over an explicit router handle (used inside async
+    /// continuations where the thread-current slot may have moved on).
+    #[must_use]
+    pub fn from_handle(handle: &RouterHandle) -> Self {
+        Self {
+            handle: handle.clone(),
+        }
+    }
+
+    /// A navigator over an explicit router handle with a path base.
+    #[must_use]
+    pub fn from_handle_route(handle: &RouterHandle, base: impl Into<String>) -> Self {
+        let navigator = Self::from_handle(handle);
+        handle.write().current_base = Some(base.into());
+        navigator
+    }
+
+    /// The backing router handle.
+    #[must_use]
+    pub fn handle(&self) -> RouterHandle {
+        self.handle.clone()
+    }
+
+    pub fn push(&self, path: impl Into<String>) {
+        let loc = self.to_location(path);
+        self.push_location(loc);
+    }
+
+    pub fn push_location(&self, loc: Location) {
+        self.push_location_with(loc, &NavigateOptions::default());
     }
 
     /// Push with explicit navigation options (scroll reset, view transition,
     /// blocker override, ...).
-    pub fn push_location_with(&self, loc: Location, options: &NavigateOptions, cx: &mut App) {
-        RouterState::update(cx, |state, cx| {
-            state.navigate(loc, options, cx);
-            cx.refresh_windows();
+    pub fn push_location_with(&self, loc: Location, options: &NavigateOptions) {
+        self.handle.update(|state| {
+            state.navigate(loc, options);
         });
+        self.handle.refresh();
     }
-    pub fn replace(&self, path: impl Into<String>, cx: &mut App) {
+    pub fn replace(&self, path: impl Into<String>) {
         let loc = self.to_location(path);
-        self.replace_location(loc, cx);
+        self.replace_location(loc);
     }
-    pub fn replace_location(&self, loc: Location, cx: &mut App) {
-        self.replace_location_with(loc, &NavigateOptions::default(), cx);
+    pub fn replace_location(&self, loc: Location) {
+        self.replace_location_with(loc, &NavigateOptions::default());
     }
 
     /// Replace with explicit navigation options.
-    pub fn replace_location_with(&self, loc: Location, options: &NavigateOptions, cx: &mut App) {
-        RouterState::update(cx, |state, cx| {
+    pub fn replace_location_with(&self, loc: Location, options: &NavigateOptions) {
+        self.handle.update(|state| {
             state.navigate(
                 loc,
                 &NavigateOptions {
                     replace: true,
                     ..options.clone()
                 },
-                cx,
             );
-            cx.refresh_windows();
         });
+        self.handle.refresh();
     }
 
     /// Apply a batch of navigation operations atomically (one re-render).
-    pub fn transact(&self, ops: impl IntoIterator<Item = NavOp>, cx: &mut App) {
+    pub fn transact(&self, ops: impl IntoIterator<Item = NavOp>) {
         let ops: Vec<NavOp> = ops.into_iter().collect();
-        RouterState::update(cx, |state, cx| {
-            state.transact(&ops, cx);
-            cx.refresh_windows();
+        self.handle.update(|state| {
+            state.transact(&ops);
         });
+        self.handle.refresh();
     }
-    pub fn back(&self, cx: &mut App) {
-        RouterState::update(cx, |state, cx| {
+    pub fn back(&self) {
+        self.handle.update(|state| {
             if state.can_go_back() {
                 state.back();
-                cx.refresh_windows();
             }
         });
+        self.handle.refresh();
     }
-    pub fn forward(&self, cx: &mut App) {
-        RouterState::update(cx, |state, cx| {
+    pub fn forward(&self) {
+        self.handle.update(|state| {
             if state.can_go_forward() {
                 state.forward();
-                cx.refresh_windows();
             }
         });
+        self.handle.refresh();
     }
-    pub fn go(&self, delta: isize, cx: &mut App) {
-        RouterState::update(cx, |state, cx| {
+    pub fn go(&self, delta: isize) {
+        self.handle.update(|state| {
             state.go(delta);
-            cx.refresh_windows();
         });
-    }
-    pub fn can_go_back(cx: &App) -> bool {
-        RouterState::global(cx).can_go_back()
-    }
-    pub fn can_go_forward(cx: &App) -> bool {
-        RouterState::global(cx).can_go_forward()
-    }
-    pub fn preload(&self, path: impl Into<String>, cx: &mut App) {
-        let loc = self.to_location(path);
-        RouterState::update(cx, |state, cx| {
-            state.preload_location(&loc, cx);
-        });
+        self.handle.refresh();
     }
     #[must_use]
-    pub fn window(&self) -> AnyWindowHandle {
-        self.window
+    pub fn can_go_back() -> bool {
+        RouterHandle::current().read().can_go_back()
+    }
+    #[must_use]
+    pub fn can_go_forward() -> bool {
+        RouterHandle::current().read().can_go_forward()
+    }
+    pub fn preload(&self, path: impl Into<String>) {
+        let loc = self.to_location(path);
+        self.handle.update(|state| {
+            state.preload_location(&loc);
+        });
     }
     fn to_location(&self, path: impl Into<String>) -> Location {
         let path = path.into();
         let resolved = if path.starts_with('/') {
             path
-        } else if let Some(base) = &self.base {
-            format!("{}/{}", base.trim_end_matches('/'), path)
         } else {
-            path
+            let base = self.handle.read().current_base.clone();
+            match base {
+                Some(base) => format!("{}/{}", base.trim_end_matches('/'), path),
+                None => path,
+            }
         };
         Location::new(&resolved)
+    }
+}
+
+impl Default for Navigator {
+    fn default() -> Self {
+        Self::new()
     }
 }

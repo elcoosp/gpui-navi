@@ -1,10 +1,11 @@
 use gpui::prelude::*;
-use gpui::{ Window, App, div, MouseButton, rgb};
+use gpui::{ Window, App, div, MouseButton};
 use navi_macros::{define_route, use_search};
 use navi_router::{Navigator, ValidateSearch, ValidationError, ValidationResult};
 use navi_router::components::Link;
 use serde::Deserialize;
 use std::collections::HashMap;
+use quoin_ui_gpui::NodeElement;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -66,9 +67,9 @@ define_route!(
 struct UsersIndexPage;
 
 impl RenderOnce for UsersIndexPage {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let search = use_search!(UsersIndexRoute);
-        let navigator = Navigator::new(window.window_handle());
+        let navigator = Navigator::new();
         let current_sort = search.sort.unwrap_or_default();
         let mut user_ids = vec![1, 2, 42];
         match current_sort {
@@ -86,17 +87,27 @@ impl RenderOnce for UsersIndexPage {
                 div().flex().gap_2()
                     .child(div().child("↑ Asc").on_mouse_up(MouseButton::Left, {
                         let nav = navigator.clone();
-                        move |_, _, cx| nav.push("/users?sort=asc", cx)
+                        move |_, _, _| nav.push("/users?sort=asc")
                     }))
                     .child(div().child("↓ Desc").on_mouse_up(MouseButton::Left, {
                         let nav = navigator.clone();
-                        move |_, _, cx| nav.push("/users?sort=desc", cx)
+                        move |_, _, _| nav.push("/users?sort=desc")
                     }))
             )
             .children(user_ids.into_iter().map(|id| {
-                Link::new(format!("/users/{id}"))
-                    .active_style(|el| el.bg(rgb(0x0025_63eb)).text_color(gpui::white()))
-                    .child(format!("User {id}"))
+                NodeElement(
+                    Link::new(format!("/users/{id}"))
+                        .active_style(|style| {
+                            style
+                                .with(quoin_ui::StyleCmd::Background(
+                                    quoin_ui::TextColor::Hex(0x0025_63eb),
+                                ))
+                                .with(quoin_ui::StyleCmd::TextColor(
+                                    quoin_ui::TextColor::Hex(0x00ff_ffff),
+                                ))
+                        })
+                        .child(format!("User {id}"))
+                        .build())
             }))
     }
 }

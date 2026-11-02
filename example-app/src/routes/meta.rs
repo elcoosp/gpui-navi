@@ -1,6 +1,6 @@
 use gpui::{IntoElement, RenderOnce, Window, App, ParentElement, Styled, div};
 use navi_macros::define_route;
-use navi_router::RouterState;
+use navi_router::RouterHandle;
 
 define_route!(
     MetaDemoRoute,
@@ -18,8 +18,8 @@ define_route!(
 struct MetaDemoPage;
 
 impl RenderOnce for MetaDemoPage {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let meta = RouterState::global(cx).current_meta();
+    fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let meta = RouterHandle::current().read().current_meta();
         div()
             .p_4()
             .child("Meta Demo Page")

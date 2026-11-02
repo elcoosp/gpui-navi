@@ -3,6 +3,7 @@ use gpui::{ Window, App, div};
 
 use navi_macros::define_route;
 use navi_router::components::Outlet;
+use quoin_ui_gpui::NodeElement;
 
 define_route!(
     AuthLayoutRoute,
@@ -15,6 +16,6 @@ define_route!(
 struct AuthLayout;
 impl RenderOnce for AuthLayout {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div().child("Auth Layout (pathless)").child(Outlet::new())
+        div().child("Auth Layout (pathless)").child(NodeElement(Outlet::new().build()))
     }
 }

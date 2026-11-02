@@ -2,6 +2,7 @@ use gpui::prelude::*;
 use gpui::{ Window, App, div};
 use navi_macros::define_route;
 use navi_router::components::Link;
+use quoin_ui_gpui::NodeElement;
 
 #[derive(Clone, IntoElement)]
 struct ValidationTestIndex;
@@ -12,11 +13,11 @@ impl RenderOnce for ValidationTestIndex {
             .p_4()
             .child("Validation Test Index")
             .child("Select a validation crate to test:")
-            .child(Link::new("/validation-test/validator").child("validator"))
-            .child(Link::new("/validation-test/garde").child("garde"))
-            .child(Link::new("/validation-test/validify").child("validify"))
-            .child(Link::new("/validation-test/valico").child("valico"))
-            .child(Link::new("/").child("Home"))
+            .child(NodeElement(Link::new("/validation-test/validator").child("validator").build()))
+            .child(NodeElement(Link::new("/validation-test/garde").child("garde").build()))
+            .child(NodeElement(Link::new("/validation-test/validify").child("validify").build()))
+            .child(NodeElement(Link::new("/validation-test/valico").child("valico").build()))
+            .child(NodeElement(Link::new("/").child("Home").build()))
     }
 }
 

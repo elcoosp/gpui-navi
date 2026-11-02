@@ -42,8 +42,8 @@ impl RenderOnce for GardeTestPage {
             .p_4()
             .child("Garde Test Page")
             .child(format!("Page: {:?}, Sort: {:?}", validated.page, validated.sort))
-            .child(Link::new("/validation-test/garde?page=50&sort=desc").child("Valid params"))
-            .child(Link::new("/validation-test/garde?page=999&sort=invalid").child("Invalid params"))
-            .child(Link::new("/validation-test").child("Back"))
+            .child(NodeElement(Link::new("/validation-test/garde?page=50&sort=desc").child("Valid params").build()))
+            .child(NodeElement(Link::new("/validation-test/garde?page=999&sort=invalid").child("Invalid params").build()))
+            .child(NodeElement(Link::new("/validation-test").child("Back").build()))
     }
 }

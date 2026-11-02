@@ -285,7 +285,9 @@ fn expand(name: &Ident, args: &RouteArgs) -> TokenStream2 {
     let component_registration = match &args.component {
         Some(comp_ty) => quote! {
             navi_router::components::register_route_component(<Self as ::navi_router::RouteDef>::name(), |_cx| {
-                gpui::Component::new(#comp_ty).into_any_element()
+                // Route components are `IntoElement` render-once values; the
+                // old `gpui::Component` adapter is gone in the gpui-pre stack.
+                <#comp_ty as ::gpui::IntoElement>::into_any_element(#comp_ty)
             });
         },
         None => quote! {},

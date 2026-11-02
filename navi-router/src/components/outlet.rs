@@ -1,26 +1,23 @@
-use crate::RouterState;
+//! Route outlet: renders the registered component for the matched route.
+
+use crate::RouterHandle;
 use crate::state::NotFoundMode;
-use gpui::Styled;
-use gpui::{
-    AnyElement, App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, Window,
-    div,
-};
-use navi_core::context;
+use quoin_ui::Node;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
-type ComponentConstructor = Arc<dyn Fn(&mut App) -> AnyElement + Send + Sync>;
+type NodeConstructor = Arc<dyn Fn() -> Node + Send + Sync>;
 
-static REGISTRY: LazyLock<Mutex<HashMap<String, ComponentConstructor>>> =
+static REGISTRY: LazyLock<Mutex<HashMap<String, NodeConstructor>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// Register the element constructor rendered by an [`Outlet`] for a route id.
+/// Register the node constructor rendered by an [`Outlet`] for a route id.
 ///
 /// # Panics
 /// Panics if the global route registry mutex is poisoned.
 pub fn register_route_component<F>(route_id: &str, constructor: F)
 where
-    F: Fn(&mut App) -> AnyElement + Send + Sync + 'static,
+    F: Fn() -> Node + Send + Sync + 'static,
 {
     REGISTRY
         .lock()
@@ -28,12 +25,26 @@ where
         .insert(route_id.to_string(), Arc::new(constructor));
 }
 
+/// The registered constructor for `route_id`, if any.
+///
+/// # Panics
+/// Panics if the route-component registry lock is poisoned.
+#[must_use]
+pub fn route_component(route_id: &str) -> Option<NodeConstructor> {
+    REGISTRY
+        .lock()
+        .expect("route registry lock")
+        .get(route_id)
+        .cloned()
+}
+
 #[derive(Clone, Copy)]
 pub struct OutletDepth(pub usize);
 
-#[derive(IntoElement, Default)]
+/// Renders the matched route's component at the current nesting depth.
+#[derive(Clone, Default)]
 pub struct Outlet {
-    children: Vec<AnyElement>,
+    children: Vec<Node>,
 }
 
 impl Outlet {
@@ -43,119 +54,106 @@ impl Outlet {
     }
 
     #[must_use]
-    pub fn child(mut self, child: impl IntoElement) -> Self {
-        self.children.push(child.into_any_element());
+    pub fn child(mut self, child: impl Into<quoin_ui::NodeChild>) -> Self {
+        self.children.push(child.into().0);
         self
     }
-}
 
-impl ParentElement for Outlet {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
-    }
-}
-
-impl RenderOnce for Outlet {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = RouterState::try_global(cx);
-        if state.is_none() {
+    /// Builds the outlet's node tree.
+    #[must_use]
+    pub fn build(self) -> Node {
+        let Some(handle) = RouterHandle::try_current() else {
             log::error!("Outlet: RouterState not found");
-            return div()
-                .size_full()
-                .flex()
-                .flex_col()
+            return Node::div()
+                .styles([
+                    quoin_ui::StyleCmd::SizeFull,
+                    quoin_ui::StyleCmd::Flex,
+                    quoin_ui::StyleCmd::FlexCol,
+                ])
                 .child("Router not initialized")
-                .into_any_element();
-        }
-        let state = state.unwrap();
+                .build();
+        };
 
-        let window_id = window.window_handle().window_id();
-        let depth = context::consume::<OutletDepth>(window_id).map_or(0, |d| d.0);
+        let depth = {
+            let state = handle.read();
+            let window_key = state.window_key;
+            navi_core::context::consume::<OutletDepth>(window_key).map_or(0, |d| d.0)
+        };
 
         if depth > 20 {
             log::error!("Outlet depth {depth} exceeded limit - possible cycle in route tree");
-            return div()
-                .size_full()
-                .flex()
-                .flex_col()
+            return Node::div()
+                .styles([
+                    quoin_ui::StyleCmd::SizeFull,
+                    quoin_ui::StyleCmd::Flex,
+                    quoin_ui::StyleCmd::FlexCol,
+                ])
                 .child("Error: Outlet depth limit exceeded")
-                .into_any_element();
+                .build();
         }
 
-        let (leaf_node_id, constructor_opt) = {
-            if let Some((_params, leaf_node)) = state.current_match.as_ref() {
-                let ancestors = state.route_tree.ancestors(&leaf_node.id);
-                if depth >= ancestors.len() {
-                    log::warn!("Outlet depth {depth} exceeds ancestors length");
-                    return div().size_full().flex().flex_col().into_any_element();
-                }
-                let node = ancestors[depth];
-                let constructor = REGISTRY
-                    .lock()
-                    .expect("route registry lock")
-                    .get(&node.id)
-                    .cloned();
-                (node.id.clone(), constructor)
-            } else {
-                log::warn!("Outlet: no matching route");
-                return div()
-                    .size_full()
-                    .flex()
-                    .flex_col()
-                    .child("404 Not Found")
-                    .into_any_element();
+        let state = handle.read();
+        let Some((_params, leaf_node)) = state.current_match.as_ref() else {
+            log::warn!("Outlet: no matching route");
+            return Node::div()
+                .styles([
+                    quoin_ui::StyleCmd::SizeFull,
+                    quoin_ui::StyleCmd::Flex,
+                    quoin_ui::StyleCmd::FlexCol,
+                ])
+                .child("404 Not Found")
+                .build();
+        };
+
+        let ancestors = state.route_tree.ancestors(&leaf_node.id);
+        if depth >= ancestors.len() {
+            log::warn!("Outlet depth {depth} exceeds ancestors length");
+            return Node::div()
+                .styles([
+                    quoin_ui::StyleCmd::SizeFull,
+                    quoin_ui::StyleCmd::Flex,
+                    quoin_ui::StyleCmd::FlexCol,
+                ])
+                .build();
+        }
+        let node = &ancestors[depth];
+        let leaf_node_id = node.id.clone();
+        let constructor = route_component(&node.id);
+
+        let not_found_constructor = if constructor.is_some() {
+            None
+        } else {
+            match state.not_found_mode {
+                NotFoundMode::Root => route_component("__not_found_root__"),
+                NotFoundMode::Fuzzy => state
+                    .route_tree
+                    .ancestors(&leaf_node_id)
+                    .iter()
+                    .rev()
+                    .find_map(|ancestor| route_component(&format!("__not_found_{}", ancestor.id))),
             }
         };
 
         // The wrapper MUST fill the parent and act as a flex column.
-        let wrapper = div()
-            .size_full() // Take all available space
-            .flex() // Enable flex layout
-            .flex_col() // Column direction
-            .id(ElementId::Name(
-                format!("outlet-{leaf_node_id}-{depth}").into(),
-            ));
+        let mut wrapper = Node::div()
+            .id(format!("outlet-{leaf_node_id}-{depth}"))
+            .styles([
+                quoin_ui::StyleCmd::SizeFull,
+                quoin_ui::StyleCmd::Flex,
+                quoin_ui::StyleCmd::FlexCol,
+            ]);
 
-        if let Some(constructor) = constructor_opt {
-            context::provide(window_id, OutletDepth(depth + 1));
-            let element = constructor(cx);
-            wrapper
-                .child(element)
-                .children(self.children)
-                .into_any_element()
+        navi_core::context::provide(state.window_key, OutletDepth(depth + 1));
+
+        if let Some(constructor) = constructor {
+            wrapper = wrapper.child(constructor());
+        } else if let Some(constructor) = not_found_constructor {
+            wrapper = wrapper.child(constructor());
         } else {
-            let not_found_component = match state.not_found_mode {
-                NotFoundMode::Root => REGISTRY
-                    .lock()
-                    .expect("route registry lock")
-                    .get("__not_found_root__")
-                    .cloned(),
-                NotFoundMode::Fuzzy => {
-                    let ancestors = state.route_tree.ancestors(&leaf_node_id);
-                    ancestors.iter().rev().find_map(|ancestor| {
-                        REGISTRY
-                            .lock()
-                            .expect("route registry lock")
-                            .get(&format!("__not_found_{}", ancestor.id))
-                            .cloned()
-                    })
-                }
-            };
-
-            if let Some(constructor) = not_found_component {
-                context::provide(window_id, OutletDepth(depth + 1));
-                let element = constructor(cx);
-                wrapper
-                    .child(element)
-                    .children(self.children)
-                    .into_any_element()
-            } else {
-                context::provide(window_id, OutletDepth(depth + 1));
-                wrapper
-                    .child("404 - Page not found")
-                    .children(self.children)
-                    .into_any_element()
-            }
+            wrapper = wrapper.child("404 - Page not found");
         }
+
+        wrapper = wrapper.children(self.children);
+        wrapper.build()
     }
 }

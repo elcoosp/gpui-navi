@@ -4,7 +4,11 @@ version.workspace = true
 edition = "2024"
 
 [dependencies]
-gpui = { workspace = true }
+# Framework-agnostic stack: quoin provides the reactive runtime seam
+# (portable sleep for loaders) and the `Node` UI contract the components
+# render through. No GUI framework is named anywhere in this crate.
+quoin-core = { workspace = true }
+quoin-ui = { workspace = true }
 
 navi-core = { path = "../navi-core" }
 navi-router-core = { path = "../navi-router-core" }

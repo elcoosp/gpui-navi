@@ -1,17 +1,18 @@
-use crate::{NavigateOptions, Navigator, RouterState};
-use gpui::prelude::FluentBuilder;
-use gpui::{
-    AnyElement, App, FontWeight, InteractiveElement, IntoElement, MouseButton, MouseMoveEvent,
-    MouseUpEvent, ParentElement, RenderOnce, Styled, Window, div,
-};
+//! TanStack-style router link rendering a `quoin_ui::Node`.
+
+use crate::state::RouterHandle;
+use crate::{NavigateOptions, Navigator};
+use quoin_ui::Node;
+use quoin_ui::node::{NodeChild, NodeStyle, StyleCmd};
 use std::collections::HashSet;
 use std::sync::LazyLock;
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PreloadType {
-    /// Preload when the link enters the viewport. GPUI has no intersection
-    /// observer yet, so this behaves like [`PreloadType::Render`].
+    /// Preload when the link enters the viewport. Adapters have no
+    /// intersection observer yet, so this behaves like
+    /// [`PreloadType::Render`].
     Viewport,
     /// Preload on hover (first mouse move over the link), after the delay.
     Intent,
@@ -44,7 +45,8 @@ fn mark_preload_started(href: &str) -> bool {
 
 /// TanStack-style segment-boundary prefix match: `/users` is active for
 /// `/users` and `/users/42` but not for `/users-admin`.
-fn path_is_active(current: &str, href: &str, exact: bool) -> bool {
+#[must_use]
+pub fn path_is_active(current: &str, href: &str, exact: bool) -> bool {
     if exact {
         return current == href;
     }
@@ -57,14 +59,16 @@ fn path_is_active(current: &str, href: &str, exact: bool) -> bool {
 /// Whether the href points outside the router (absolute web URL or a
 /// non-http scheme such as `mailto:`). External links are handed to the OS
 /// instead of being matched against the route tree.
-fn is_external_href(href: &str) -> bool {
+#[must_use]
+pub fn is_external_href(href: &str) -> bool {
     href.starts_with("http://")
         || href.starts_with("https://")
         || href.starts_with("mailto:")
         || href.starts_with("tel:")
 }
 
-#[derive(IntoElement)]
+/// A framework-agnostic `<Link>`: builds a pointer-styled container with
+/// navigation, active styling and preload behavior.
 pub struct Link {
     href: String,
     search: Option<serde_json::Value>,
@@ -76,9 +80,9 @@ pub struct Link {
     disabled: bool,
     active_options: ActiveOptions,
     reset_scroll: bool,
-    active_style: Option<Box<dyn Fn(gpui::Div) -> gpui::Div>>,
-    inactive_style: Option<Box<dyn Fn(gpui::Div) -> gpui::Div>>,
-    children: Vec<AnyElement>,
+    active_style: Option<Box<dyn Fn(NodeStyle) -> NodeStyle>>,
+    inactive_style: Option<Box<dyn Fn(NodeStyle) -> NodeStyle>>,
+    children: Vec<quoin_ui::Node>,
 }
 
 impl Link {
@@ -137,14 +141,16 @@ impl Link {
         self
     }
 
+    /// Style hook applied when the link is active.
     #[must_use]
-    pub fn active_style(mut self, f: impl Fn(gpui::Div) -> gpui::Div + 'static) -> Self {
+    pub fn active_style(mut self, f: impl Fn(NodeStyle) -> NodeStyle + 'static) -> Self {
         self.active_style = Some(Box::new(f));
         self
     }
 
+    /// Style hook applied when the link is inactive.
     #[must_use]
-    pub fn inactive_style(mut self, f: impl Fn(gpui::Div) -> gpui::Div + 'static) -> Self {
+    pub fn inactive_style(mut self, f: impl Fn(NodeStyle) -> NodeStyle + 'static) -> Self {
         self.inactive_style = Some(Box::new(f));
         self
     }
@@ -163,8 +169,8 @@ impl Link {
     }
 
     #[must_use]
-    pub fn child(mut self, child: impl IntoElement) -> Self {
-        self.children.push(child.into_any_element());
+    pub fn child(mut self, child: impl Into<NodeChild>) -> Self {
+        self.children.push(child.into().0);
         self
     }
 
@@ -191,33 +197,27 @@ impl Link {
         }
         loc
     }
-}
 
-impl ParentElement for Link {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
-    }
-}
-
-impl RenderOnce for Link {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    /// Builds the link's node tree.
+    #[must_use]
+    pub fn build(self) -> Node {
         let href = self.href.clone();
         let disabled = self.disabled;
 
         // External links never match an app route: hand them to the OS and
         // skip router-specific behavior (active styles, preloads).
         if is_external_href(&href) {
-            let external_href = href.clone();
-            return div()
-                .cursor_pointer()
-                .children(self.children)
-                .when(disabled, |el| el.opacity(0.5))
-                .on_mouse_up(MouseButton::Left, move |_event: &MouseUpEvent, _, cx| {
+            let mut builder = Node::div()
+                .on_click(move |ctx: &mut quoin_ui::NodeEventCtx| {
                     if !disabled {
-                        cx.open_url(&external_href);
+                        ctx.open_url(&href);
                     }
                 })
-                .into_any_element();
+                .children(self.children);
+            if disabled {
+                builder = builder.style(StyleCmd::Opacity(0.5));
+            }
+            return builder.build();
         }
 
         let replace = self.replace;
@@ -225,88 +225,82 @@ impl RenderOnce for Link {
         let target = self.target_location();
         let active_options = self.active_options.clone();
 
-        let is_active = RouterState::try_global(cx).is_some_and(|router_state| {
-            let current = router_state.current_location();
-            let active = path_is_active(&current.pathname, &href, active_options.exact);
+        let handle = RouterHandle::try_current();
+        let is_active = handle.as_ref().is_some_and(|router_state| {
+            let state = router_state.read();
+            let current = state.current_location();
+            let active = path_is_active(&current.pathname, &self.href, active_options.exact);
             let search_ok =
                 !active_options.include_search || active && current.search == target.search;
             let hash_ok = !active_options.include_hash || active && current.hash == target.hash;
             active && search_ok && hash_ok
         });
 
-        let navigator = Navigator::new(window.window_handle());
-        let has_router = RouterState::try_global(cx).is_some();
-
-        // Preload strategies. `Render`/`Viewport` kick off during this render;
-        // `Intent` arms a hover handler that starts the preload after a delay.
+        // Preload strategies. `Render`/`Viewport` kick off during this
+        // build; `Intent` arms a hover handler that starts the preload
+        // after a delay.
         match self.preload {
             Some(PreloadType::Render | PreloadType::Viewport) => {
-                if !disabled && has_router && mark_preload_started(&href) {
-                    RouterState::update(cx, |state, cx| {
-                        state.preload_location(&target.clone(), cx);
-                    });
+                if !disabled
+                    && handle.is_some()
+                    && mark_preload_started(&href)
+                    && let Some(handle) = &handle
+                {
+                    handle.update(|state| state.preload_location(&target.clone()));
                 }
             }
             Some(PreloadType::Intent) | None => {}
         }
 
-        let mut element = div().cursor_pointer().children(self.children);
+        let mut style = NodeStyle::new().with(StyleCmd::CursorPointer);
+        if is_active {
+            if let Some(f) = self.active_style {
+                style = f(style);
+            } else {
+                style = style.with(StyleCmd::FontWeight(quoin_ui::NodeFontWeight::Bold));
+            }
+        } else if let Some(f) = self.inactive_style {
+            style = f(style);
+        }
+
+        let mut builder = Node::div().styles(style.cmds).children(self.children);
 
         if self.preload == Some(PreloadType::Intent) {
             let delay = self.preload_delay.unwrap_or(Duration::from_millis(100));
             let intent_href = href.clone();
             let intent_target = target.clone();
-            element = element.on_mouse_move(
-                move |_event: &MouseMoveEvent, _window: &mut Window, cx: &mut App| {
-                    if disabled || !mark_preload_started(&intent_href) {
-                        return;
-                    }
-                    let intent_target = intent_target.clone();
-                    cx.spawn(move |cx: &mut gpui::AsyncApp| {
-                        let cx = cx.clone();
-                        async move {
-                            cx.background_executor().timer(delay).await;
-                            let () = cx.update(|cx| {
-                                RouterState::update(cx, |state, cx| {
-                                    state.preload_location(&intent_target, cx);
-                                });
-                            });
-                        }
-                    })
-                    .detach();
-                },
-            );
+            builder = builder.on_mouse_move(move |_ctx| {
+                if disabled || !mark_preload_started(&intent_href) {
+                    return;
+                }
+                let Some(handle) = RouterHandle::try_current() else {
+                    return;
+                };
+                let intent_target = intent_target.clone();
+                let spawn = handle.host().spawn;
+                spawn(Box::pin(async move {
+                    quoin_core::sleep(delay).await;
+                    handle.update(|state| state.preload_location(&intent_target));
+                }));
+            });
         }
 
-        if is_active {
-            if let Some(f) = self.active_style {
-                element = f(element);
-            } else {
-                element = element.font_weight(FontWeight::BOLD);
+        builder = builder.on_click(move |_ctx| {
+            if !disabled {
+                let options = NavigateOptions {
+                    reset_scroll: Some(reset_scroll),
+                    ..NavigateOptions::default()
+                };
+                let navigator = Navigator::new();
+                if replace {
+                    navigator.replace_location_with(target.clone(), &options);
+                } else {
+                    navigator.push_location_with(target.clone(), &options);
+                }
             }
-        } else if let Some(f) = self.inactive_style {
-            element = f(element);
-        }
+        });
 
-        element
-            .on_mouse_up(
-                MouseButton::Left,
-                move |_event: &MouseUpEvent, _window, cx| {
-                    if !disabled {
-                        let target = target.clone();
-                        let options = NavigateOptions {
-                            reset_scroll: Some(reset_scroll),
-                            ..NavigateOptions::default()
-                        };
-                        if replace {
-                            navigator.replace_location_with(target, &options, cx);
-                        } else {
-                            navigator.push_location_with(target, &options, cx);
-                        }
-                    }
-                },
-            )
-            .into_any_element()
+        builder.build()
     }
 }
 

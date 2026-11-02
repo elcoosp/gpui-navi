@@ -4,8 +4,10 @@ version.workspace = true
 edition = "2024"
 
 [dependencies]
-gpui = { workspace = true }
-gpui-component = { workspace = true }
+# Framework-agnostic stack: the panel model renders `quoin_ui::Node`
+# trees; no GUI framework is named anywhere in this crate.
+quoin-core = { workspace = true }
+quoin-ui = { workspace = true }
 
 rs-query = { workspace = true }
 navi-router = { path = "../navi-router" }

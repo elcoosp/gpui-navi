@@ -1,7 +1,14 @@
-use gpui::WindowId;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::collections::HashMap;
+
+/// An opaque window identifier.
+///
+/// Framework-agnostic replacement for the old `gpui::WindowId`: any adapter
+/// maps its native window identity onto a `u64` key (GPUI exposes
+/// `WindowId::as_u64()`), so this crate never names a GUI framework.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct WindowKey(pub u64);
 
 /// A single layer in the context tree, holding type-keyed values.
 pub struct ContextLayer {
@@ -103,25 +110,25 @@ impl Default for ContextTree {
 }
 
 thread_local! {
-    static WINDOW_CONTEXTS: RefCell<HashMap<WindowId, ContextTree>> = RefCell::new(HashMap::new());
+    static WINDOW_CONTEXTS: RefCell<HashMap<WindowKey, ContextTree>> = RefCell::new(HashMap::new());
 }
 
 /// Initialize a context tree for a window.
-pub fn init_window(window_id: WindowId) {
+pub fn init_window(window_id: WindowKey) {
     WINDOW_CONTEXTS.with(|c| {
         c.borrow_mut().insert(window_id, ContextTree::new());
     });
 }
 
 /// Destroy the context tree for a window.
-pub fn destroy_window(window_id: WindowId) {
+pub fn destroy_window(window_id: WindowKey) {
     WINDOW_CONTEXTS.with(|c| {
         c.borrow_mut().remove(&window_id);
     });
 }
 
 /// Provide a value to the context tree of a specific window.
-pub fn provide<T: 'static>(window_id: WindowId, val: T) {
+pub fn provide<T: 'static>(window_id: WindowKey, val: T) {
     WINDOW_CONTEXTS.with(|c| {
         if let Some(ctx) = c.borrow_mut().get_mut(&window_id) {
             ctx.provide(val);
@@ -131,12 +138,12 @@ pub fn provide<T: 'static>(window_id: WindowId, val: T) {
 
 /// Consume a value from the context tree of a specific window.
 #[must_use]
-pub fn consume<T: Clone + 'static>(window_id: WindowId) -> Option<T> {
+pub fn consume<T: Clone + 'static>(window_id: WindowKey) -> Option<T> {
     WINDOW_CONTEXTS.with(|c| c.borrow().get(&window_id)?.consume::<T>())
 }
 
 /// Push a new context layer for a window.
-pub fn push_layer(window_id: WindowId) {
+pub fn push_layer(window_id: WindowKey) {
     WINDOW_CONTEXTS.with(|c| {
         if let Some(ctx) = c.borrow_mut().get_mut(&window_id) {
             ctx.push_layer();
@@ -145,7 +152,7 @@ pub fn push_layer(window_id: WindowId) {
 }
 
 /// Pop the topmost context layer for a window.
-pub fn pop_layer(window_id: WindowId) {
+pub fn pop_layer(window_id: WindowKey) {
     WINDOW_CONTEXTS.with(|c| {
         if let Some(ctx) = c.borrow_mut().get_mut(&window_id) {
             ctx.pop_layer();
@@ -154,7 +161,7 @@ pub fn pop_layer(window_id: WindowId) {
 }
 
 /// Subscribe to changes for a specific type in a window's context.
-pub fn subscribe<T: 'static>(window_id: WindowId, f: impl Fn() + 'static) {
+pub fn subscribe<T: 'static>(window_id: WindowKey, f: impl Fn() + 'static) {
     WINDOW_CONTEXTS.with(|c| {
         if let Some(ctx) = c.borrow_mut().get_mut(&window_id) {
             ctx.subscribe::<T>(f);
@@ -264,42 +271,31 @@ mod window_context_tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    #[gpui::test]
-    fn test_window_context_free_functions(cx: &mut gpui::TestAppContext) {
-        let window = cx.add_window(|_window, _cx| TestView);
-        let _ = window.update(cx, |_, window, _cx| {
-            let window_id = window.window_handle().window_id();
-            init_window(window_id);
-            provide(window_id, "ctx-value".to_string());
-            assert_eq!(consume::<String>(window_id), Some("ctx-value".to_string()));
-            assert!(consume::<u8>(window_id).is_none());
-            push_layer(window_id);
-            provide(window_id, 42_u8);
-            assert_eq!(consume::<u8>(window_id), Some(42));
-            assert_eq!(consume::<String>(window_id), Some("ctx-value".to_string()));
-            pop_layer(window_id);
-            assert!(consume::<u8>(window_id).is_none());
-            let hits = Arc::new(AtomicUsize::new(0));
-            let hits_clone = Arc::clone(&hits);
-            subscribe::<u64>(window_id, move || {
-                hits_clone.fetch_add(1, Ordering::SeqCst);
-            });
-            provide(window_id, 1_u64);
-            assert_eq!(hits.load(Ordering::SeqCst), 1);
-            destroy_window(window_id);
-            assert!(consume::<String>(window_id).is_none());
+    // The pre-migration version of this test was a `#[gpui::test]` that only
+    // used the framework to obtain a window id; the free-function API itself
+    // was already framework-agnostic, so a plain unit test preserves the
+    // coverage without any GUI dependency.
+    #[test]
+    fn test_window_context_free_functions() {
+        let window_id = WindowKey(1);
+        init_window(window_id);
+        provide(window_id, "ctx-value".to_string());
+        assert_eq!(consume::<String>(window_id), Some("ctx-value".to_string()));
+        assert!(consume::<u8>(window_id).is_none());
+        push_layer(window_id);
+        provide(window_id, 42_u8);
+        assert_eq!(consume::<u8>(window_id), Some(42));
+        assert_eq!(consume::<String>(window_id), Some("ctx-value".to_string()));
+        pop_layer(window_id);
+        assert!(consume::<u8>(window_id).is_none());
+        let hits = Arc::new(AtomicUsize::new(0));
+        let hits_clone = Arc::clone(&hits);
+        subscribe::<u64>(window_id, move || {
+            hits_clone.fetch_add(1, Ordering::SeqCst);
         });
-    }
-
-    struct TestView;
-
-    impl gpui::Render for TestView {
-        fn render(
-            &mut self,
-            _window: &mut gpui::Window,
-            _cx: &mut gpui::Context<Self>,
-        ) -> impl gpui::IntoElement {
-            gpui::div()
-        }
+        provide(window_id, 1_u64);
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        destroy_window(window_id);
+        assert!(consume::<String>(window_id).is_none());
     }
 }

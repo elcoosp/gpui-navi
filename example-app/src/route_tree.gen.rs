@@ -231,36 +231,36 @@ let mut tree = navi_router::RouteTree::new();
 }
 
 /// Register all route components and loaders.
-pub fn register_routes(cx: &mut gpui::App) {
-splat::GlobalNotFoundRoute::register(cx);
-_root::RootRoute::register(cx);
-about::AboutRoute::register(cx);
-awaited::AwaitedDemoRoute::register(cx);
-blocking::BlockingRoute::register(cx);
-context::ContextDemoRoute::register(cx);
-index::IndexRoute::register(cx);
-lifecycle::LifecycleRoute::register(cx);
-login::LoginRoute::register(cx);
-meta::MetaDemoRoute::register(cx);
-scroll::ScrollRoute::register(cx);
-settings::SettingsRoute::register(cx);
-marketing_about::MarketingAboutRoute::register(cx);
-_auth::AuthLayoutRoute::register(cx);
-_auth_profile::ProfileRoute::register(cx);
-admin_dashboard::AdminDashboardRoute::register(cx);
-admin::AdminRoute::register(cx);
-dashboard_analytics::DashboardAnalyticsRoute::register(cx);
-dashboard_index::DashboardIndexRoute::register(cx);
-dashboard::DashboardRoute::register(cx);
-dashboard_settings::DashboardSettingsRoute::register(cx);
-docs_splat::DocsRoute::register(cx);
-users_splat::UsersNotFoundRoute::register(cx);
-users_param_id::UsersParamIdRoute::register(cx);
-users_index::UsersIndexRoute::register(cx);
-users::OptionalUserRoute::register(cx);
-#[cfg(feature = "garde")] validation_test_garde::GardeTestRoute::register(cx);
-validation_test_index::ValidationTestIndexRoute::register(cx);
-#[cfg(feature = "valico")] validation_test_valico::ValicoTestRoute::register(cx);
-#[cfg(feature = "validator")] validation_test_validator::ValidatorTestRoute::register(cx);
-#[cfg(feature = "validify")] validation_test_validify::ValidifyTestRoute::register(cx);
+pub fn register_routes() {
+splat::GlobalNotFoundRoute::register();
+_root::RootRoute::register();
+about::AboutRoute::register();
+awaited::AwaitedDemoRoute::register();
+blocking::BlockingRoute::register();
+context::ContextDemoRoute::register();
+index::IndexRoute::register();
+lifecycle::LifecycleRoute::register();
+login::LoginRoute::register();
+meta::MetaDemoRoute::register();
+scroll::ScrollRoute::register();
+settings::SettingsRoute::register();
+marketing_about::MarketingAboutRoute::register();
+_auth::AuthLayoutRoute::register();
+_auth_profile::ProfileRoute::register();
+admin_dashboard::AdminDashboardRoute::register();
+admin::AdminRoute::register();
+dashboard_analytics::DashboardAnalyticsRoute::register();
+dashboard_index::DashboardIndexRoute::register();
+dashboard::DashboardRoute::register();
+dashboard_settings::DashboardSettingsRoute::register();
+docs_splat::DocsRoute::register();
+users_splat::UsersNotFoundRoute::register();
+users_param_id::UsersParamIdRoute::register();
+users_index::UsersIndexRoute::register();
+users::OptionalUserRoute::register();
+#[cfg(feature = "garde")] validation_test_garde::GardeTestRoute::register();
+validation_test_index::ValidationTestIndexRoute::register();
+#[cfg(feature = "valico")] validation_test_valico::ValicoTestRoute::register();
+#[cfg(feature = "validator")] validation_test_validator::ValidatorTestRoute::register();
+#[cfg(feature = "validify")] validation_test_validify::ValidifyTestRoute::register();
 }

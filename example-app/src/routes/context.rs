@@ -6,7 +6,7 @@ define_route!(
     ContextDemoRoute,
     path: "/context",
     data: String,
-    loader: |(), _| async move {
+    loader: |()| async move {
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new("Loader data".to_string()))
     },
     context: |args: RouteContextArgs| {
@@ -25,7 +25,7 @@ define_route!(
 struct ContextDemoPage;
 
 impl RenderOnce for ContextDemoPage {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
         let context = navi_macros::use_route_context!(ContextDemoRoute);
         div()
             .p_4()

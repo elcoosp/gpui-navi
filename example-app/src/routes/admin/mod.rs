@@ -2,6 +2,7 @@ use gpui::prelude::*;
 use gpui::{ Window, App, div};
 use navi_macros::define_route;
 use navi_router::{BeforeLoadResult, redirect, components::Outlet};
+use quoin_ui_gpui::NodeElement;
 
 define_route!(
     AdminRoute,
@@ -26,6 +27,6 @@ impl RenderOnce for AdminLayout {
         div()
             .p_4()
             .child("Admin Area (protected by beforeLoad)")
-            .child(Outlet::new())
+            .child(NodeElement(Outlet::new().build()))
     }
 }

@@ -12,9 +12,9 @@ define_route!(
     DashboardAnalyticsRoute,
     path: "/dashboard/analytics",
     data: AnalyticsData,
-    loader: |(): (), executor: gpui::BackgroundExecutor| async move {
+    loader: |(): ()| async move {
         log::info!("[Analytics] Loader started");
-        executor.timer(Duration::from_millis(800)).await;
+        navi_router::sleep(Duration::from_millis(800)).await;
         log::info!("[Analytics] Loader completed, returning data");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(AnalyticsData {
             chart_data: vec![10, 25, 15, 30, 20],
@@ -27,7 +27,7 @@ define_route!(
 struct DashboardAnalytics;
 
 impl RenderOnce for DashboardAnalytics {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let data = use_loader_data!(DashboardAnalyticsRoute);
         log::debug!("[Analytics] Render: data = {data:?}");
         match data {

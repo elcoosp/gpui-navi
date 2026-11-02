@@ -13,9 +13,9 @@ define_route!(
     path: "/dashboard",
     is_index: true,
     data: OverviewData,
-    loader: |(): (), executor: gpui::BackgroundExecutor| async move {
+    loader: |(): ()| async move {
         log::info!("[Overview] Loader started");
-        executor.timer(Duration::from_millis(600)).await;
+        navi_router::sleep(Duration::from_millis(600)).await;
         log::info!("[Overview] Loader completed");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(OverviewData {
             stats: vec![
@@ -32,7 +32,7 @@ define_route!(
 struct DashboardOverview;
 
 impl RenderOnce for DashboardOverview {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let data = use_loader_data!(DashboardIndexRoute);
         let stats = data.map_or_else(|| vec!["⏳ Loading overview...".to_string()], |d| d.stats.clone());
         div()

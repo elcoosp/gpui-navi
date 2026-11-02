@@ -24,6 +24,10 @@ edition = "2024"
 # be a distinct crate whose types cannot cross into gpui-component APIs).
 # The snapshot tracks recent zed main; it replaces the former
 # `zed@git#697f5dde` pin.
+#
+# GPUI is a **binding** dependency in this workspace: only `example-app`
+# (the host application) and the quoin GPUI adapter reference it. Every
+# navi library crate is GUI-framework agnostic and builds on quoin instead.
 gpui = { package = "gpui-pre", version = "=0.3.10" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 # Post-restructure stack: `gpui-kit` is the application facade (re-exports
@@ -31,12 +35,31 @@ gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10", features =
 # 0.8 is the styled component catalog used by navi-devtools.
 gpui-kit = "0.8.1"
 gpui-component = "0.8.1"
-# rs-query main (0.1.0). Navi keeps using only its gpui-free core
-# (`QueryClient` / `Query` / `QueryKey`): the crate itself still tracks
-# zed-git gpui, which stays a leaf in the graph because none of its used APIs
-# expose gpui types. Its optional `devtools` feature remains OFF — it drags
-# the new-layout gpui-component, and Navi ships its own devtools UI.
-rs-query = { git = "https://github.com/elcoosp/rs-query", rev = "ee416b8db255eb34bb29d4a9663e66135f39609d" }
+
+# quoin is the framework-agnostic reactive system + renderer contract every
+# navi library crate builds on:
+# - `quoin-core` — signals, executor/timer seams, portable sleep;
+# - `quoin-ui` — the runtime `Node` UI tree the router components and
+#   devtools render through;
+# - `quoin-ui-gpui` — the GPUI adapter that materializes `Node` trees with
+#   real gpui-component widgets (used by example-app only).
+#
+# Local path dependencies: quoin's navi-migration extensions (runtime Node
+# model + renderer) are local commits, and the latest rs-query main depends
+# on quoin through a relative `path = "../quoin/quoin-core"` dependency, so
+# the three clones must sit side by side (workspaces/{quoin,rs-query,
+# gpui-navi}). Once quoin/rs-query publish releases carrying these changes,
+# these become plain version/git dependencies.
+quoin-core = { path = "../quoin/quoin-core" }
+quoin-ui = { path = "../quoin/quoin-ui" }
+quoin-ui-gpui = { path = "../quoin/quoin-ui-gpui" }
+send_wrapper = "0.6"
+
+# rs-query main (0.2.0) — fully GUI-framework agnostic: its runtime seam
+# (`QueryRuntime`) is backed by quoin's worker pool and portable timer, so
+# `QueryClient` works with no UI framework and no ambient async runtime.
+# Navi uses `QueryClient` / `Query` / `QueryKey` for route loaders.
+rs-query = { path = "../rs-query" }
 
 # Lean dev profile: line tables only (backtraces still work) and no
 # incremental caches. Cuts target/ size by well over half, which matters
@@ -53,4 +76,5 @@ pedantic = { level = "warn", priority = -1 }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
+
 

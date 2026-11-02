@@ -237,11 +237,11 @@ Quality gates (also enforced in CI):
   tested **per feature** instead of under `--all-features`.
 - `clippy.toml` calibrates a few shape thresholds for the devtools UI module
   (large render methods) instead of scattering allow attributes.
-- The `xattr` crate is vendored under `vendor/xattr` with a tiny patch:
-  upstream 0.2.3 no longer builds against libc ≥ 0.2.187 on Linux
-  (`ENOATTR` was removed), and the `1.x` patch does not satisfy
-  `async-tar`'s `"0.2"` version requirement.
+
+The dependency stack is the post-restructure `gpui-component` 0.8 /
+`gpui-kit` release line, with GPUI supplied by the matching `gpui-pre`
+snapshot (recent zed main) and `rs-query` pinned to a compatible commit.
 
 See [docs/BRAINSTORM.md](docs/BRAINSTORM.md) for the full improvement
-brainstorm (performance, DRY/KISS, features) and the documented follow-ups
-(gpui-kit migration, deep-links re-introduction).
+brainstorm (performance, DRY/KISS, features) and the remaining follow-ups
+(deep-links re-introduction, coverage gate).

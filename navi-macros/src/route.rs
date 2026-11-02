@@ -58,6 +58,7 @@ struct RouteArgs {
     data_ty: Type,
     loader: Option<Expr>,
     component: Option<Type>,
+    node_constructor: Option<Expr>,
     stale_time: Option<Expr>,
     gc_time: Option<Expr>,
     is_layout: bool,
@@ -78,6 +79,7 @@ fn parse_route_args(name: &Ident, fields: Punctuated<Field, Token![,]>) -> syn::
     let mut data_ty: Option<Type> = None;
     let mut loader: Option<Expr> = None;
     let mut component: Option<Type> = None;
+    let mut node_constructor: Option<Expr> = None;
     let mut stale_time: Option<Expr> = None;
     let mut gc_time: Option<Expr> = None;
     let mut is_layout: Option<LitBool> = None;
@@ -123,6 +125,12 @@ fn parse_route_args(name: &Ident, fields: Punctuated<Field, Token![,]>) -> syn::
             loader = Some(expr);
             continue;
         }
+        if field.key == "node"
+            && let FieldValue::Expr(expr) = field.value
+        {
+            node_constructor = Some(expr);
+            continue;
+        }
         return Err(syn::Error::new(
             field.key.span(),
             format!("unknown `define_route!` field `{}`", field.key),
@@ -139,6 +147,7 @@ fn parse_route_args(name: &Ident, fields: Punctuated<Field, Token![,]>) -> syn::
         data_ty: data_ty.unwrap_or_else(|| syn::parse_quote!(())),
         loader,
         component,
+        node_constructor,
         stale_time,
         gc_time,
         is_layout: is_layout.is_some_and(|b| b.value),
@@ -185,7 +194,7 @@ fn loader_factory_impl(name: &Ident, args: &RouteArgs) -> (bool, TokenStream2) {
         .unwrap_or_else(|| syn::parse_quote! { std::time::Duration::from_secs(300) });
     let params_ty = &args.params_ty;
     let factory = quote! {
-        pub fn loader_factory(executor: ::gpui::BackgroundExecutor) -> std::sync::Arc<
+        pub fn loader_factory() -> std::sync::Arc<
             dyn Fn(&std::collections::HashMap<String, String>) -> ::rs_query::Query<::navi_router::LoaderOutcome<::navi_router::AnyData>>
             + Send + Sync
         > {
@@ -199,16 +208,14 @@ fn loader_factory_impl(name: &Ident, args: &RouteArgs) -> (bool, TokenStream2) {
                 };
                 let params_clone = params.clone();
                 let loader = #loader_closure;
-                let executor = executor.clone();
                 let key = ::rs_query::QueryKey::new("navi_loader")
                     .with("route", <#name as ::navi_router::RouteDef>::name())
                     .with("params", serde_json::to_string(&params).unwrap());
                 ::rs_query::Query::new(key, move || {
                     let params = params_clone.clone();
                     let loader = loader.clone();
-                    let executor = executor.clone();
                     async move {
-                        let data = loader(params, executor).await
+                        let data = loader(params).await
                             .map_err(|e| ::rs_query::QueryError::custom(e.to_string()))?;
                         Ok(::navi_router::LoaderOutcome::Data(::navi_router::AnyData(std::sync::Arc::new(data) as std::sync::Arc<dyn std::any::Any + Send + Sync>)))
                     }
@@ -273,24 +280,32 @@ fn expand(name: &Ident, args: &RouteArgs) -> TokenStream2 {
 
     let register_loader_call = if has_loader {
         quote! {
-            let executor = cx.background_executor().clone();
-            navi_router::RouterState::update(cx, |state, _cx| {
-                state.register_loader_factory(<Self as ::navi_router::RouteDef>::name(), Self::loader_factory(executor));
+            ::navi_router::RouterHandle::current().update(|state| {
+                state.register_loader_factory(<Self as ::navi_router::RouteDef>::name(), Self::loader_factory());
             });
         }
     } else {
         quote! {}
     };
 
-    let component_registration = match &args.component {
-        Some(comp_ty) => quote! {
-            navi_router::components::register_route_component(<Self as ::navi_router::RouteDef>::name(), |_cx| {
-                // Route components are `IntoElement` render-once values; the
-                // old `gpui::Component` adapter is gone in the gpui-pre stack.
-                <#comp_ty as ::gpui::IntoElement>::into_any_element(#comp_ty)
-            });
+    // Component registration: `node:` takes a framework-agnostic
+    // `Fn() -> quoin_ui::Node` directly; `component:` wraps a
+    // render-once value into the host adapter's custom element escape
+    // hatch (the GPUI adapter in the example app).
+    let component_registration = match &args.node_constructor {
+        Some(node_expr) => quote! {
+            navi_router::components::register_route_component(<Self as ::navi_router::RouteDef>::name(), #node_expr);
         },
-        None => quote! {},
+        None => match &args.component {
+            Some(comp_ty) => quote! {
+                navi_router::components::register_route_component(<Self as ::navi_router::RouteDef>::name(), || {
+                    ::quoin_ui_gpui::custom_element(|| {
+                        ::gpui::IntoElement::into_any_element(#comp_ty)
+                    })
+                });
+            },
+            None => quote! {},
+        },
     };
 
     quote! {
@@ -337,7 +352,7 @@ fn expand(name: &Ident, args: &RouteArgs) -> TokenStream2 {
 
             #loader_factory_impl
 
-            pub fn register(cx: &mut gpui::App) {
+            pub fn register() {
                 #component_registration
                 #register_loader_call
             }

@@ -1,9 +1,18 @@
+//! Router state, navigation host seam, and loader wiring.
+//!
+//! The whole crate is GUI-framework agnostic: state mutations flow through
+//! a shared [`RouterHandle`], async work runs on the quoin-backed
+//! [`RouterHost`] seam (UI-thread spawn + repaint request), and rendering
+//! happens through `quoin_ui::Node` trees. The embedding application binds
+//! the host to its framework of choice.
+
 use crate::{
     Blocker, BlockerId, Location, NavigateOptions, NotFound, Redirect, RouteNode, RouteTree,
     ViewTransitionOptions,
 };
-use gpui::{AnyWindowHandle, App, BorrowAppContext, EntityId, Global, WindowId};
+use navi_core::WindowKey;
 use navi_router_core::{NavOp, NavigationEffect, RouterCore};
+use parking_lot::{Mutex, RwLock};
 use rs_query::{Query, QueryClient, QueryKey};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -15,6 +24,47 @@ pub use navi_router_core::AnyData;
 
 /// Path pushed when no route matches and no dedicated not-found route exists.
 pub const NOT_FOUND_PATH: &str = "/404";
+
+/// A boxed, UI-thread future — the currency of [`RouterHost::spawn`].
+pub type LocalFuture = std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>;
+
+/// The seam between the router and the embedding runtime.
+///
+/// * `spawn` runs a future on the UI thread (parity with the classic
+///   foreground `cx.spawn` flows: loader completion, blocker resolution,
+///   before-load guards).
+/// * `refresh` requests a repaint of the hosting window(s) — the quoin
+///   `request_update` contract; the application maps it onto its framework
+///   (e.g. a window-wide refresh notifier).
+///
+/// Both hooks are UI-thread-only (`Rc`), matching every mainstream
+/// single-threaded UI runtime; cross-framework adapters queue onto their
+/// main thread instead of requiring `Send` futures.
+#[derive(Clone)]
+pub struct RouterHost {
+    /// Requests a UI repaint. Callable from the UI thread.
+    pub refresh: Rc<dyn Fn()>,
+    /// Spawns a UI-thread future.
+    pub spawn: Rc<dyn Fn(LocalFuture)>,
+}
+
+impl RouterHost {
+    /// Spawns a UI-thread future through the seam.
+    pub fn spawn(&self, future: LocalFuture) {
+        (self.spawn)(future);
+    }
+
+    /// Requests a repaint through the seam.
+    pub fn refresh(&self) {
+        (self.refresh)();
+    }
+}
+
+impl std::fmt::Debug for RouterHost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RouterHost").finish_non_exhaustive()
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum RouterEvent {
@@ -55,6 +105,19 @@ impl RouterEvent {
             | RouterEvent::BeforeRouteMount { to, .. }
             | RouterEvent::Resolved { to, .. }
             | RouterEvent::Rendered { to, .. } => Some(to),
+        }
+    }
+
+    /// The origin location of the event, when present.
+    #[must_use]
+    pub fn from(&self) -> Option<&Location> {
+        match self {
+            RouterEvent::BeforeNavigate { from, .. }
+            | RouterEvent::BeforeLoad { from, .. }
+            | RouterEvent::Load { from, .. }
+            | RouterEvent::BeforeRouteMount { from, .. }
+            | RouterEvent::Resolved { from, .. }
+            | RouterEvent::Rendered { from, .. } => from.as_ref(),
         }
     }
 }
@@ -119,22 +182,125 @@ impl Default for RouterOptions {
     }
 }
 
+/// Insertion-ordered, capacity-bounded scroll-position memory shared by
+/// [`ScrollRestoration`](crate::ScrollRestoration) nodes.
+#[derive(Clone)]
+pub struct ScrollPositions {
+    inner: Arc<Mutex<ScrollPositionsInner>>,
+}
+
+#[derive(Default)]
+struct ScrollPositionsInner {
+    map: HashMap<String, f32>,
+    order: Vec<String>,
+    capacity: usize,
+}
+
+impl ScrollPositions {
+    /// Creates an empty store with the default capacity.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(ScrollPositionsInner {
+                capacity: DEFAULT_SCROLL_CACHE_CAPACITY,
+                ..ScrollPositionsInner::default()
+            })),
+        }
+    }
+
+    /// Build a stable, insertion-order-independent key for a location.
+    #[must_use]
+    pub fn key(pathname: &str, search: &serde_json::Value) -> String {
+        let search_key = canonical_search_key(search);
+        if search_key.is_empty() {
+            pathname.to_string()
+        } else {
+            format!("{pathname}?{search_key}")
+        }
+    }
+
+    /// Bound how many locations remember their scroll offset.
+    pub fn set_capacity(&self, capacity: usize) {
+        self.inner.lock().capacity = capacity;
+    }
+
+    /// The current capacity.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.inner.lock().capacity
+    }
+
+    /// Save the current scroll offset for a key.
+    pub fn insert(&self, key: String, offset: f32) {
+        let mut inner = self.inner.lock();
+        if !inner.map.contains_key(&key) {
+            inner.order.push(key.clone());
+            while inner.order.len() > inner.capacity {
+                let evicted = inner.order.remove(0);
+                inner.map.remove(&evicted);
+            }
+        }
+        inner.map.insert(key, offset);
+    }
+
+    /// Get a previously saved scroll offset for a key.
+    #[must_use]
+    pub fn get(&self, key: &str) -> Option<f32> {
+        self.inner.lock().map.get(key).copied()
+    }
+}
+
+impl Default for ScrollPositions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Default upper bound on remembered scroll positions. Bounded memory even
+/// for apps that wander through thousands of dynamic routes.
+pub const DEFAULT_SCROLL_CACHE_CAPACITY: usize = 128;
+
+/// Build a stable, insertion-order-independent string for a search value so
+/// `?a=1&b=2` and `?b=2&a=1` share one scroll entry. Nested JSON is handled
+/// by serializing with object keys sorted.
+#[must_use]
+pub fn canonical_search_key(search: &serde_json::Value) -> String {
+    match search {
+        serde_json::Value::Null => String::new(),
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Object(map) => {
+            let mut pairs: Vec<String> = map
+                .iter()
+                .map(|(k, v)| format!("{k}={}", canonical_search_key(v)))
+                .collect();
+            pairs.sort();
+            pairs.join("&")
+        }
+        other => other.to_string(),
+    }
+}
+
+/// The full router state. Plain data: shared through [`RouterHandle`].
 pub struct RouterState {
     pub(crate) core: RouterCore,
-    pub route_tree: Rc<RouteTree>,
+    pub route_tree: Arc<RouteTree>,
     pub current_match: Option<(HashMap<String, String>, Arc<RouteNode>)>,
     pub pending_navigation: Option<Location>,
     pub blockers: HashMap<BlockerId, Blocker>,
     pub scroll_restoration: bool,
     pub default_view_transition: Option<ViewTransitionOptions>,
     pub current_base: Option<String>,
-    events: Vec<Box<dyn Fn(RouterEvent) + Send + Sync>>,
+    events: Vec<Arc<dyn Fn(RouterEvent) + Send + Sync>>,
     next_blocker_id: BlockerId,
     pub query_client: QueryClient,
     loader_factories: HashMap<String, LoaderFactory>,
     context_cache: HashMap<String, serde_json::Value>,
-    window_handle: AnyWindowHandle,
-    root_view: Option<EntityId>,
+    /// Framework-agnostic host seam (repaint + UI-thread spawn).
+    pub host: RouterHost,
+    /// Opaque window identity for `navi-core`'s context tree.
+    pub window_key: WindowKey,
+    /// Opaque root-view identifier assigned by the embedding application.
+    pub root_view: Option<u64>,
     pub not_found_mode: NotFoundMode,
     pub not_found_data: Option<serde_json::Value>,
     pub default_pending_ms: u64,
@@ -146,9 +312,136 @@ pub struct RouterState {
     /// [`ScrollRestoration`](crate::ScrollRestoration) paint consumes it and
     /// skips restoring the saved offset once.
     pub(crate) scroll_reset_pending: bool,
+    /// Scroll-offset memory shared with restoration nodes.
+    pub scroll_positions: ScrollPositions,
+    /// The router event log (devtools timeline source).
+    pub(crate) event_log: crate::event_bus::EventLog,
 }
 
-impl Global for RouterState {}
+/// A cheap handle to the shared router state + event log.
+///
+/// Cloning is free (Arc); navigation paths, components, devtools and tests
+/// all drive the router through this handle.
+#[derive(Clone)]
+pub struct RouterHandle {
+    state: Arc<RwLock<RouterState>>,
+}
+
+impl RouterHandle {
+    /// The router event log (devtools timeline source).
+    #[must_use]
+    pub fn events(&self) -> crate::event_bus::EventLog {
+        self.state.read().event_log.clone()
+    }
+}
+
+thread_local! {
+    static CURRENT: std::cell::RefCell<Option<RouterHandle>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+impl RouterHandle {
+    /// Creates a router handle with the given initial location and options.
+    #[must_use]
+    pub fn new_with_options(
+        initial: Location,
+        window_key: WindowKey,
+        route_tree: Arc<RouteTree>,
+        options: RouterOptions,
+        host: RouterHost,
+    ) -> Self {
+        let state = RouterState::new_with_options(initial, window_key, route_tree, options, host);
+        // The handle is deliberately shared as `Arc` even though the state
+        // hosts `Rc`-based UI seams: the router is bound to the window's
+        // UI thread, and cross-thread use is guarded by `SendWrapper` at
+        // the embedding layer.
+        #[expect(clippy::arc_with_non_send_sync)]
+        Self {
+            state: Arc::new(RwLock::new(state)),
+        }
+    }
+
+    /// Creates a router handle with default options.
+    #[must_use]
+    pub fn new(
+        initial: Location,
+        window_key: WindowKey,
+        route_tree: Arc<RouteTree>,
+        host: RouterHost,
+    ) -> Self {
+        Self::new_with_options(
+            initial,
+            window_key,
+            route_tree,
+            RouterOptions::default(),
+            host,
+        )
+    }
+
+    /// Installs this handle as the thread-current router (used by hooks
+    /// macros and the components' no-context constructors).
+    pub fn install_current(&self) {
+        CURRENT.with(|slot| *slot.borrow_mut() = Some(self.clone()));
+    }
+
+    /// Removes the thread-current router when it is this handle.
+    pub fn uninstall_current(&self) {
+        CURRENT.with(|slot| {
+            let is_current = slot
+                .borrow()
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(&current.state, &self.state));
+            if is_current {
+                *slot.borrow_mut() = None;
+            }
+        });
+    }
+
+    /// The thread-current router handle.
+    ///
+    /// # Panics
+    /// Panics when no router was installed on this thread (parity with the
+    /// classic global accessor).
+    #[must_use]
+    pub fn current() -> Self {
+        Self::try_current().unwrap_or_else(|| {
+            panic!("RouterHandle::current() called before RouterProvider::install")
+        })
+    }
+
+    /// The thread-current router handle, when one is installed.
+    #[must_use]
+    pub fn try_current() -> Option<Self> {
+        CURRENT.with(|slot| slot.borrow().clone())
+    }
+
+    /// Read access to the state.
+    pub fn read(&self) -> parking_lot::RwLockReadGuard<'_, RouterState> {
+        self.state.read()
+    }
+
+    /// Mutable access to the state.
+    pub fn write(&self) -> parking_lot::RwLockWriteGuard<'_, RouterState> {
+        self.state.write()
+    }
+
+    /// Runs `f` with mutable access to the state.
+    pub fn update<R>(&self, f: impl FnOnce(&mut RouterState) -> R) -> R {
+        let mut guard = self.state.write();
+        f(&mut guard)
+    }
+
+    /// Requests a repaint through the host seam.
+    pub fn refresh(&self) {
+        (self.state.read().host.refresh)();
+    }
+
+    /// The host seam.
+    #[must_use]
+    pub fn host(&self) -> RouterHost {
+        self.state.read().host.clone()
+    }
+}
 
 /// Build the canonical cache key for a route loader, shared by
 /// [`RouterState::get_loader_data`] and [`RouterState::get_loader_state`].
@@ -194,26 +487,26 @@ impl RouterState {
     #[must_use]
     pub fn new(
         initial: Location,
-        window_id: WindowId,
-        window_handle: AnyWindowHandle,
-        route_tree: Rc<RouteTree>,
+        window_key: WindowKey,
+        route_tree: Arc<RouteTree>,
+        host: RouterHost,
     ) -> Self {
         Self::new_with_options(
             initial,
-            window_id,
-            window_handle,
+            window_key,
             route_tree,
             RouterOptions::default(),
+            host,
         )
     }
 
     #[must_use]
     pub fn new_with_options(
         initial: Location,
-        _window_id: WindowId,
-        window_handle: AnyWindowHandle,
-        route_tree: Rc<RouteTree>,
+        window_key: WindowKey,
+        route_tree: Arc<RouteTree>,
         options: RouterOptions,
+        host: RouterHost,
     ) -> Self {
         let core = RouterCore::new(initial, (*route_tree).clone());
         let current_match = core.current_match.clone();
@@ -231,7 +524,8 @@ impl RouterState {
             query_client: QueryClient::new(),
             loader_factories: HashMap::new(),
             context_cache: HashMap::new(),
-            window_handle,
+            host,
+            window_key,
             root_view: None,
             not_found_mode: options.not_found_mode,
             not_found_data: None,
@@ -239,6 +533,8 @@ impl RouterState {
             default_pending_min_ms: options.default_pending_min_ms,
             navigating_not_found: false,
             scroll_reset_pending: false,
+            scroll_positions: ScrollPositions::new(),
+            event_log: crate::event_bus::EventLog::new(),
         }
     }
 
@@ -275,36 +571,28 @@ impl RouterState {
         self.core.history().can_go_forward()
     }
 
-    pub fn set_root_view(&mut self, view_id: EntityId) {
+    pub fn set_root_view(&mut self, view_id: u64) {
         self.root_view = Some(view_id);
     }
 
     #[must_use]
-    pub fn root_view(&self) -> Option<EntityId> {
+    pub fn root_view(&self) -> Option<u64> {
         self.root_view
     }
 
-    #[must_use]
-    pub fn window_handle(&self) -> AnyWindowHandle {
-        self.window_handle
-    }
-
     /// Send an event to subscribers and to the global event log (devtools).
-    fn dispatch(&self, event: &RouterEvent, cx: &mut App) {
-        crate::event_bus::push_event(event.clone(), cx);
+    fn dispatch(&self, event: &RouterEvent) {
+        self.event_log.push(event.clone());
         self.emit(event);
     }
 
-    pub fn navigate(&mut self, loc: Location, options: &NavigateOptions, cx: &mut App) {
+    pub fn navigate(&mut self, loc: Location, options: &NavigateOptions) {
         log::debug!("navigate called: {}", loc.pathname);
 
-        self.dispatch(
-            &RouterEvent::BeforeNavigate {
-                from: Some(self.current_location()),
-                to: loc.clone(),
-            },
-            cx,
-        );
+        self.dispatch(&RouterEvent::BeforeNavigate {
+            from: Some(self.current_location()),
+            to: loc.clone(),
+        });
 
         // --- Blockers (async handling) ---
         if !options.ignore_blocker && !self.blockers.is_empty() {
@@ -312,37 +600,30 @@ impl RouterState {
             let blockers: Vec<Blocker> = self.blockers.values().cloned().collect();
             let loc_clone = loc.clone();
             let options_clone = options.clone();
-            cx.spawn({
-                |cx: &mut gpui::AsyncApp| {
-                    let cx = cx.clone();
-                    async move {
-                        let mut allow = true;
-                        for blocker in &blockers {
-                            if !blocker.should_allow(&current, &loc_clone).await {
-                                allow = false;
-                                break;
-                            }
-                        }
-                        let () = cx.update(|cx| {
-                            RouterState::update(cx, |state, cx| {
-                                if allow {
-                                    state.commit_navigation(loc_clone, &options_clone, cx);
-                                } else {
-                                    state.pending_navigation = Some(loc_clone);
-                                }
-                            });
-                        });
+            let handle = current_handle_of(self);
+            self.host.spawn(Box::pin(async move {
+                let mut allow = true;
+                for blocker in &blockers {
+                    if !blocker.should_allow(&current, &loc_clone).await {
+                        allow = false;
+                        break;
                     }
                 }
-            })
-            .detach();
+                if allow {
+                    handle.update(|state| state.commit_navigation(loc_clone, &options_clone));
+                    handle.refresh();
+                } else {
+                    handle.update(|state| state.pending_navigation = Some(loc_clone));
+                    handle.refresh();
+                }
+            }));
             return;
         }
 
-        self.commit_navigation(loc, options, cx);
+        self.commit_navigation(loc, options);
     }
 
-    fn commit_navigation(&mut self, loc: Location, options: &NavigateOptions, cx: &mut App) {
+    fn commit_navigation(&mut self, loc: Location, options: &NavigateOptions) {
         let from = Some(self.current_location());
 
         if options.reset_scroll == Some(true) {
@@ -358,8 +639,8 @@ impl RouterState {
             self.core.not_found_data = self.not_found_data.clone();
             let effects = self.core.navigate_with(loc.clone(), options, None);
             self.current_match = self.core.current_match.clone();
-            self.handle_navigation_effects(effects, cx);
-            self.dispatch(&RouterEvent::Resolved { from, to: loc }, cx);
+            self.handle_navigation_effects(effects);
+            self.dispatch(&RouterEvent::Resolved { from, to: loc });
             return;
         };
 
@@ -370,77 +651,63 @@ impl RouterState {
             .filter_map(|node| node.before_load.clone())
             .collect();
 
-        self.dispatch(
-            &RouterEvent::BeforeLoad {
-                from: from.clone(),
-                to: loc.clone(),
-            },
-            cx,
-        );
+        self.dispatch(&RouterEvent::BeforeLoad {
+            from: from.clone(),
+            to: loc.clone(),
+        });
 
         if !before_load_fns.is_empty() {
-            let window_handle = self.window_handle;
             let loc_clone = loc.clone();
             let options_clone = options.clone();
+            let handle = current_handle_of(self);
 
-            cx.spawn(move |cx: &mut gpui::AsyncApp| {
-                let cx = cx.clone();
-                async move {
-                    for before_load in before_load_fns {
-                        let ctx = crate::route_tree::BeforeLoadContext {
-                            params: HashMap::new(),
-                            search: loc_clone.search.clone(),
-                            location: loc_clone.clone(),
-                        };
-                        match before_load(ctx).await {
-                            crate::route_tree::BeforeLoadResult::Ok => {}
-                            crate::route_tree::BeforeLoadResult::Redirect(redirect) => {
-                                let () = cx.update(|cx| {
-                                    let nav = crate::Navigator::new(window_handle);
-                                    nav.push_location(Location::new(&redirect.to), cx);
-                                });
-                                return;
-                            }
-                            crate::route_tree::BeforeLoadResult::NotFound(not_found) => {
-                                let () = cx.update(|cx| {
-                                    RouterState::update(cx, |state, cx| {
-                                        state.not_found_data = not_found.data;
-                                        if state.current_location().pathname != NOT_FOUND_PATH {
-                                            let nav = crate::Navigator::new(state.window_handle());
-                                            nav.push(NOT_FOUND_PATH, cx);
-                                        }
-                                    });
-                                });
-                                return;
-                            }
+            self.host.spawn(Box::pin(async move {
+                for before_load in before_load_fns {
+                    let ctx = crate::route_tree::BeforeLoadContext {
+                        params: HashMap::new(),
+                        search: loc_clone.search.clone(),
+                        location: loc_clone.clone(),
+                    };
+                    match before_load(ctx).await {
+                        crate::route_tree::BeforeLoadResult::Ok => {}
+                        crate::route_tree::BeforeLoadResult::Redirect(redirect) => {
+                            let nav = crate::Navigator::from_handle(&handle);
+                            nav.push_location(Location::new(&redirect.to));
+                            return;
+                        }
+                        crate::route_tree::BeforeLoadResult::NotFound(not_found) => {
+                            handle.update(|state| {
+                                state.not_found_data = not_found.data;
+                                if state.current_location().pathname != NOT_FOUND_PATH {
+                                    let nav = crate::Navigator::from_handle(&handle);
+                                    nav.push(NOT_FOUND_PATH);
+                                }
+                            });
+                            return;
                         }
                     }
-                    // All before_load passed, proceed with core navigation
-                    let () = cx.update(|cx| {
-                        RouterState::update(cx, |state, cx| {
-                            let effects = state.core.navigate_with(
-                                loc_clone,
-                                &options_clone,
-                                matched.clone(),
-                            );
-                            state.current_match = state.core.current_match.clone();
-                            state.handle_navigation_effects(effects, cx);
-                        });
-                    });
                 }
-            })
-            .detach();
+                // All before_load passed, proceed with core navigation
+                handle.update(|state| {
+                    let effects =
+                        state
+                            .core
+                            .navigate_with(loc_clone, &options_clone, matched.clone());
+                    state.current_match = state.core.current_match.clone();
+                    state.handle_navigation_effects(effects);
+                });
+            }));
             return;
         }
 
         // No before_load hooks, direct navigation
         let effects = self.core.navigate_with(loc.clone(), options, matched);
         self.current_match = self.core.current_match.clone();
-        self.handle_navigation_effects(effects, cx);
-        self.dispatch(&RouterEvent::Resolved { from, to: loc }, cx);
+        self.handle_navigation_effects(effects);
+        self.dispatch(&RouterEvent::Resolved { from, to: loc });
     }
 
-    fn handle_navigation_effects(&mut self, effects: Vec<NavigationEffect>, cx: &mut App) {
+    fn handle_navigation_effects(&mut self, effects: Vec<NavigationEffect>) {
         for effect in effects {
             match effect {
                 NavigationEffect::SpawnLoader { route_id, params } => {
@@ -450,97 +717,64 @@ impl RouterState {
                         let client = self.query_client.clone();
                         let fetch_fn = query.fetch_fn.clone();
                         let query_options = query.options.clone();
-                        let window_handle = self.window_handle;
+                        let handle = current_handle_of(self);
 
-                        cx.spawn(move |cx: &mut gpui::AsyncApp| {
-                            let cx = cx.clone();
-                            async move {
-                                match (fetch_fn)().await {
-                                    Ok(outcome) => match outcome {
-                                        LoaderOutcome::Data(data) => {
-                                            client.set_query_data(
-                                                &key,
-                                                data,
-                                                query_options.clone(),
-                                            );
-                                            let () = cx.update(|cx| {
-                                                RouterState::update(cx, |_, cx| {
-                                                    cx.refresh_windows();
-                                                });
-                                                let _ = window_handle
-                                                    .update(cx, |_, window, _| window.refresh());
-                                            });
-                                        }
-                                        LoaderOutcome::Redirect(redirect) => {
-                                            let () = cx.update(|cx| {
-                                                let nav = crate::Navigator::new(window_handle);
-                                                nav.push_location(Location::new(&redirect.to), cx);
-                                            });
-                                        }
-                                        LoaderOutcome::NotFound(not_found) => {
-                                            let () = cx.update(|cx| {
-                                                RouterState::update(cx, |state, cx| {
-                                                    state.not_found_data = not_found.data;
-                                                    if state.current_location().pathname
-                                                        != NOT_FOUND_PATH
-                                                    {
-                                                        let nav = crate::Navigator::new(
-                                                            state.window_handle(),
-                                                        );
-                                                        nav.push(NOT_FOUND_PATH, cx);
-                                                    }
-                                                });
-                                            });
-                                        }
-                                    },
-                                    Err(e) => {
-                                        log::error!("Loader error for {route_id}: {e:?}");
-                                        let () = cx.update(|cx| {
-                                            RouterState::update(cx, |_, cx| cx.refresh_windows());
-                                            let _ = window_handle
-                                                .update(cx, |_, window, _| window.refresh());
-                                        });
+                        self.host.spawn(Box::pin(async move {
+                            match (fetch_fn)().await {
+                                Ok(outcome) => match outcome {
+                                    LoaderOutcome::Data(data) => {
+                                        client.set_query_data(&key, data, query_options.clone());
+                                        handle.refresh();
                                     }
+                                    LoaderOutcome::Redirect(redirect) => {
+                                        let nav = crate::Navigator::from_handle(&handle);
+                                        nav.push_location(Location::new(&redirect.to));
+                                    }
+                                    LoaderOutcome::NotFound(not_found) => {
+                                        handle.update(|state| {
+                                            state.not_found_data = not_found.data;
+                                            if state.current_location().pathname != NOT_FOUND_PATH {
+                                                let nav = crate::Navigator::from_handle(&handle);
+                                                nav.push(NOT_FOUND_PATH);
+                                            }
+                                        });
+                                        handle.refresh();
+                                    }
+                                },
+                                Err(e) => {
+                                    log::error!("Loader error for {route_id}: {e:?}");
+                                    handle.refresh();
                                 }
                             }
-                        })
-                        .detach();
+                        }));
                     }
                 }
                 NavigationEffect::Redirect { to, replace } => {
-                    // Direct call: we are already inside `update_global`, so a
-                    // nested `RouterState::update` (via `Navigator`) is illegal.
+                    // Direct call: we are already inside `update`, so a
+                    // nested handle `update` is unnecessary.
                     self.navigate(
                         Location::new(&to),
                         &NavigateOptions {
                             replace,
                             ..NavigateOptions::default()
                         },
-                        cx,
                     );
                     return;
                 }
                 NavigationEffect::NotFound { data } => {
                     self.not_found_data = data;
-                    // Direct call (no nested `update_global`) and a recursion
-                    // guard for trees without a dedicated `/404` route: that
+                    // Direct call (no nested update) and a recursion guard
+                    // for trees without a dedicated `/404` route: that
                     // navigation itself produces another NotFound effect.
                     if !self.navigating_not_found {
                         self.navigating_not_found = true;
-                        self.navigate(
-                            Location::new(NOT_FOUND_PATH),
-                            &NavigateOptions::default(),
-                            cx,
-                        );
+                        self.navigate(Location::new(NOT_FOUND_PATH), &NavigateOptions::default());
                         self.navigating_not_found = false;
                     }
                     return;
                 }
                 NavigationEffect::NotifyListeners => {
-                    cx.refresh_windows();
-                    let _ = self
-                        .window_handle
-                        .update(cx, |_, window, _| window.refresh());
+                    self.host.refresh();
                 }
             }
         }
@@ -552,7 +786,7 @@ impl RouterState {
     /// when any blocker is registered and the options do not ignore them,
     /// the batch falls back to sequential `navigate` calls so every hop goes
     /// through the blocker path.
-    pub fn transact(&mut self, ops: &[NavOp], cx: &mut App) {
+    pub fn transact(&mut self, ops: &[NavOp]) {
         let has_moves = ops
             .iter()
             .any(|op| matches!(op, NavOp::Push(_) | NavOp::Replace(_)));
@@ -560,7 +794,7 @@ impl RouterState {
             for op in ops {
                 match op {
                     NavOp::Push(loc) => {
-                        self.navigate(loc.clone(), &NavigateOptions::default(), cx);
+                        self.navigate(loc.clone(), &NavigateOptions::default());
                     }
                     NavOp::Replace(loc) => {
                         self.navigate(
@@ -569,7 +803,6 @@ impl RouterState {
                                 replace: true,
                                 ..NavigateOptions::default()
                             },
-                            cx,
                         );
                     }
                     NavOp::Back => {
@@ -593,19 +826,16 @@ impl RouterState {
             _ => None,
         });
         if let Some(to) = &to {
-            self.dispatch(
-                &RouterEvent::BeforeNavigate {
-                    from: from.clone(),
-                    to: to.clone(),
-                },
-                cx,
-            );
+            self.dispatch(&RouterEvent::BeforeNavigate {
+                from: from.clone(),
+                to: to.clone(),
+            });
         }
         let effects = self.core.transact(ops);
         self.current_match = self.core.current_match.clone();
-        self.handle_navigation_effects(effects, cx);
+        self.handle_navigation_effects(effects);
         if let Some(to) = to {
-            self.dispatch(&RouterEvent::Resolved { from, to }, cx);
+            self.dispatch(&RouterEvent::Resolved { from, to });
         }
     }
 
@@ -616,7 +846,7 @@ impl RouterState {
         std::mem::take(&mut self.scroll_reset_pending)
     }
 
-    pub fn preload_location(&mut self, loc: &Location, cx: &mut App) {
+    pub fn preload_location(&mut self, loc: &Location) {
         if let Some((params, node)) = self.route_tree.match_path(&loc.pathname)
             && node.has_loader
             && let Some(factory) = self.loader_factories.get(&node.id)
@@ -631,7 +861,8 @@ impl RouterState {
             let fetch_fn = query.fetch_fn.clone();
             let options = query.options.clone();
             let node_id = node.id.clone();
-            cx.spawn(|_cx: &mut gpui::AsyncApp| async move {
+            // Preloads fire and forget on the quoin runtime seam.
+            self.host.spawn(Box::pin(async move {
                 match (fetch_fn)().await {
                     Ok(LoaderOutcome::Data(data)) => {
                         client.set_query_data(&key, data, options);
@@ -641,8 +872,7 @@ impl RouterState {
                         log::error!("Preload error for {node_id}: {e}");
                     }
                 }
-            })
-            .detach();
+            }));
         }
     }
 
@@ -658,7 +888,7 @@ impl RouterState {
     }
 
     pub fn subscribe<F: Fn(RouterEvent) + Send + Sync + 'static>(&mut self, f: F) {
-        self.events.push(Box::new(f));
+        self.events.push(Arc::new(f));
     }
 
     pub fn add_blocker(&mut self, blocker: Blocker) -> BlockerId {
@@ -672,7 +902,7 @@ impl RouterState {
         self.blockers.remove(id);
     }
 
-    pub fn proceed(&mut self, cx: &mut App) {
+    pub fn proceed(&mut self) {
         if let Some(loc) = self.pending_navigation.take() {
             self.navigate(
                 loc,
@@ -680,7 +910,6 @@ impl RouterState {
                     ignore_blocker: true,
                     ..NavigateOptions::default()
                 },
-                cx,
             );
         }
     }
@@ -750,17 +979,6 @@ impl RouterState {
         self.context_cache.insert(R::name().to_string(), value);
     }
 
-    pub fn try_global(cx: &App) -> Option<&Self> {
-        cx.try_global::<Self>()
-    }
-
-    pub fn update<F, R>(cx: &mut App, f: F) -> R
-    where
-        F: FnOnce(&mut Self, &mut App) -> R,
-    {
-        cx.update_global(|state, cx| f(state, cx))
-    }
-
     #[must_use]
     pub fn current_meta(&self) -> HashMap<String, serde_json::Value> {
         let mut meta = HashMap::new();
@@ -777,8 +995,15 @@ impl RouterState {
     pub fn has_pending_loader(&self) -> bool {
         self.query_client.is_fetching()
     }
+}
 
-    pub fn global(cx: &App) -> &Self {
-        cx.global::<Self>()
-    }
+/// Extracts the [`RouterHandle`] sharing `state`. Used inside state methods
+/// that spawn async continuations: those continuations must mutate the same
+/// shared state, and the handle is the cheapest way to carry it.
+fn current_handle_of(_state: &RouterState) -> RouterHandle {
+    RouterHandle::try_current().unwrap_or_else(|| {
+        panic!(
+            "router async continuation requires the RouterHandle to be installed (RouterProvider::install or RouterHandle::install_current)"
+        )
+    })
 }

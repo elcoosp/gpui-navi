@@ -1,3 +1,5 @@
+//! Framework-agnostic router components rendering `quoin_ui::Node` trees.
+
 pub mod awaited;
 pub mod link;
 pub mod outlet;

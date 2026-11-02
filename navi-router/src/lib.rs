@@ -22,6 +22,9 @@ pub mod route_tree {
 // Re-export commonly used items at crate root too
 pub use navi_router_core::route_tree::{BeforeLoadContext, BeforeLoadResult, RouteContextArgs};
 
+// quoin re-exports: the framework-agnostic runtime seam navi builds on.
+pub use quoin_core::sleep;
+
 // Adapter-specific modules and types
 pub mod components;
 pub mod event_bus;
@@ -34,6 +37,6 @@ pub use components::{
 };
 pub use navigator::Navigator;
 pub use state::{
-    AnyData, LoaderOutcome, LoaderState, NotFoundMode, RouteDef, RouterEvent, RouterOptions,
-    RouterState,
+    AnyData, LoaderOutcome, LoaderState, NotFoundMode, RouteDef, RouterEvent, RouterHandle,
+    RouterHost, RouterOptions, RouterState,
 };

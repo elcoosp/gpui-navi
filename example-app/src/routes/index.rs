@@ -1,6 +1,6 @@
 use gpui::prelude::*;
 use gpui::{ Window, App, div, FontWeight, rgb, px};
-use gpui_component::scroll::ScrollableElement;
+use gpui_kit::component::scroll::ScrollableElement;
 use navi_macros::define_route;
 
 #[derive(Clone, IntoElement)]

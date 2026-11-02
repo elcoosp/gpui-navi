@@ -59,10 +59,10 @@ impl RenderOnce for ValicoTestPage {
                 "Page: {:?}, Sort: {:?}",
                 validated.page, validated.sort
             ))
-            .child(Link::new("/validation-test/valico?page=50&sort=desc").child("Valid params"))
+            .child(NodeElement(Link::new("/validation-test/valico?page=50&sort=desc").child("Valid params").build()))
             .child(
-                Link::new("/validation-test/valico?page=999&sort=invalid").child("Invalid params"),
+                NodeElement(Link::new("/validation-test/valico?page=999&sort=invalid").child("Invalid params").build()),
             )
-            .child(Link::new("/validation-test").child("Back"))
+            .child(NodeElement(Link::new("/validation-test").child("Back").build()))
     }
 }

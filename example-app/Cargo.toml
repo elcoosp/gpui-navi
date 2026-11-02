@@ -5,17 +5,20 @@ edition = "2024"
 build = "build.rs"
 
 [package.metadata.bundle]
-name = "Navi GPUI Example"
+name = "Navi Example"
 identifier = "com.navi.example-app"
 icon = ["icon.png"]
 version.workspace = true
 copyright = "MIT"
 category = "public.app-category.developer-tools"
-short_description = "Navi GPUI Example"
-long_description = "Example application for Navi in GPUI."
+short_description = "Navi Example"
+long_description = "Example application for Navi on quoin + GPUI."
 osx_url_schemes = ["naviapp"]
 
 [dependencies]
+# The binding layer: this binary is where a GUI framework is chosen. GPUI
+# provides windowing; quoin's GPUI adapter (quoin-ui-gpui) renders the
+# framework-agnostic navi Node trees (router components + devtools panel).
 gpui = { workspace = true }
 # The application facade: GPUI + gpui-base + gpui-component + bundled assets,
 # with `application()` / `init()` / `open_window()` entry points.
@@ -23,6 +26,10 @@ gpui-kit = { workspace = true }
 # Platform backend features (font-kit, X11, Wayland, runtime shaders) that
 # gpui-kit leaves off by default; additive across the shared gpui-pre-platform.
 gpui_platform = { workspace = true }
+# quoin runtime pieces used by the host wiring (portable sleep helpers).
+quoin-ui = { workspace = true }
+quoin-ui-gpui = { workspace = true }
+send_wrapper = { workspace = true }
 rs-query = { workspace = true }
 navi-core = { path = "../navi-core" }
 navi-router = { path = "../navi-router" }

@@ -1,6 +1,6 @@
 use gpui::prelude::*;
 use gpui::{ Window, App, ElementId, ScrollHandle, div};
-use gpui_component::{v_flex, scroll::ScrollableElement};
+use gpui_kit::component::{v_flex, scroll::ScrollableElement};
 use navi_macros::define_route;
 use navi_router::components::ScrollRestoration;
 

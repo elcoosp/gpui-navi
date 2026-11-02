@@ -91,17 +91,18 @@ result. Each item is marked **[done]** or **[future]**.
 
 All crates.io dependencies were bumped to their latest majors (thiserror 2,
 syn 3, serde_qs removed, schemars 1.2, validify 2, darling 0.24, convert_case
-0.12, parking_lot 0.13, garde 0.23, validator 0.21, …). The three git
-dependencies are pinned to the newest **mutually-compatible** stack:
-`zed/gpui@697f5dde`, `gpui-component@ee4e9e4`, `rs-query@3e2543f`.
-Mid-2026 the `gpui-component` upstream renamed and split itself
-(`gpui-component` → `gpui-kit` + `gpui-component` 0.8, `gpui-component-assets`
-→ `gpui-kit-assets`) and dropped/relocated most of the APIs the devtools and
-example app are built on (`Table`, `Tab`, `scroll`, virtual lists, `Root`),
-while `rs-query`'s devtools feature tracks the new layout. Migrating all
-consumers in lockstep is the documented follow-up (below); until then the
-pinned stack is the only configuration where every crate compiles as
-authored.
+0.12, parking_lot 0.13, garde 0.23, validator 0.21, …). Mid-2026 the
+`gpui-component` upstream renamed and split itself (`gpui-component` →
+`gpui-kit` + `gpui-component` 0.8, `gpui-component-assets` → `gpui-kit-assets`)
+and relocated most shared infrastructure into the unstyled `gpui-base` crate.
+**The migration is done** (see §3.5): the workspace now sits on the released
+post-restructure line — `gpui-component` 0.8.1 / `gpui-kit` 0.8.1 from
+crates.io, GPUI supplied by the matching `gpui-pre =0.3.10` snapshot of
+recent zed main declared under the `gpui` alias, and `rs-query` pinned to
+`ee416b8` with its optional `devtools` feature still off (Navi ships its own
+devtools UI; the pin's used API surface is gpui-free, so the crate's
+internal zed-git gpui dependency stays a graph leaf and cannot clash with
+the snapshot).
 
 ## 3. Modularity
 
@@ -120,11 +121,22 @@ authored.
    Xilem ports. With the core truly UI-free, a second backend only needs a
    `*-router` adapter crate mirroring `navi-router`.
 
-5. **[future] gpui-kit migration.** Migrate `navi-devtools`, `example-app`
+5. **[done] gpui-kit migration.** Migrated `navi-devtools`, `example-app`
     and the `rs-query` pin to the post-restructure `gpui-component` 0.8 /
-    `gpui-kit` stack (latest zed main). Most symbols survive but moved
-    between `gpui-base` and `gpui-component`; the devtools table/timeline
-    code must be ported and visually verified in one coordinated change.
+    `gpui-kit` stack (GPUI via the `gpui-pre =0.3.10` snapshot of recent zed
+    main). Most symbols survived the split between `gpui-base` and
+    `gpui-component`; the concrete deltas that had to be ported: `Root`'s
+    dialog/sheet/notification layers are mounted by the Root itself (the
+    `Root::render_*_layer` calls are gone, `gpui_kit::open_window` replaces
+    the manual `Root::new` dance), `gpui::Component` disappeared (route
+    components now go through `IntoElement::into_any_element`), the
+    `dropdown_menu` closure receives `&mut Context<PopupMenu>` instead of
+    `&mut App`, gpui's `test-support` must be requested explicitly now that
+    rs-query's zed-git gpui is a separate package, and the `xattr` vendored
+    patch became unnecessary (`async-tar` left the graph with
+    `gpui-pre-reqwest-client`). The devtools table/timeline code ported with
+    unchanged `TableDelegate`/`Column`/`Tab`/`TabBar`/`VirtualList` shapes
+    and was visually verified against the example app.
 
 ## 4. DRY
 

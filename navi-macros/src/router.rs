@@ -43,7 +43,7 @@ pub fn define_router(input: TokenStream) -> TokenStream {
         .iter()
         .map(|route| {
             quote! {
-                #route::register(cx);
+                #route::register();
             }
         })
         .collect();
@@ -67,25 +67,20 @@ pub fn define_router(input: TokenStream) -> TokenStream {
         }
 
         /// Register all route components and loaders.
-        pub fn register_routes(cx: &mut gpui::App) {
+        pub fn register_routes() {
             #(
                 #register_calls
             )*
         }
 
-        /// Build the full router state with an initial location.
+        /// Build the full router handle with an initial location.
         pub fn build_router(
             initial: navi_router::Location,
-            window_id: gpui::WindowId,
-            window_handle: gpui::AnyWindowHandle,
-        ) -> navi_router::RouterState {
+            window_key: navi_core::WindowKey,
+            host: navi_router::RouterHost,
+        ) -> navi_router::RouterHandle {
             let tree = build_route_tree();
-            navi_router::RouterState::new(
-                initial,
-                window_id,
-                window_handle,
-                std::rc::Rc::new(tree),
-            )
+            navi_router::RouterHandle::new(initial, window_key, std::sync::Arc::new(tree), host)
         }
     };
 

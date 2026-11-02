@@ -4,7 +4,10 @@ version.workspace = true
 edition = "2024"
 
 [dev-dependencies]
-gpui = { workspace = true }
+# `test-support` powers `TestAppContext` / `#[gpui::test]`; it used to arrive
+# via feature unification with rs-query's shared zed-git gpui, but the
+# gpui-pre snapshot is a distinct package, so it is requested explicitly now.
+gpui = { workspace = true, features = ["test-support"] }
 navi-router = { path = "../navi-router" }
 navi-router-core = { path = "../navi-router-core" }
 navi-macros = { path = "../navi-macros" }

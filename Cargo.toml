@@ -17,23 +17,26 @@ version = "0.2.0"
 edition = "2024"
 
 [workspace.dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
-# NOTE: the git stack (zed gpui / gpui-component / rs-query) is pinned by the
-# lockfile to the newest mutually-compatible commits. Mid-2026 the
-# `gpui-component` upstream restructured (`gpui-kit` split) with breaking API
-# churn; every consumer must migrate together (see docs/BRAINSTORM.md).
-# `rs-query` stays off its `devtools` feature, which drags in the new-layout
-# gpui-component; Navi ships its own devtools UI.
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-rs-query = { git = "https://github.com/elcoosp/rs-query" }
-
-# xattr 0.2.3 (pulled by async-tar via gpui's http_client) fails to compile
-# against libc >= 0.2.187 on Linux (`ENOATTR` was removed upstream). A 1.x
-# patch does not satisfy async-tar's `"0.2"` requirement, so a minimal
-# patched copy is vendored under `vendor/xattr` (ENOATTR -> ENODATA on
-# Linux/Android; the `xattr::set` API async-tar uses is unchanged).
-[patch.crates-io]
-xattr = { path = "vendor/xattr" }
+# GPUI arrives through the `gpui-pre-*` crates.io snapshots that the post-
+# restructure gpui-kit stack is built against. gpui-component 0.8 pins
+# `gpui-pre =0.3.10` exactly, so declaring the same package under the `gpui`
+# alias keeps every crate on one shared GPUI (a second, zed-git `gpui` would
+# be a distinct crate whose types cannot cross into gpui-component APIs).
+# The snapshot tracks recent zed main; it replaces the former
+# `zed@git#697f5dde` pin.
+gpui = { package = "gpui-pre", version = "=0.3.10" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+# Post-restructure stack: `gpui-kit` is the application facade (re-exports
+# GPUI, gpui-base, gpui-component and the bundled assets), `gpui-component`
+# 0.8 is the styled component catalog used by navi-devtools.
+gpui-kit = "0.8.1"
+gpui-component = "0.8.1"
+# rs-query main (0.1.0). Navi keeps using only its gpui-free core
+# (`QueryClient` / `Query` / `QueryKey`): the crate itself still tracks
+# zed-git gpui, which stays a leaf in the graph because none of its used APIs
+# expose gpui types. Its optional `devtools` feature remains OFF — it drags
+# the new-layout gpui-component, and Navi ships its own devtools UI.
+rs-query = { git = "https://github.com/elcoosp/rs-query", rev = "ee416b8db255eb34bb29d4a9663e66135f39609d" }
 
 # Lean dev profile: line tables only (backtraces still work) and no
 # incremental caches. Cuts target/ size by well over half, which matters

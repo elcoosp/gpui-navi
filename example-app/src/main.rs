@@ -2,8 +2,7 @@ use gpui::{
     App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Styled, Window,
     WindowBounds, WindowOptions, div, px, size,
 };
-use gpui_component::Root;
-use gpui_component_assets::Assets;
+use gpui_kit::assets::Assets;
 use navi_devtools::DevtoolsState;
 use navi_router::{
     Location, NotFoundMode, RouterOptions, RouterState,
@@ -21,26 +20,26 @@ struct AppView {
 }
 
 impl Render for AppView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        // Dialog, sheet and notification layers are mounted by the kit's
+        // Root itself in the post-restructure stack; the app view renders
+        // only its own content.
         div()
             .size_full()
             .relative()
             .child(self.router_provider.clone().child(Outlet::new()))
             .child(self.devtools.clone())
-            .children(Root::render_dialog_layer(window, cx))
-            .children(Root::render_sheet_layer(window, cx))
-            .children(Root::render_notification_layer(window, cx))
     }
 }
 
 fn main() {
     env_logger::init();
 
-    gpui_platform::application()
+    gpui_kit::application()
         .with_assets(Assets)
         .run(|cx: &mut App| {
             cx.init_colors();
-            gpui_component::init(cx);
+            gpui_kit::init(cx);
 
             // Validate route tree for cycles
             let tree = build_route_tree();
@@ -59,7 +58,7 @@ fn main() {
 
             let tree = build_route_tree();
 
-            cx.open_window(
+            gpui_kit::open_window(
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                         None,
@@ -68,6 +67,7 @@ fn main() {
                     ))),
                     ..Default::default()
                 },
+                cx,
                 |window, cx| {
                     let window_id = window.window_handle().window_id();
                     let window_handle = window.window_handle();
@@ -97,7 +97,7 @@ fn main() {
                     });
 
                     RouterState::update(cx, |state, _| state.set_root_view(root_view.entity_id()));
-                    cx.new(|cx| Root::new(root_view, window, cx))
+                    root_view
                 },
             )
             .unwrap();

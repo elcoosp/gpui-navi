@@ -19,7 +19,7 @@ define_route!(
 #[derive(Clone, IntoElement)]
 struct OptionalUserPage;
 impl RenderOnce for OptionalUserPage {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
         let params = use_params!(OptionalUserRoute);
         let id = params.id.as_deref().unwrap_or("none");
         div().child(format!("Optional user ID: {id}"))

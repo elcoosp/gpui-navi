@@ -20,9 +20,9 @@ define_route!(
     path: "/users/$id",
     params: UserParams,
     data: UserData,
-    loader: |params: UserParams, executor: gpui::BackgroundExecutor| async move {
+    loader: |params: UserParams| async move {
         let id = params.id;
-        executor.timer(std::time::Duration::from_millis(800)).await;
+        navi_router::sleep(std::time::Duration::from_millis(800)).await;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(UserData {
             id: id.clone(),
             name: format!("User {id}"),
@@ -36,7 +36,7 @@ define_route!(
 struct UserDetailPage;
 
 impl RenderOnce for UserDetailPage {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let data = use_loader_data!(UsersParamIdRoute);
         match data {
             Some(data) => div()

@@ -1,15 +1,15 @@
 use gpui::prelude::*;
 use gpui::{ Window, App, div};
 use navi_macros::define_route;
-use navi_router::RouterState;
+use navi_router::RouterHandle;
 
 #[derive(Clone, IntoElement)]
 struct DocsSplatPage;
 
 impl RenderOnce for DocsSplatPage {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let path = RouterState::try_global(cx)
-            .map(|s| s.current_location().pathname)
+    fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let path = RouterHandle::try_current()
+            .map(|h| h.read().current_location().pathname)
             .unwrap_or_default();
         let slug = path.strip_prefix("/docs/").unwrap_or("unknown");
         div()

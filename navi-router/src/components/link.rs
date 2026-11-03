@@ -4,9 +4,14 @@ use crate::state::RouterHandle;
 use crate::{NavigateOptions, Navigator};
 use quoin_ui::Node;
 use quoin_ui::node::{NodeChild, NodeStyle, StyleCmd};
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 use std::sync::LazyLock;
 use std::time::Duration;
+
+/// Upper bound on the global preload dedup registry. Long sessions no longer
+/// grow it without bound; when the cap is reached the registry resets (a
+/// one-off redundant preload is harmless, unbounded memory is not).
+const PRELOAD_DEDUP_CAPACITY: usize = 4096;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PreloadType {
@@ -32,19 +37,29 @@ pub struct ActiveOptions {
 }
 
 /// Tracks which hrefs already kicked off a preload so renders and repeated
-/// mouse moves do not spam the query cache.
-static PRELOAD_STARTED: LazyLock<std::sync::Mutex<HashSet<String>>> =
-    LazyLock::new(|| std::sync::Mutex::new(HashSet::new()));
+/// mouse moves do not spam the query cache. `FxHash` hashing: short string
+/// keys, no Hash-DoS surface (hrefs are author-controlled).
+static PRELOAD_STARTED: LazyLock<std::sync::Mutex<FxHashSet<String>>> =
+    LazyLock::new(|| std::sync::Mutex::new(FxHashSet::default()));
 
 fn mark_preload_started(href: &str) -> bool {
-    PRELOAD_STARTED
-        .lock()
-        .expect("preload registry lock")
-        .insert(href.to_string())
+    let mut started = PRELOAD_STARTED.lock().expect("preload registry lock");
+    // Exact dedup first: a href already registered never restarts a preload,
+    // even across a capacity reset.
+    if started.contains(href) {
+        return false;
+    }
+    if started.len() >= PRELOAD_DEDUP_CAPACITY {
+        started.clear();
+    }
+    started.insert(href.to_string())
 }
 
 /// TanStack-style segment-boundary prefix match: `/users` is active for
 /// `/users` and `/users/42` but not for `/users-admin`.
+///
+/// Allocation-free: the old implementation built `format!("{href}/")` on
+/// every call (per link, per frame); this one compares bytes directly.
 #[must_use]
 pub fn path_is_active(current: &str, href: &str, exact: bool) -> bool {
     if exact {
@@ -53,7 +68,12 @@ pub fn path_is_active(current: &str, href: &str, exact: bool) -> bool {
     if href == "/" {
         return current.starts_with('/');
     }
-    current == href || current.starts_with(&format!("{href}/"))
+    if current == href {
+        return true;
+    }
+    current.len() > href.len()
+        && current.starts_with(href)
+        && current.as_bytes()[href.len()] == b'/'
 }
 
 /// Whether the href points outside the router (absolute web URL or a
@@ -114,6 +134,13 @@ impl Link {
     #[must_use]
     pub fn hash(mut self, hash: impl Into<String>) -> Self {
         self.hash = Some(hash.into());
+        self
+    }
+
+    /// Attach router state carried with the navigation.
+    #[must_use]
+    pub fn state(mut self, state: serde_json::Value) -> Self {
+        self.state = Some(state);
         self
     }
 
@@ -228,11 +255,12 @@ impl Link {
         let handle = RouterHandle::try_current();
         let is_active = handle.as_ref().is_some_and(|router_state| {
             let state = router_state.read();
-            let current = state.current_location();
-            let active = path_is_active(&current.pathname, &self.href, active_options.exact);
-            let search_ok =
-                !active_options.include_search || active && current.search == target.search;
-            let hash_ok = !active_options.include_hash || active && current.hash == target.hash;
+            // Borrowed reads: no `Location` clone in the render path.
+            let active = path_is_active(state.current_pathname(), &self.href, active_options.exact);
+            let search_ok = !active_options.include_search
+                || active && state.current_search_value() == &target.search;
+            let hash_ok =
+                !active_options.include_hash || active && state.current_hash() == target.hash;
             active && search_ok && hash_ok
         });
 
@@ -335,6 +363,28 @@ mod tests {
         let key = format!("test-href-{}", std::process::id());
         assert!(mark_preload_started(&key), "first call starts preload");
         assert!(!mark_preload_started(&key), "second call is deduped");
+    }
+
+    #[test]
+    fn test_preload_registry_is_bounded() {
+        // Saturate the registry; it must reset instead of growing forever.
+        for i in 0..(PRELOAD_DEDUP_CAPACITY + 8) {
+            let href = format!("bounded-{}-{i}", std::process::id());
+            let first = mark_preload_started(&href);
+            assert!(first, "fresh href {i} must start a preload");
+            assert!(!mark_preload_started(&href), "dedup within the run");
+        }
+    }
+
+    #[test]
+    fn test_path_is_active_edge_shapes() {
+        // Deep prefixes: only segment boundaries count.
+        assert!(path_is_active("/a/b/c", "/a/b", false));
+        assert!(path_is_active("/a/b/c", "/a", false));
+        assert!(!path_is_active("/a/bc", "/a/b", false));
+        assert!(!path_is_active("/a/b/c", "/a/b/c/d", false));
+        // Empty href behaves like the root prefix.
+        assert!(path_is_active("/anything", "", false));
     }
 
     #[test]

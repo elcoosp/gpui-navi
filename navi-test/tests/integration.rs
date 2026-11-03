@@ -68,7 +68,8 @@ fn test_navigation_blocker_sync() {
 fn test_router_core_effects_via_reexports() {
     let mut tree = RouteTree::new();
     tree.add_route(node("a", "/a"));
-    let mut core = navi_router::RouterCore::new(Location::new("/"), tree.clone());
+    let mut core =
+        navi_router::RouterCore::new(Location::new("/"), std::sync::Arc::new(tree.clone()));
     let effects = core.navigate(Location::new("/a"), &NavigateOptions::default());
     assert_eq!(effects.len(), 1);
     assert!(matches!(effects[0], NavigationEffect::NotifyListeners));

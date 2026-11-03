@@ -1,19 +1,21 @@
 use crate::location::Location;
 use history_navigation::History as BrowserHistory;
-use parking_lot::Mutex;
-use std::sync::Arc;
 
+/// Browser-style history stack.
+///
+/// The stack is owned exclusively by [`crate::RouterCore`] (every mutation
+/// goes through `&mut self`), so the old `Arc<Mutex<...>>` wrapper was pure
+/// overhead: locking and refcount traffic on a single-owner structure.
 pub struct History {
-    inner: Arc<Mutex<BrowserHistory<Location>>>,
+    inner: BrowserHistory<Location>,
     listeners: Vec<LocationListener>,
 }
 
 impl History {
     #[must_use]
     pub fn new(initial: Location) -> Self {
-        let inner = Arc::new(Mutex::new(BrowserHistory::new(initial)));
         Self {
-            inner,
+            inner: BrowserHistory::new(initial),
             listeners: Vec::new(),
         }
     }
@@ -21,16 +23,16 @@ impl History {
     pub fn push(&mut self, loc: Location) {
         // Notify first so the entry can be moved into the store unchanged.
         self.notify_listeners(&loc);
-        self.inner.lock().push(loc);
+        self.inner.push(loc);
     }
 
     pub fn replace(&mut self, loc: Location) {
         self.notify_listeners(&loc);
-        self.inner.lock().replace(loc);
+        self.inner.replace(loc);
     }
 
     pub fn back(&mut self) -> bool {
-        if self.inner.lock().back() {
+        if self.inner.back() {
             self.notify_current();
             true
         } else {
@@ -39,7 +41,7 @@ impl History {
     }
 
     pub fn forward(&mut self) -> bool {
-        if self.inner.lock().forward() {
+        if self.inner.forward() {
             self.notify_current();
             true
         } else {
@@ -48,13 +50,20 @@ impl History {
     }
 
     pub fn go(&mut self, delta: isize) {
-        self.inner.lock().go(delta);
+        self.inner.go(delta);
         self.notify_current();
     }
 
     #[must_use]
     pub fn current(&self) -> Location {
-        self.inner.lock().current().clone()
+        self.inner.current().clone()
+    }
+
+    /// The current location by reference — avoids the full `Location` clone
+    /// in read-only paths (adapters, matching, active-state checks).
+    #[must_use]
+    pub fn current_ref(&self) -> &Location {
+        self.inner.current()
     }
 
     pub fn listen<F: Fn(&Location) + Send + Sync + 'static>(&mut self, f: F) {
@@ -63,24 +72,24 @@ impl History {
 
     #[must_use]
     pub fn can_go_back(&self) -> bool {
-        self.inner.lock().can_go_back()
+        self.inner.can_go_back()
     }
 
     #[must_use]
     pub fn can_go_forward(&self) -> bool {
-        self.inner.lock().can_go_forward()
+        self.inner.can_go_forward()
     }
 
     /// Number of entries currently stored.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.inner.lock().len()
+        self.inner.len()
     }
 
     /// Whether the history has no entries (never the case after `new`).
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.inner.lock().is_empty()
+        self.inner.is_empty()
     }
 
     fn notify_listeners(&self, loc: &Location) {
@@ -90,8 +99,9 @@ impl History {
     }
 
     fn notify_current(&self) {
-        let loc = self.current();
-        self.notify_listeners(&loc);
+        // Borrowed read of the current entry: no `Location` clone.
+        let loc = self.inner.current();
+        self.notify_listeners(loc);
     }
 }
 
@@ -101,6 +111,7 @@ type LocationListener = Box<dyn Fn(&Location) + Send + Sync>;
 mod tests {
     use super::*;
     use crate::location::Location;
+    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
@@ -179,11 +190,11 @@ mod tests {
         let mut history = History::new(Location::new("/"));
         let calls = Arc::new(AtomicUsize::new(0));
         let calls_clone = Arc::clone(&calls);
-        let seen = Arc::new(parking_lot::Mutex::new(Vec::new()));
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
         let seen_clone = Arc::clone(&seen);
         history.listen(move |loc: &Location| {
             calls_clone.fetch_add(1, Ordering::SeqCst);
-            seen_clone.lock().push(loc.pathname.clone());
+            seen_clone.lock().expect("seen").push(loc.pathname.clone());
         });
         history.push(Location::new("/a"));
         history.replace(Location::new("/b"));
@@ -191,12 +202,26 @@ mod tests {
         history.forward();
         history.go(-1);
         assert_eq!(calls.load(Ordering::SeqCst), 5);
-        assert_eq!(*seen.lock(), vec!["/a", "/b", "/", "/b", "/"]);
+        assert_eq!(
+            *seen.lock().expect("seen"),
+            vec!["/a", "/b", "/", "/b", "/"]
+        );
     }
 
     #[test]
     fn test_history_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<History>();
+    }
+
+    #[test]
+    fn test_current_ref_matches_current() {
+        let mut history = History::new(Location::new("/a?b=1"));
+        assert_eq!(history.current_ref().pathname, "/a");
+        assert_eq!(history.current_ref().search["b"], serde_json::json!(1));
+        history.push(Location::new("/c#frag"));
+        assert_eq!(history.current_ref().pathname, "/c");
+        assert_eq!(history.current_ref().hash, "frag");
+        assert_eq!(history.current(), history.current_ref().clone());
     }
 }

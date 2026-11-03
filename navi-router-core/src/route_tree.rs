@@ -2,6 +2,8 @@ use crate::location::Location;
 use crate::redirect::{NotFound, Redirect};
 use crate::state_types::AnyData;
 use futures::future::BoxFuture;
+use rustc_hash::FxHashMap;
+use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -175,38 +177,61 @@ impl std::fmt::Debug for RouteNode {
 // ---- Radix trie ----
 //
 // Children are partitioned by segment kind so that matching is deterministic:
-// exact static children are probed first (O(log n) lookup), then dynamic
-// parameters in insertion order, then optional parameters, and finally the
-// splat. This guarantees that for `/users/new` the static route always wins
-// over `/users/$id`, regardless of registration or hash-map iteration order.
+// exact static children are probed first (FxHashMap — exact-key lookup only,
+// so iteration order is never observed and the hashed keys are
+// author-controlled, not attacker-controlled), then dynamic parameters in
+// insertion order, then optional parameters, and finally the splat. This
+// guarantees that for `/users/new` the static route always wins over
+// `/users/$id`, regardless of registration order.
+//
+// Segment and parameter names are interned as `Arc<str>` (shared with the
+// parsed pattern) so matching only bumps refcounts, never copies strings.
 #[derive(Clone, Debug, Default)]
 struct RadixNode {
-    static_children: BTreeMap<String, RadixNode>,
-    param_children: Vec<(String, RadixNode)>,
-    optional_children: Vec<(String, RadixNode)>,
+    static_children: FxHashMap<Arc<str>, RadixNode>,
+    param_children: Vec<(Arc<str>, RadixNode)>,
+    optional_children: Vec<(Arc<str>, RadixNode)>,
     splat_child: Option<Box<RadixNode>>,
     route: Option<Arc<RouteNode>>,
 }
 
 impl RadixNode {
     fn or_default_param(&mut self, name: &str) -> &mut RadixNode {
-        if let Some(index) = self.param_children.iter().position(|(n, _)| n == name) {
+        if let Some(index) = self
+            .param_children
+            .iter()
+            .position(|(n, _)| n.as_ref() == name)
+        {
             return &mut self.param_children[index].1;
         }
-        self.param_children
-            .push((name.to_string(), RadixNode::default()));
+        let interned: Arc<str> = Arc::from(name);
+        self.param_children.push((interned, RadixNode::default()));
         let last = self.param_children.len() - 1;
         &mut self.param_children[last].1
     }
 
     fn or_default_optional(&mut self, name: &str) -> &mut RadixNode {
-        if let Some(index) = self.optional_children.iter().position(|(n, _)| n == name) {
+        if let Some(index) = self
+            .optional_children
+            .iter()
+            .position(|(n, _)| n.as_ref() == name)
+        {
             return &mut self.optional_children[index].1;
         }
+        let interned: Arc<str> = Arc::from(name);
         self.optional_children
-            .push((name.to_string(), RadixNode::default()));
+            .push((interned, RadixNode::default()));
         let last = self.optional_children.len() - 1;
         &mut self.optional_children[last].1
+    }
+
+    fn static_child(&self, name: &str) -> Option<&RadixNode> {
+        self.static_children.get(name)
+    }
+
+    fn insert_static_child(&mut self, name: &str) -> &mut RadixNode {
+        let interned: Arc<str> = Arc::from(name);
+        self.static_children.entry(interned).or_default()
     }
 }
 
@@ -225,7 +250,7 @@ impl RouteTrie {
         let mut current = &mut self.root;
         for seg in &node.pattern.segments {
             current = match seg {
-                Segment::Static(s) => current.static_children.entry(s.clone()).or_default(),
+                Segment::Static(s) => current.insert_static_child(s),
                 Segment::Dynamic { name } => current.or_default_param(name),
                 Segment::Optional { name } => current.or_default_optional(name),
                 Segment::Splat => current.splat_child.get_or_insert_with(Box::default),
@@ -235,56 +260,92 @@ impl RouteTrie {
     }
 
     fn match_path(&self, path: &str) -> MatchResult {
-        let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-        match_segments(&segments, &self.root)
+        // Zero-copy: path segments live on the stack (heap only past 8);
+        // parameter bindings are collected as `(name, value)` borrows and the
+        // public `HashMap` is materialized exactly once, on final success.
+        let mut segments: SmallVec<[&str; 8]> = SmallVec::new();
+        for part in path.split('/').filter(|s| !s.is_empty()) {
+            segments.push(part);
+        }
+        let mut bindings: SmallVec<[(&str, BindingValue<'_, '_>); 8]> = SmallVec::new();
+        match match_segments(&segments, &self.root, &mut bindings) {
+            None => None,
+            Some(route) => {
+                let mut params = HashMap::with_capacity(bindings.len());
+                for (name, value) in bindings {
+                    let value = match value {
+                        BindingValue::Slice(s) => s.to_string(),
+                        BindingValue::Splat(parts) => parts.join("/"),
+                    };
+                    params.insert(name.to_string(), value);
+                }
+                Some((params, Arc::clone(route)))
+            }
+        }
     }
 }
 
+/// A parameter binding value discovered during matching. Splat captures span
+/// several segments, so they are joined only when the match succeeds.
+#[derive(Clone, Copy)]
+enum BindingValue<'s, 'p> {
+    Slice(&'p str),
+    Splat(&'s [&'p str]),
+}
+
 /// Depth-first matcher over the trie. Free function because it only needs the
-/// current node (recursion), not the trie itself.
-fn match_segments(segments: &[&str], node: &RadixNode) -> MatchResult {
+/// current node (recursion), not the trie itself. Tentative bindings are
+/// pushed onto `bindings` and rolled back when a branch fails, so failed
+/// branches never allocate and successful branches keep exactly the bindings
+/// that led to the match.
+fn match_segments<'a, 's, 'p>(
+    segments: &'s [&'p str],
+    node: &'a RadixNode,
+    bindings: &mut SmallVec<[(&'a str, BindingValue<'s, 'p>); 8]>,
+) -> Option<&'a Arc<RouteNode>> {
     if segments.is_empty() {
-        return node.route.clone().map(|r| (HashMap::new(), r));
+        return node.route.as_ref();
     }
     let seg = segments[0];
     let rest = &segments[1..];
 
     // 1. Exact static segment: always preferred.
-    if let Some(child) = node.static_children.get(seg)
-        && let Some(m) = match_segments(rest, child)
+    if let Some(child) = node.static_child(seg)
+        && let Some(r) = match_segments(rest, child, bindings)
     {
-        return Some(m);
+        return Some(r);
     }
 
     // 2. Dynamic parameters, in insertion order.
     for (name, child) in &node.param_children {
-        if let Some((mut params, route)) = match_segments(rest, child) {
-            params.insert(name.clone(), seg.to_string());
-            return Some((params, route));
+        bindings.push((name.as_ref(), BindingValue::Slice(seg)));
+        if let Some(r) = match_segments(rest, child, bindings) {
+            return Some(r);
         }
+        bindings.pop();
     }
 
     // 3. Optional parameters: first try consuming the segment...
     for (name, child) in &node.optional_children {
-        if let Some((mut params, route)) = match_segments(rest, child) {
-            params.insert(name.clone(), seg.to_string());
-            return Some((params, route));
+        bindings.push((name.as_ref(), BindingValue::Slice(seg)));
+        if let Some(r) = match_segments(rest, child, bindings) {
+            return Some(r);
         }
+        bindings.pop();
     }
     // ...then try skipping it.
     for (_name, child) in &node.optional_children {
-        if let Some(m) = match_segments(segments, child) {
-            return Some(m);
+        if let Some(r) = match_segments(segments, child, bindings) {
+            return Some(r);
         }
     }
 
     // 4. Splat consumes everything that is left.
     if let Some(child) = &node.splat_child
-        && child.route.is_some()
+        && let Some(route) = &child.route
     {
-        let mut params = HashMap::new();
-        params.insert("*splat".to_string(), segments.join("/"));
-        return child.route.clone().map(|r| (params, r));
+        bindings.push(("*splat", BindingValue::Splat(segments)));
+        return Some(route);
     }
 
     None
@@ -331,8 +392,8 @@ impl std::error::Error for RouteTreeError {}
 // ---- RouteTree ----
 #[derive(Clone)]
 pub struct RouteTree {
-    nodes: BTreeMap<String, Arc<RouteNode>>,
-    children: HashMap<String, Vec<String>>,
+    nodes: FxHashMap<String, Arc<RouteNode>>,
+    children: FxHashMap<String, Vec<String>>,
     root_id: String,
     trie: RouteTrie,
 }
@@ -341,8 +402,8 @@ impl RouteTree {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            nodes: BTreeMap::new(),
-            children: HashMap::new(),
+            nodes: FxHashMap::default(),
+            children: FxHashMap::default(),
             root_id: "__root__".into(),
             trie: RouteTrie::default(),
         }
@@ -359,18 +420,21 @@ impl RouteTree {
     }
 
     /// Ancestor chain from the tree root down to `route_id` (inclusive).
+    ///
+    /// Zero-allocation walk: parent ids are borrowed through the node map,
+    /// so the only allocation is the returned `Vec` itself.
     #[must_use]
     pub fn ancestors(&self, route_id: &str) -> Vec<&RouteNode> {
         let mut chain = Vec::new();
-        let mut current = route_id.to_string();
-        while let Some(node) = self.nodes.get(&current) {
+        let mut current = route_id;
+        while let Some(node) = self.nodes.get(current) {
             chain.push(Arc::as_ref(node));
             if chain.len() > 100 {
                 log::error!("Cycle detected at {route_id}");
                 break;
             }
             match node.parent.as_deref() {
-                Some(parent) => current = parent.to_string(),
+                Some(parent) => current = parent,
                 None => break,
             }
         }
@@ -431,21 +495,14 @@ impl RouteTree {
     /// cycle, or duplicate pattern).
     pub fn validate(&self) -> Result<(), RouteTreeError> {
         for node in self.nodes.values() {
-            if let Some(parent) = &node.parent
-                && !self.nodes.contains_key(parent)
-            {
-                return Err(RouteTreeError::UnknownParent {
-                    route_id: node.id.clone(),
-                    parent: parent.clone(),
-                });
-            }
-        }
-        for node in self.nodes.values() {
             // A route without a parent is its own root; otherwise climb the
             // parent chain until a root is reached, the chain is broken
-            // (unknown id), or it cycles.
+            // (unknown id), or it cycles. A broken chain is reported as an
+            // unknown-parent error, attributed to the node whose parent link
+            // dangles (direct parent or any deeper ancestor).
             let mut reachable = node.parent.is_none();
             let mut seen = std::collections::HashSet::new();
+            let mut dangling_child = &node.id;
             let mut cur: Option<&String> = node.parent.as_ref();
             while let Some(id) = cur {
                 if id == &self.root_id {
@@ -462,8 +519,14 @@ impl RouteTree {
                             break;
                         }
                         cur = n.parent.as_ref();
+                        dangling_child = id;
                     }
-                    None => break,
+                    None => {
+                        return Err(RouteTreeError::UnknownParent {
+                            route_id: dangling_child.clone(),
+                            parent: id.clone(),
+                        });
+                    }
                 }
             }
             if !reachable {
@@ -886,5 +949,157 @@ mod tests {
             loader_data: Some(AnyData::new(42_u32)),
         };
         assert_eq!(args.parent_context, Some(serde_json::json!({"a": 1})));
+    }
+
+    // ---- Matcher regression tests (sorted static fan-out + backtracking) ----
+
+    #[test]
+    fn test_static_fanout_beyond_inline_capacity() {
+        // More than 8 static children forces the sorted small-vec into heap
+        // territory; binary search must still find every member.
+        let mut t = RouteTree::new();
+        for i in 0..24 {
+            t.add_route(make_node(&format!("s{i}"), &format!("/seg{i}")));
+        }
+        for i in 0..24 {
+            assert_eq!(route_id_of(&t, &format!("/seg{i}")), format!("s{i}"));
+        }
+        assert!(t.match_path("/seg24").is_none());
+    }
+
+    #[test]
+    fn test_backtracking_rolls_back_bindings() {
+        // `/a/$x/b` fails for a one-segment path; the tentative `$x` binding
+        // must be rolled back so `/a/$y` reports `y`, never a stale `x`.
+        let mut t = RouteTree::new();
+        t.add_route(make_node("xb", "/a/$x/b"));
+        t.add_route(make_node("y", "/a/$y"));
+        let (params, r) = t.match_path("/a/1").expect("match");
+        assert_eq!(r.id, "y");
+        assert_eq!(params.get("y"), Some(&"1".to_string()));
+        assert!(!params.contains_key("x"));
+        let (params, r) = t.match_path("/a/1/b").expect("match");
+        assert_eq!(r.id, "xb");
+        assert_eq!(params.get("x"), Some(&"1".to_string()));
+    }
+
+    #[test]
+    fn test_failed_match_allocates_no_params() {
+        // No match: the matcher must return `None` (no params materialized).
+        let t = RouteTree::from_nodes([make_node("a", "/a/$x")]);
+        assert!(t.match_path("/a").is_none());
+    }
+
+    #[test]
+    fn test_tree_error_display_variants() {
+        let e = RouteTreeError::UnknownParent {
+            route_id: "c".into(),
+            parent: "ghost".into(),
+        };
+        assert_eq!(e.to_string(), "route `c` references unknown parent `ghost`");
+        let e = RouteTreeError::UnreachableFromRoot {
+            route_id: "x".into(),
+        };
+        assert_eq!(
+            e.to_string(),
+            "route `x` is not reachable from the root (parent cycle?)"
+        );
+        let e = RouteTreeError::DuplicatePattern {
+            pattern: "/dup".into(),
+            route_ids: vec!["a".into(), "b".into()],
+        };
+        assert_eq!(
+            e.to_string(),
+            "duplicate route pattern `/dup` used by [\"a\", \"b\"]"
+        );
+    }
+
+    #[test]
+    fn test_tree_default_and_all_nodes() {
+        let tree = RouteTree::default();
+        assert!(tree.is_empty());
+        let mut tree = RouteTree::new();
+        tree.add_route(make_node("a", "/a"));
+        tree.add_route(make_node("b", "/b"));
+        let ids: Vec<&str> = tree.all_nodes().map(|n| n.id.as_str()).collect();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&"a") && ids.contains(&"b"));
+    }
+
+    #[test]
+    fn test_duplicate_optional_name_reuses_child() {
+        // Two routes sharing an optional name at the same level must reuse
+        // the same trie child (the `position`-hit branch).
+        let mut t = RouteTree::new();
+        t.add_route(make_node("a", "/{-$lang}/en"));
+        t.add_route(make_node("b", "/{-$lang}/de"));
+        assert_eq!(route_id_of(&t, "/fr/en"), "a");
+        assert_eq!(route_id_of(&t, "/fr/de"), "b");
+    }
+
+    #[test]
+    fn test_ancestors_breaks_on_extreme_depth() {
+        // A parent chain longer than the cycle guard logs and stops at the
+        // guard instead of recursing forever.
+        let mut t = RouteTree::new();
+        for i in 0..120 {
+            let mut n = make_node(&format!("n{i}"), &format!("/s{i}"));
+            n.parent = (i > 0).then(|| format!("n{}", i - 1));
+            t.add_route(n);
+        }
+        let chain = t.ancestors("n119");
+        assert_eq!(chain.len(), 101);
+        assert_eq!(chain[0].id, "n19");
+    }
+
+    #[test]
+    fn test_validate_unknown_grandparent_is_unknown_parent() {
+        // The dangling link sits one level above the checked node; the error
+        // still names the node whose parent link dangles.
+        let mut t = RouteTree::new();
+        let mut child = make_node("child", "/child");
+        child.parent = Some("mid".into());
+        let mut mid = make_node("mid", "/mid");
+        mid.parent = Some("ghost".into());
+        t.add_route(child);
+        t.add_route(mid);
+        assert_eq!(
+            t.validate(),
+            Err(RouteTreeError::UnknownParent {
+                route_id: "mid".into(),
+                parent: "ghost".into()
+            })
+        );
+    }
+
+    #[test]
+    fn test_validate_reachable_via_parentless_ancestor() {
+        // The parent chain ends at a node whose id is not the canonical root
+        // but has no parent: still reachable.
+        let mut t = RouteTree::new();
+        let mut base = make_node("base", "/base");
+        base.is_layout = true;
+        let mut child = make_node("child", "/base/child");
+        child.parent = Some("base".into());
+        t.add_route(base);
+        t.add_route(child);
+        assert!(t.validate().is_ok());
+    }
+
+    #[test]
+    fn test_optional_skip_keeps_earlier_bindings() {
+        // `/p/$id/{-$lang}/end` — matching "/p/9/end" exercises the
+        // optional-skip path: `$id` binding survives, `lang` is absent.
+        let mut t = RouteTree::new();
+        t.add_route(make_node("r", "/p/$id/{-$lang}/end"));
+        let (params, r) = t.match_path("/p/9/end").expect("match");
+        assert_eq!(r.id, "r");
+        assert_eq!(params.get("id"), Some(&"9".to_string()));
+        assert!(!params.contains_key("lang"));
+        // Consuming the optional also works.
+        let (params, r) = t.match_path("/p/9/en/end").expect("match");
+        assert_eq!(r.id, "r");
+        assert_eq!(params.get("id"), Some(&"9".to_string()));
+        assert_eq!(params.get("lang"), Some(&"en".to_string()));
     }
 }

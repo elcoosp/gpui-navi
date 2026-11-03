@@ -7,9 +7,10 @@ edition = "2024"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 futures = "0.3"
-parking_lot = "0.13"
 log = "0.4"
 url = "2.5"
+rustc-hash = "2.1"
+smallvec = "1"
 history-navigation = { path = "../stubs/history-navigation" }
 
 # Validation crate integrations (optional)
@@ -29,6 +30,13 @@ garde = ["dep:garde"]
 validify = ["dep:validify"]
 valico = ["dep:valico", "dep:schemars"]
 nested-search = ["dep:serde_qs"]
+
+[dev-dependencies]
+criterion = "0.8"
+
+[[bench]]
+name = "core"
+harness = false
 
 # Inherit the workspace lint policy (pedantic clippy, no unsafe).
 [lints]

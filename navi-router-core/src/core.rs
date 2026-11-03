@@ -35,9 +35,21 @@ pub enum NavigationEffect {
     NotifyListeners,
 }
 
+impl NavigationEffect {
+    /// The not-found payload when this effect is
+    /// [`NavigationEffect::NotFound`].
+    #[must_use]
+    pub fn not_found_payload(&self) -> Option<&serde_json::Value> {
+        match self {
+            NavigationEffect::NotFound { data } => data.as_ref(),
+            _ => None,
+        }
+    }
+}
+
 pub struct RouterCore {
     history: History,
-    route_tree: RouteTree,
+    route_tree: Arc<RouteTree>,
     pub current_match: Option<(HashMap<String, String>, Arc<RouteNode>)>,
     pending_navigation: Option<Location>,
     pub not_found_data: Option<serde_json::Value>,
@@ -45,7 +57,7 @@ pub struct RouterCore {
 
 impl RouterCore {
     #[must_use]
-    pub fn new(initial: Location, route_tree: RouteTree) -> Self {
+    pub fn new(initial: Location, route_tree: Arc<RouteTree>) -> Self {
         let current_match = route_tree.match_path(&initial.pathname);
         Self {
             history: History::new(initial),
@@ -61,6 +73,12 @@ impl RouterCore {
     #[must_use]
     pub fn match_path(&self, path: &str) -> Option<(HashMap<String, String>, Arc<RouteNode>)> {
         self.route_tree.match_path(path)
+    }
+
+    /// The current match by reference (no `HashMap`/`Arc` clones).
+    #[must_use]
+    pub fn current_match_ref(&self) -> Option<&(HashMap<String, String>, Arc<RouteNode>)> {
+        self.current_match.as_ref()
     }
 
     pub fn navigate(&mut self, loc: Location, options: &NavigateOptions) -> Vec<NavigationEffect> {
@@ -84,17 +102,19 @@ impl RouterCore {
             self.pending_navigation = None;
             return effects;
         };
-        self.current_match = Some((params.clone(), matched_node.clone()));
+        if matched_node.has_loader {
+            effects.push(NavigationEffect::SpawnLoader {
+                route_id: matched_node.id.clone(),
+                // Cloned only when a loader actually needs it; otherwise the
+                // map is moved straight into `current_match` below.
+                params: params.clone(),
+            });
+        }
+        self.current_match = Some((params, matched_node));
         if options.replace {
             self.history.replace(loc);
         } else {
             self.history.push(loc);
-        }
-        if matched_node.has_loader {
-            effects.push(NavigationEffect::SpawnLoader {
-                route_id: matched_node.id.clone(),
-                params,
-            });
         }
         effects.push(NavigationEffect::NotifyListeners);
         self.pending_navigation = None;
@@ -104,6 +124,12 @@ impl RouterCore {
     #[must_use]
     pub fn current_location(&self) -> Location {
         self.history.current()
+    }
+
+    /// The current location by reference (no clone).
+    #[must_use]
+    pub fn current_location_ref(&self) -> &Location {
+        self.history.current_ref()
     }
 
     #[must_use]
@@ -140,8 +166,10 @@ impl RouterCore {
 
     /// Re-resolve `current_match` against the history's current location.
     fn rematch_current(&mut self) {
-        let loc = self.history.current();
-        self.current_match = self.route_tree.match_path(&loc.pathname);
+        let matched = self
+            .route_tree
+            .match_path(&self.history.current_ref().pathname);
+        self.current_match = matched;
     }
 
     #[must_use]
@@ -155,7 +183,7 @@ impl RouterCore {
     }
 
     #[must_use]
-    pub fn route_tree(&self) -> &RouteTree {
+    pub fn route_tree(&self) -> &Arc<RouteTree> {
         &self.route_tree
     }
 
@@ -264,12 +292,12 @@ mod tests {
         }
     }
 
-    fn tree_with(routes: &[(&str, &str)]) -> RouteTree {
+    fn tree_with(routes: &[(&str, &str)]) -> std::sync::Arc<RouteTree> {
         let mut tree = RouteTree::new();
         for (id, pat) in routes {
             tree.add_route(node(id, pat));
         }
-        tree
+        std::sync::Arc::new(tree)
     }
 
     #[test]
@@ -280,7 +308,10 @@ mod tests {
 
     #[test]
     fn test_initial_no_match() {
-        let core = RouterCore::new(Location::new("/missing"), RouteTree::new());
+        let core = RouterCore::new(
+            Location::new("/missing"),
+            std::sync::Arc::new(RouteTree::new()),
+        );
         assert!(core.current_match.is_none());
     }
 
@@ -299,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_navigate_not_found() {
-        let mut core = RouterCore::new(Location::new("/"), RouteTree::new());
+        let mut core = RouterCore::new(Location::new("/"), std::sync::Arc::new(RouteTree::new()));
         let eff = core.navigate(Location::new("/x"), &NavigateOptions::default());
         assert_eq!(eff.len(), 1);
         assert!(matches!(eff[0], NavigationEffect::NotFound { .. }));
@@ -308,11 +339,11 @@ mod tests {
 
     #[test]
     fn test_navigate_with_loader_spawns_effect() {
-        let mut tree = tree_with(&[("data", "/data")]);
+        let mut tree = (*tree_with(&[("data", "/data")])).clone();
         let mut n = node("data", "/data");
         n.has_loader = true;
         tree.add_route(n);
-        let mut core = RouterCore::new(Location::new("/"), tree);
+        let mut core = RouterCore::new(Location::new("/"), std::sync::Arc::new(tree));
         let eff = core.navigate(Location::new("/data"), &NavigateOptions::default());
         assert_eq!(eff.len(), 2);
         assert!(matches!(
@@ -409,12 +440,46 @@ mod tests {
         let mut core = RouterCore::new(Location::new("/"), tree_with(&[("a", "/a")]));
         core.not_found_data = Some(serde_json::json!({"hint": "gone"}));
         let eff = core.navigate_with(Location::new("/zz"), &NavigateOptions::default(), None);
-        match &eff[0] {
-            NavigationEffect::NotFound { data } => {
-                assert_eq!(data.as_ref(), Some(&serde_json::json!({"hint": "gone"})));
-            }
-            other => panic!("expected NotFound, got {other:?}"),
-        }
+        assert!(matches!(eff[0], NavigationEffect::NotFound { .. }));
+        assert_eq!(
+            eff[0].not_found_payload(),
+            Some(&serde_json::json!({"hint": "gone"}))
+        );
+    }
+
+    #[test]
+    fn test_not_found_payload_on_other_effects() {
+        let effect = NavigationEffect::NotifyListeners;
+        assert!(effect.not_found_payload().is_none());
+        let effect = NavigationEffect::SpawnLoader {
+            route_id: "a".into(),
+            params: HashMap::new(),
+        };
+        assert!(effect.not_found_payload().is_none());
+    }
+
+    #[test]
+    fn test_current_match_ref_and_location_ref() {
+        let mut core = RouterCore::new(
+            Location::new("/?a=1"),
+            tree_with(&[("home", "/"), ("a", "/a")]),
+        );
+        // Borrowed accessors agree with the owned clones.
+        assert_eq!(
+            core.current_match_ref().map(|(_, n)| n.id.clone()),
+            Some("home".into())
+        );
+        assert_eq!(core.current_location_ref().pathname, "/");
+        assert_eq!(
+            core.current_location_ref().search["a"],
+            serde_json::json!(1)
+        );
+        core.navigate(Location::new("/a"), &NavigateOptions::default());
+        assert_eq!(
+            core.current_match_ref().map(|(_, n)| n.id.clone()),
+            Some("a".into())
+        );
+        assert_eq!(core.current_location_ref().pathname, "/a");
     }
 
     #[test]
@@ -437,7 +502,7 @@ mod tests {
 
     #[test]
     fn test_not_found_data_default_none() {
-        let core = RouterCore::new(Location::new("/"), RouteTree::new());
+        let core = RouterCore::new(Location::new("/"), std::sync::Arc::new(RouteTree::new()));
         assert!(core.not_found_data.is_none());
     }
 
@@ -509,11 +574,11 @@ mod tests {
 
     #[test]
     fn test_transact_spawn_loader_effects_kept() {
-        let mut tree = tree_with(&[("data", "/data")]);
+        let mut tree = (*tree_with(&[("data", "/data")])).clone();
         let mut n = node("data", "/data");
         n.has_loader = true;
         tree.add_route(n);
-        let mut core = RouterCore::new(Location::new("/"), tree);
+        let mut core = RouterCore::new(Location::new("/"), std::sync::Arc::new(tree));
         let eff = core.transact(&[NavOp::Push(Location::new("/data"))]);
         assert_eq!(eff.len(), 2);
         assert!(matches!(

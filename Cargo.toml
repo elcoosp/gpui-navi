@@ -68,6 +68,17 @@ rs-query = { path = "../rs-query" }
 debug = "line-tables-only"
 incremental = false
 
+# Release builds ship to end users: thin LTO crosses crate boundaries
+# (the router is a multi-crate workspace) and a single codegen unit gives
+# LLVM whole-graph inlining.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# Benchmarks keep symbols so samply/perf can attribute samples.
+[profile.bench]
+debug = true
+
 # Workspace-wide lint policy. Pedantic is the baseline; CI runs clippy with
 # `-D warnings` so any new pedantic hit fails the build. Suppression is done
 # with targeted `#[expect]` (which errors when stale), never blanket `allow`.

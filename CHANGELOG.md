@@ -88,6 +88,8 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(core)* Wire criterion harness configurations into the manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true42f9fca4c57e115d12547a890534deb17a15f545))
 - *(router)* Wire criterion benchmarks and include rustc-hash keys  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1dd78649d727586e1dba8e8ad09a02e453767b9e))
 - *(router)* Fix trailing formatting assignment statement inside scroller  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truef7ab12405e7d7b13608afd3bcf14c336d7fbe724))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true8d705fdfe55724bf0617d5fc33602af5297b9339))
+- Logo  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueda0f950c6e5fca4f95ae966c2362e435d211915e))
 
 ### ⚡ Performance
 

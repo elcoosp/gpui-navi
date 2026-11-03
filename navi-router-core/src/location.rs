@@ -120,8 +120,20 @@ fn append_search_value<T: url::form_urlencoded::Target>(
 }
 
 fn coerce_scalar(value: &str) -> serde_json::Value {
-    if value.is_empty() {
-        return serde_json::Value::Null;
+    // Fast path: numeric-looking values (digit or leading `-`) skip the
+    // boolean checks; everything else keeps the exact original semantics —
+    // including the f64 fallback that maps `NaN`/`inf` to JSON null.
+    match value.as_bytes().first() {
+        None => return serde_json::Value::Null,
+        Some(&b) if b.is_ascii_digit() || b == b'-' => {
+            if let Ok(i) = value.parse::<i64>() {
+                return serde_json::json!(i);
+            }
+            if let Ok(f) = value.parse::<f64>() {
+                return serde_json::json!(f);
+            }
+        }
+        _ => {}
     }
     if let Ok(i) = value.parse::<i64>() {
         return serde_json::json!(i);
@@ -246,6 +258,31 @@ mod tests {
         assert_eq!(loc.search["no"], json!(false));
         assert_eq!(loc.search["empty"], serde_json::Value::Null);
         assert_eq!(loc.search["s"], json!("abc"));
+    }
+
+    #[test]
+    fn test_query_coercion_f64_quirks_preserved() {
+        // `NaN`/`inf` parse as f64 but cannot be JSON numbers: they must keep
+        // coercing to null (pins the non-fast-path fallback semantics).
+        let loc = Location::new("/x?a=NaN&b=inf&c=-inf&d=%2B1.5&e=-7");
+        assert_eq!(loc.search["a"], serde_json::Value::Null);
+        assert_eq!(loc.search["b"], serde_json::Value::Null);
+        assert_eq!(loc.search["c"], serde_json::Value::Null);
+        assert_eq!(loc.search["d"], json!(1.5));
+        assert_eq!(loc.search["e"], json!(-7));
+        // A literal `+` decodes to a space, so it is NOT a number.
+        let loc = Location::new("/x?d=+1.5");
+        assert_eq!(loc.search["d"], json!(" 1.5"));
+        // An escaped plus is a literal sign: the i64 fallback path.
+        let loc = Location::new("/x?v=%2B5");
+        assert_eq!(loc.search["v"], json!(5));
+        // A leading-dash non-number falls through to a string.
+        let loc = Location::new("/x?v=-abc");
+        assert_eq!(loc.search["v"], json!("-abc"));
+        // Boolean checks are case-insensitive.
+        let loc = Location::new("/x?a=TRUE&b=False");
+        assert_eq!(loc.search["a"], json!(true));
+        assert_eq!(loc.search["b"], json!(false));
     }
 
     #[test]

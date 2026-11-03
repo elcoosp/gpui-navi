@@ -3,13 +3,13 @@
 use crate::RouterHandle;
 use crate::state::NotFoundMode;
 use quoin_ui::Node;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
 type NodeConstructor = Arc<dyn Fn() -> Node + Send + Sync>;
 
-static REGISTRY: LazyLock<Mutex<HashMap<String, NodeConstructor>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+static REGISTRY: LazyLock<Mutex<FxHashMap<String, NodeConstructor>>> =
+    LazyLock::new(|| Mutex::new(FxHashMap::default()));
 
 /// Register the node constructor rendered by an [`Outlet`] for a route id.
 ///
@@ -105,6 +105,7 @@ impl Outlet {
                 .build();
         };
 
+        let leaf_node_id = leaf_node.id.clone();
         let ancestors = state.route_tree.ancestors(&leaf_node.id);
         if depth >= ancestors.len() {
             log::warn!("Outlet depth {depth} exceeds ancestors length");
@@ -117,7 +118,6 @@ impl Outlet {
                 .build();
         }
         let node = &ancestors[depth];
-        let leaf_node_id = node.id.clone();
         let constructor = route_component(&node.id);
 
         let not_found_constructor = if constructor.is_some() {

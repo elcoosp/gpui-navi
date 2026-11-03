@@ -37,7 +37,7 @@ pub fn scroll_restoration_node(handle_id: impl Into<String>) -> Node {
                 handle
                     .read()
                     .scroll_positions
-                    .insert(key.to_string(), offset)
+                    .insert(key.to_string(), offset);
             }
         })
         .skip_once({

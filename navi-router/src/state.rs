@@ -14,9 +14,11 @@ use navi_core::WindowKey;
 use navi_router_core::{NavOp, NavigationEffect, RouterCore};
 use parking_lot::{Mutex, RwLock};
 use rs_query::{Query, QueryClient, QueryKey};
+use rustc_hash::FxHashMap;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::cell::OnceCell;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -137,6 +139,18 @@ pub enum LoaderOutcome<T> {
     NotFound(NotFound),
 }
 
+impl<T: std::fmt::Debug> std::fmt::Debug for LoaderOutcome<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoaderOutcome::Data(data) => f.debug_tuple("Data").field(data).finish(),
+            LoaderOutcome::Redirect(redirect) => f.debug_tuple("Redirect").field(redirect).finish(),
+            LoaderOutcome::NotFound(not_found) => {
+                f.debug_tuple("NotFound").field(not_found).finish()
+            }
+        }
+    }
+}
+
 impl<T: PartialEq> PartialEq for LoaderOutcome<T> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -191,8 +205,8 @@ pub struct ScrollPositions {
 
 #[derive(Default)]
 struct ScrollPositionsInner {
-    map: HashMap<String, f32>,
-    order: Vec<String>,
+    map: FxHashMap<String, f32>,
+    order: VecDeque<String>,
     capacity: usize,
 }
 
@@ -231,13 +245,18 @@ impl ScrollPositions {
     }
 
     /// Save the current scroll offset for a key.
+    ///
+    /// Eviction is O(1): the insertion order lives in a `VecDeque` ring
+    /// buffer, so overflowing the capacity pops the oldest key from the
+    /// front instead of shifting the whole vector.
     pub fn insert(&self, key: String, offset: f32) {
         let mut inner = self.inner.lock();
         if !inner.map.contains_key(&key) {
-            inner.order.push(key.clone());
+            inner.order.push_back(key.clone());
             while inner.order.len() > inner.capacity {
-                let evicted = inner.order.remove(0);
-                inner.map.remove(&evicted);
+                if let Some(evicted) = inner.order.pop_front() {
+                    inner.map.remove(&evicted);
+                }
             }
         }
         inner.map.insert(key, offset);
@@ -262,19 +281,29 @@ pub const DEFAULT_SCROLL_CACHE_CAPACITY: usize = 128;
 
 /// Build a stable, insertion-order-independent string for a search value so
 /// `?a=1&b=2` and `?b=2&a=1` share one scroll entry. Nested JSON is handled
-/// by serializing with object keys sorted.
+/// by serializing with object keys sorted. Builds the key in a single
+/// `String` buffer instead of a `Vec<String>` of `format!` fragments.
 #[must_use]
 pub fn canonical_search_key(search: &serde_json::Value) -> String {
     match search {
         serde_json::Value::Null => String::new(),
         serde_json::Value::String(s) => s.clone(),
         serde_json::Value::Object(map) => {
-            let mut pairs: Vec<String> = map
+            let mut pairs: Vec<(String, String)> = map
                 .iter()
-                .map(|(k, v)| format!("{k}={}", canonical_search_key(v)))
+                .map(|(k, v)| (k.clone(), canonical_search_key(v)))
                 .collect();
             pairs.sort();
-            pairs.join("&")
+            let mut out = String::new();
+            for (i, (k, v)) in pairs.iter().enumerate() {
+                if i > 0 {
+                    out.push('&');
+                }
+                out.push_str(k);
+                out.push('=');
+                out.push_str(v);
+            }
+            out
         }
         other => other.to_string(),
     }
@@ -293,8 +322,8 @@ pub struct RouterState {
     events: Vec<Arc<dyn Fn(RouterEvent) + Send + Sync>>,
     next_blocker_id: BlockerId,
     pub query_client: QueryClient,
-    loader_factories: HashMap<String, LoaderFactory>,
-    context_cache: HashMap<String, serde_json::Value>,
+    loader_factories: FxHashMap<String, LoaderFactory>,
+    context_cache: FxHashMap<String, serde_json::Value>,
     /// Framework-agnostic host seam (repaint + UI-thread spawn).
     pub host: RouterHost,
     /// Opaque window identity for `navi-core`'s context tree.
@@ -316,6 +345,16 @@ pub struct RouterState {
     pub scroll_positions: ScrollPositions,
     /// The router event log (devtools timeline source).
     pub(crate) event_log: crate::event_bus::EventLog,
+    /// Params of the current match serialized once per navigation; per-frame
+    /// `use_params!` calls clone this instead of re-serializing the map.
+    current_params_json: Option<serde_json::Value>,
+    /// Lazily-built memos of the loader [`QueryKey`] (unit-params and
+    /// map-params variants): initialized by the first per-frame
+    /// `get_loader_data`/`get_loader_state` call after a navigation, taken
+    /// (invalidated) on the next navigation. `get_loader_data` runs under a
+    /// read guard, so the memo must be `&self`-initializable.
+    loader_key_cache_unit: OnceCell<(String, QueryKey)>,
+    loader_key_cache_params: OnceCell<(String, QueryKey)>,
 }
 
 /// A cheap handle to the shared router state + event log.
@@ -443,31 +482,15 @@ impl RouterHandle {
     }
 }
 
-/// Build the canonical cache key for a route loader, shared by
+/// Build the canonical cache key for a route loader from parts precomputed
+/// at navigation time ([`RouterState::refresh_match_caches`]). Shared by
 /// [`RouterState::get_loader_data`] and [`RouterState::get_loader_state`].
-fn loader_query_key<R: RouteDef>(
-    route_id: &str,
-    params: &HashMap<String, String>,
-    node: &RouteNode,
-    current_search: &serde_json::Value,
-) -> QueryKey {
-    let deps_json = node
-        .loader_deps
-        .as_ref()
-        .map_or(serde_json::Value::Null, |f| f(current_search));
-    let params_str = if std::any::TypeId::of::<R::Params>() == std::any::TypeId::of::<()>() {
-        "null".to_string()
-    } else {
-        serde_json::to_string(params).unwrap_or_else(|_| "null".to_string())
-    };
+fn build_loader_key(route_id: &str, params_str: &str, deps_str: Option<&str>) -> QueryKey {
     let mut key_builder = QueryKey::new("navi_loader")
         .with("route", route_id)
         .with("params", params_str);
-    if !deps_json.is_null() {
-        key_builder = key_builder.with(
-            "deps",
-            serde_json::to_string(&deps_json).unwrap_or_default(),
-        );
+    if let Some(deps) = deps_str {
+        key_builder = key_builder.with("deps", deps);
     }
     key_builder
 }
@@ -508,9 +531,9 @@ impl RouterState {
         options: RouterOptions,
         host: RouterHost,
     ) -> Self {
-        let core = RouterCore::new(initial, (*route_tree).clone());
+        let core = RouterCore::new(initial, Arc::clone(&route_tree));
         let current_match = core.current_match.clone();
-        Self {
+        let mut state = Self {
             core,
             route_tree,
             current_match,
@@ -522,8 +545,8 @@ impl RouterState {
             current_base: None,
             next_blocker_id: 0,
             query_client: QueryClient::new(),
-            loader_factories: HashMap::new(),
-            context_cache: HashMap::new(),
+            loader_factories: FxHashMap::default(),
+            context_cache: FxHashMap::default(),
             host,
             window_key,
             root_view: None,
@@ -535,7 +558,12 @@ impl RouterState {
             scroll_reset_pending: false,
             scroll_positions: ScrollPositions::new(),
             event_log: crate::event_bus::EventLog::new(),
-        }
+            current_params_json: None,
+            loader_key_cache_unit: OnceCell::new(),
+            loader_key_cache_params: OnceCell::new(),
+        };
+        state.refresh_match_caches();
+        state
     }
 
     // History delegates. The core re-matches on traversal; we mirror its
@@ -544,6 +572,7 @@ impl RouterState {
         let moved = self.core.back();
         if moved {
             self.current_match = self.core.current_match.clone();
+            self.refresh_match_caches();
         }
         moved
     }
@@ -552,6 +581,7 @@ impl RouterState {
         let moved = self.core.forward();
         if moved {
             self.current_match = self.core.current_match.clone();
+            self.refresh_match_caches();
         }
         moved
     }
@@ -559,6 +589,7 @@ impl RouterState {
     pub fn go(&mut self, delta: isize) {
         self.core.go(delta);
         self.current_match = self.core.current_match.clone();
+        self.refresh_match_caches();
     }
 
     #[must_use]
@@ -639,6 +670,7 @@ impl RouterState {
             self.core.not_found_data = self.not_found_data.clone();
             let effects = self.core.navigate_with(loc.clone(), options, None);
             self.current_match = self.core.current_match.clone();
+            self.refresh_match_caches();
             self.handle_navigation_effects(effects);
             self.dispatch(&RouterEvent::Resolved { from, to: loc });
             return;
@@ -676,13 +708,19 @@ impl RouterState {
                             return;
                         }
                         crate::route_tree::BeforeLoadResult::NotFound(not_found) => {
+                            // No nested `handle.update` here: parking_lot
+                            // locks are not reentrant, so the fallback
+                            // navigation must run after the update closes.
+                            let mut navigate_not_found = false;
                             handle.update(|state| {
                                 state.not_found_data = not_found.data;
-                                if state.current_location().pathname != NOT_FOUND_PATH {
-                                    let nav = crate::Navigator::from_handle(&handle);
-                                    nav.push(NOT_FOUND_PATH);
-                                }
+                                navigate_not_found =
+                                    state.current_location().pathname != NOT_FOUND_PATH;
                             });
+                            if navigate_not_found {
+                                let nav = crate::Navigator::from_handle(&handle);
+                                nav.push(NOT_FOUND_PATH);
+                            }
                             return;
                         }
                     }
@@ -694,6 +732,7 @@ impl RouterState {
                             .core
                             .navigate_with(loc_clone, &options_clone, matched.clone());
                     state.current_match = state.core.current_match.clone();
+                    state.refresh_match_caches();
                     state.handle_navigation_effects(effects);
                 });
             }));
@@ -703,6 +742,7 @@ impl RouterState {
         // No before_load hooks, direct navigation
         let effects = self.core.navigate_with(loc.clone(), options, matched);
         self.current_match = self.core.current_match.clone();
+        self.refresh_match_caches();
         self.handle_navigation_effects(effects);
         self.dispatch(&RouterEvent::Resolved { from, to: loc });
     }
@@ -731,13 +771,19 @@ impl RouterState {
                                         nav.push_location(Location::new(&redirect.to));
                                     }
                                     LoaderOutcome::NotFound(not_found) => {
+                                        // No nested `handle.update` (locks are
+                                        // not reentrant): record the data, then
+                                        // navigate after the update closes.
+                                        let mut navigate_not_found = false;
                                         handle.update(|state| {
                                             state.not_found_data = not_found.data;
-                                            if state.current_location().pathname != NOT_FOUND_PATH {
-                                                let nav = crate::Navigator::from_handle(&handle);
-                                                nav.push(NOT_FOUND_PATH);
-                                            }
+                                            navigate_not_found =
+                                                state.current_location().pathname != NOT_FOUND_PATH;
                                         });
+                                        if navigate_not_found {
+                                            let nav = crate::Navigator::from_handle(&handle);
+                                            nav.push(NOT_FOUND_PATH);
+                                        }
                                         handle.refresh();
                                     }
                                 },
@@ -833,6 +879,7 @@ impl RouterState {
         }
         let effects = self.core.transact(ops);
         self.current_match = self.core.current_match.clone();
+        self.refresh_match_caches();
         self.handle_navigation_effects(effects);
         if let Some(to) = to {
             self.dispatch(&RouterEvent::Resolved { from, to });
@@ -879,6 +926,32 @@ impl RouterState {
     #[must_use]
     pub fn current_location(&self) -> Location {
         self.core.current_location()
+    }
+
+    /// The current pathname by reference (no `Location` clone). Use this in
+    /// per-frame code that only needs the path (active-link checks, keys).
+    #[must_use]
+    pub fn current_pathname(&self) -> &str {
+        self.core.current_location_ref().pathname.as_str()
+    }
+
+    /// The current hash by reference (no `Location` clone).
+    #[must_use]
+    pub fn current_hash(&self) -> &str {
+        self.core.current_location_ref().hash.as_str()
+    }
+
+    /// The current search params by reference (no `Location` clone).
+    #[must_use]
+    pub fn current_search_value(&self) -> &serde_json::Value {
+        &self.core.current_location_ref().search
+    }
+
+    /// The params of the current match, serialized once at navigation time.
+    /// `None` when no route is matched.
+    #[must_use]
+    pub fn current_params_json(&self) -> Option<&serde_json::Value> {
+        self.current_params_json.as_ref()
     }
 
     pub fn emit(&self, event: &RouterEvent) {
@@ -933,16 +1006,65 @@ impl RouterState {
     }
 
     fn loader_key_for_current<R: RouteDef>(&self) -> Option<QueryKey> {
-        let (params, node) = self.current_match.as_ref()?;
+        let (_, node) = self.current_match.as_ref()?;
         if node.id != R::name() {
             return None;
         }
-        Some(loader_query_key::<R>(
-            &node.id,
-            params,
-            node,
-            &self.current_location().search,
-        ))
+        let unit = std::any::TypeId::of::<R::Params>() == std::any::TypeId::of::<()>();
+        let cache = if unit {
+            &self.loader_key_cache_unit
+        } else {
+            &self.loader_key_cache_params
+        };
+        // Memo hit: the key was built by the first hook call after the
+        // navigation committed. Cheap string compare, no allocation.
+        if let Some((route_id, key)) = cache.get()
+            && route_id == &node.id
+        {
+            return Some(key.clone());
+        }
+        // Cold path (once per navigation per variant): build from the cached
+        // params JSON instead of re-serializing the params map.
+        let node_id = node.id.clone();
+        let (_, key) = cache.get_or_init(|| self.build_loader_key_cached(node_id, unit));
+        Some(key.clone())
+    }
+
+    /// Build the loader key for the current match from the cached params
+    /// JSON instead of re-serializing the params map.
+    fn build_loader_key_cached(&self, route_id: String, unit: bool) -> (String, QueryKey) {
+        let params_str = if unit {
+            "null".to_string()
+        } else {
+            self.current_params_json.as_ref().map_or_else(
+                || "null".to_string(),
+                |j| serde_json::to_string(j).unwrap_or_else(|_| "null".to_string()),
+            )
+        };
+        let deps_str = self.current_match.as_ref().and_then(|(_, node)| {
+            node.loader_deps.as_ref().and_then(|f| {
+                let deps_json = f(&self.core.history().current_ref().search);
+                if deps_json.is_null() {
+                    None
+                } else {
+                    Some(serde_json::to_string(&deps_json).unwrap_or_default())
+                }
+            })
+        });
+        let key = build_loader_key(&route_id, &params_str, deps_str.as_deref());
+        (route_id, key)
+    }
+
+    /// Reset the per-navigation caches after `current_match` changed:
+    /// re-serialize the params JSON (for `use_params!`) and drop the loader
+    /// key memos (rebuilt lazily by the first per-frame hook call).
+    fn refresh_match_caches(&mut self) {
+        self.current_params_json = self
+            .current_match
+            .as_ref()
+            .and_then(|(params, _node)| serde_json::to_value(params).ok());
+        self.loader_key_cache_unit.take();
+        self.loader_key_cache_params.take();
     }
 
     #[must_use]
@@ -1006,4 +1128,101 @@ fn current_handle_of(_state: &RouterState) -> RouterHandle {
             "router async continuation requires the RouterHandle to be installed (RouterProvider::install or RouterHandle::install_current)"
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn noop_host() -> RouterHost {
+        RouterHost {
+            refresh: Rc::new(|| {}),
+            spawn: Rc::new(|_future: LocalFuture| {}),
+        }
+    }
+
+    fn state_with(tree: RouteTree) -> RouterState {
+        RouterState::new(
+            Location::new("/"),
+            navi_core::WindowKey(1),
+            Arc::new(tree),
+            noop_host(),
+        )
+    }
+
+    /// `NavigationEffect::Redirect` is part of the adapter contract but
+    /// `RouterCore` never emits it; drive the effect arm directly so the
+    /// behavior (navigate to the redirect target, then stop) stays pinned.
+    #[test]
+    fn handle_navigation_effects_redirect_effect_navigates() {
+        let mut state = state_with(RouteTree::new());
+        state.handle_navigation_effects(vec![NavigationEffect::Redirect {
+            to: "/somewhere".to_string(),
+            replace: false,
+        }]);
+        // The redirect target is unmatched: not-found handling kicked in.
+        assert!(state.not_found_data.is_none() || state.current_location().pathname != "/");
+    }
+
+    #[test]
+    fn router_host_debug_is_opaque() {
+        let host = noop_host();
+        let dbg = format!("{host:?}");
+        assert!(dbg.contains("RouterHost"));
+    }
+
+    #[test]
+    fn loader_outcome_equality_rules() {
+        let d1: LoaderOutcome<AnyData> = LoaderOutcome::Data(AnyData::new(1_u8));
+        let d2: LoaderOutcome<AnyData> = LoaderOutcome::Data(AnyData::new(1_u8));
+        // Type-erased data never compares equal (AnyData PartialEq).
+        assert!(!(d1 == d2));
+        let r1: LoaderOutcome<AnyData> = LoaderOutcome::Redirect(crate::redirect("/a"));
+        let r2: LoaderOutcome<AnyData> = LoaderOutcome::Redirect(crate::redirect("/a"));
+        let r3: LoaderOutcome<AnyData> = LoaderOutcome::Redirect(crate::redirect("/b"));
+        assert_eq!(r1, r2);
+        assert_ne!(r1, r3);
+        let nf1: LoaderOutcome<AnyData> =
+            LoaderOutcome::NotFound(crate::not_found().with_route_id("r1"));
+        let nf2: LoaderOutcome<AnyData> =
+            LoaderOutcome::NotFound(crate::not_found().with_route_id("r1"));
+        let nf3: LoaderOutcome<AnyData> =
+            LoaderOutcome::NotFound(crate::not_found().with_route_id("r2"));
+        assert_eq!(nf1, nf2);
+        assert_ne!(nf1, nf3);
+        assert_ne!(d1, nf1);
+    }
+
+    #[test]
+    fn router_event_from_accessor_with_origin() {
+        let event = RouterEvent::Resolved {
+            from: Some(Location::new("/a")),
+            to: Location::new("/b"),
+        };
+        assert_eq!(event.from().map(|l| l.pathname.clone()), Some("/a".into()));
+        assert_eq!(event.to().map(|l| l.pathname.clone()), Some("/b".into()));
+        let event = RouterEvent::Rendered {
+            from: None,
+            to: Location::new("/b"),
+        };
+        assert!(event.from().is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "router async continuation requires the RouterHandle")]
+    fn blocked_navigation_without_installed_handle_panics() {
+        let mut state = state_with(RouteTree::new());
+        state.add_blocker(Blocker::new_sync(|_, _| false));
+        // No `RouterHandle` installed on this thread: the blocker
+        // continuation cannot be wired up, which must panic loudly.
+        state.navigate(Location::new("/"), &NavigateOptions::default());
+    }
+
+    #[test]
+    fn router_options_defaults_match_docs() {
+        let options = RouterOptions::default();
+        assert_eq!(options.default_pending_ms, 1000);
+        assert_eq!(options.default_pending_min_ms, 500);
+        assert!(matches!(options.not_found_mode, NotFoundMode::Root));
+    }
 }

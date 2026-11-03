@@ -123,12 +123,12 @@ jobs:
         with:
           fetch-depth: 0
       - name: Download changelog
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: changelog
           path: ./release-notes
       - name: Download artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: navi-codegen-*
           path: ./assets

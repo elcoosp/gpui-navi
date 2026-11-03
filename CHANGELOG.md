@@ -82,6 +82,22 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - Update router.rs  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true31cac768f2617fb72c14587a7ed744c44f8e9e03))
 - *(router)* Rewire router library to build on quoin core and quoin ui  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true23f8a3e7cef6e4d555943a9ec47ac2547b2e77cd))
 - *(test)* Adapt integration test dependencies for headless execution  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true2da784003ea974a5b4a4f50080625c28a165958d))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true3bf9fa34535dd230a0c71d3c992895f4d26ec7b8))
+- Synchronize workspace lockfile for criterion benchmarking suite  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truefce16ed1a3867ba72a7548d7ac968d4620c83043))
+- Configure thin LTO tuning rules and symbols preservation  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truea5152e676a7691d6e15b219bcd1d81b21f50a5dd))
+- *(core)* Wire criterion harness configurations into the manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true42f9fca4c57e115d12547a890534deb17a15f545))
+- *(router)* Wire criterion benchmarks and include rustc-hash keys  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1dd78649d727586e1dba8e8ad09a02e453767b9e))
+- *(router)* Fix trailing formatting assignment statement inside scroller  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truef7ab12405e7d7b13608afd3bcf14c336d7fbe724))
+
+### ⚡ Performance
+
+
+- *(core)* Author route trie matching and queries coercion benchmarks  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true69bd50de4828607d5407188d308cf95d099d9959))
+- *(location)* Optimize scalar parsing queries coercion rules  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true0524e6dd749aefe0f89e55d2dc0759396dfadc64))
+- *(core)* Craft zero-copy radix trie matching with stack bindings  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true439af8505dce31d4a5c987e167c8f1335f344af0))
+- *(router)* Bench navigation transitions and active links rendering  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true359a5bb8d455e8920ed310ec7733e73b08d95c65))
+- *(router)* Optimize path active predicates using byte checks  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truea22723aba0faad36d7c0bd2b36a26537a6b47566))
+- *(router)* Implement per-navigation caches and lazy queries key memos  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truef5f1665f5ead4d120991119aa054addd893f07be))
 
 ### 🐛 Bug Fixes
 
@@ -168,6 +184,9 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(readme)* Update README with new features, development workflow and quality gates  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true5530ac7e57450fe1736c2e0c47b4721f30b71224))
 - *(readme)* Update dependency stack documentation for gpui-kit migration  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true9d61a86ed18daac9dfbdb2ab9f15709caabdc5cb))
 - *(brainstorm)* Mark gpui-kit migration as complete and detail API deltas  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true8af69790a9f7e4204938598879d592fb00681dab))
+- *(readme)* Rewrite performance section highlighting allocation-free loops  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueeb6ed84075c902ecbb2ef74289fc39d0e6a02e10))
+- *(benchmarks)* Document criterion performance metrics snapshot rules  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6f0325e50405eff8e643947316dfa861594f8044))
+- *(performance)* Document state-of-the-art allocation engineering criteria  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true90c0b63bb3be0eeba48d3fa5d94766616c7f669e))
 
 ### 🚀 Features
 
@@ -240,6 +259,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(history-navigation)* Add go clamping, len/is_empty and comprehensive tests  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueff5ac0713479f1b610cac4b00dbdc1d1c0b04e2e))
 - *(core)* Introduce WindowKey opaque window identifier replacement  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true200ee8ee9681f82d275c39d12a86b3e486fabd65))
 - *(example-app)* Add screenshot tour driver orchestration logic  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truebf0d6ed817c07f499cfb30a11c3d2f2c258a7c71))
+- *(router)* Engineer bounded ring buffer for the events timeline  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueac7dab4f41655f8b056da88f03303872c9a39278))
 
 ### 🚜 Refactor
 
@@ -332,6 +352,10 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(router)* Forward quoin portable sleep macros to the crate root  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true15da86cd0df41e5c0b7dc114baada31b64122f0e))
 - *(router)* Adapt imperative Navigator to mutate state via router handles  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true565091e754f0800dadab09f5d44405e99ca86603))
 - *(router)* Re engineer RouterState under the zero framework paradigm  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueb8160a01cde81cc1fb222201b2bcd21170528ae0))
+- *(macros)* Switch params and search hooks to evaluate caches  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueabd238472bfab56417d9d37cd7b7604f1635e85a))
+- *(core)* Accept shared route tree reference inside initializers  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true7e135487e193b48f61eea0a18d8b656aabe9960e))
+- *(core)* Purge redundant mutex lock inside browser history stack  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6e8e5864764118c9a8da493831f1c6d6d155561c))
+- *(router)* Cache route identifiers strings in outlet walks  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truef7d6421b17378ed4fc1a207c04193dc3568029a2))
 
 ### 🧪 Testing
 
@@ -343,6 +367,8 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(navi-router-core)* Add Debug derive and unit tests for Redirect and NotFound  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truef692575adddf8eecce901070e6e57e425b9f6890))
 - *(navi-test)* Expand integration tests: macro expansion, RouterState, transactions, events  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truec14642fbad071d49b8e6cc26c46e8d40a289a1c4))
 - Deploy headless integration test suites over queued hosts  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true99ba18fd194b16fbb262252e0b5108a377154a8a))
+- Deploy comprehensive headless integration regression suites  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true51c9e93cbf7a1817d7f8592b2d96498517b924a3))
+- Deploy comprehensive headless integration regression suites  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truea5a82e7701b3c888383661a370a51709d75b9325))
 
 ### 💞 New Contributors
 - @elcoosp made their first contribution

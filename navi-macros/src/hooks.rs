@@ -7,11 +7,10 @@ pub fn use_params(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         {
             let state = ::navi_router::RouterHandle::current();
-            let current_match = state.read().current_match.clone()
+            // Params are serialized once per navigation by the router state;
+            // this hook only clones the cached JSON value.
+            let json_value = state.read().current_params_json().cloned()
                 .expect("use_params called but no route matched");
-            let params_map = &current_match.0;
-            let json_value = serde_json::to_value(params_map)
-                .expect("Failed to convert params to JSON");
             let typed_params: <#route_ty as ::navi_router::RouteDef>::Params =
                 serde_json::from_value(json_value)
                     .expect("Failed to deserialize route params");
@@ -26,9 +25,9 @@ pub fn use_search(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         {
             let state = ::navi_router::RouterHandle::current();
-            let location = state.read().current_location();
-            let search_value = &location.search;
-            match serde_json::from_value::<<#route_ty as ::navi_router::RouteDef>::Search>(search_value.clone()) {
+            // Borrowed read: no full `Location` clone per frame.
+            let search_value = state.read().current_search_value().clone();
+            match serde_json::from_value::<<#route_ty as ::navi_router::RouteDef>::Search>(search_value) {
                 Ok(typed) => typed,
                 Err(e) => {
                     log::warn!("Failed to deserialize search params for {}: {}, using default", stringify!(#route_ty), e);

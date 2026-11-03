@@ -226,7 +226,27 @@ just clippy      # workspace lints (pedantic), zero warnings, per optional featu
 just fmt         # rustfmt check
 just verify      # fmt + clippy + tests
 just coverage    # cargo-llvm-cov summary
+cargo bench --bench core --bench adapter   # criterion benchmarks
 ```
+
+## Performance
+
+The router is engineered for allocation-free hot paths — see
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the design and
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md) for full before/after numbers:
+
+- **Zero-copy route matching**: stack-collected parameter bindings, interned
+  `Arc<str>` segment names, FxHash static-child lookup, `HashMap` materialized
+  once on success (matching is 14–38% faster across the board).
+- **Per-frame paths allocate nothing**: `use_params!`/`use_search!`/
+  `use_loader_data!` read navigation-time caches; `Link` active checks are
+  branch-and-byte comparisons (−94%); loader `QueryKey`s are memoized per
+  navigation.
+- **Bounded memory everywhere**: ring-buffered event log, capped preload
+  registry, O(1) scroll-eviction, `Arc<RouteTree>` shared between the core
+  and the adapter (no deep tree clone at startup).
+- **Lock-free single-owner history**: no `Mutex` in the navigation path
+  (back/forward is −67%).
 
 Quality gates (also enforced in CI):
 

@@ -1,0 +1,56 @@
+[package]
+name = "navi-demo-core"
+version = "0.2.0"
+edition = "2024"
+publish = false
+description = "Framework-agnostic demo shared by every Navi example app (gpui, dioxus, leptos, xilem, floem)"
+
+[dependencies]
+navi-core = { path = "../../navi-core" }
+navi-router = { path = "../../navi-router" }
+navi-macros = { path = "../../navi-macros" }
+quoin-core = { path = "../../../quoin/quoin-core" }
+quoin-ui = { path = "../../../quoin/quoin-ui" }
+rs-query = { path = "../../../rs-query" }
+# The facade: exactly one framework feature is enabled at a time; the
+# per-framework feature forwarding below drives both the reactive context
+# and the `component!`/`quoin_render!` emitter backend.
+quoin = { path = "../../../quoin/quoin", optional = true }
+# In scope for the macro-generated backend code (`gpui::…`, `dioxus::…`,
+# `leptos::…`, `xilem::…`, `floem::…` paths).
+gpui = { package = "gpui-pre", version = "=0.3.10", optional = true }
+# The GPUI emitter lowers interactive widgets to gpui-component types, and
+# the cross-thread refresh pump uses an async channel.
+gpui-component = { version = "0.8.1", optional = true }
+smol = { version = "2", optional = true }
+dioxus = { version = "0.7", default-features = false, optional = true }
+leptos = { version = "0.9.0-rc1", default-features = false, optional = true }
+xilem = { git = "https://github.com/linebender/xilem", branch = "main", optional = true }
+floem = { git = "https://github.com/lapce/floem", branch = "main", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+send_wrapper = "0.6"
+
+[features]
+default = []
+# Framework selection: forwarded to the quoin facade. Enabling one also
+# gates the shared `NaviDemo` shell (which needs an emitter backend).
+gpui = ["dep:quoin", "quoin/gpui", "dep:gpui", "dep:gpui-component", "dep:smol"]
+dioxus = ["dep:quoin", "quoin/dioxus", "dep:dioxus"]
+leptos = ["dep:quoin", "quoin/leptos", "dep:leptos"]
+xilem = ["dep:quoin", "quoin/xilem", "dep:xilem"]
+floem = ["dep:quoin", "quoin/floem", "dep:floem"]
+
+[build-dependencies]
+navi-codegen = { path = "../../navi-codegen" }
+
+
+# Floem's main branch depends on `muda` (with the `gtk` feature on Linux,
+# which needs GTK dev files); reuse quoin's in-memory stub.
+[patch.crates-io]
+muda = { path = "../../../quoin/third_party/muda-stub" }
+
+
+# Standalone example workspace: detached from the navi workspace above.
+[workspace]

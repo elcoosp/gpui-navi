@@ -1,0 +1,15 @@
+# Linker search path for the `libxkbcommon.so` / `libxkbcommon-x11.so`
+# linker names on systems that ship the runtime libraries but not their
+# development packages (the extracted .deb payload under
+# ~/.local/opt/xkb provides those names). Mirrors quoin's workspace
+# config; on machines with `libxkbcommon-dev` + `libxkbcommon-x11-dev`
+# installed the system paths already resolve and this entry is simply
+# redundant.
+#
+# `[build] rustflags` (not the RUSTFLAGS env var) is used on purpose:
+# `cargo test` strips RUSTFLAGS from the environment of spawned test
+# binaries, while a config-file flag is discovered by any nested cargo
+# (e.g. trybuild-driven UI tests) as it walks up from its working
+# directory.
+[build]
+rustflags = ["-L", "native=/home/z/.local/opt/xkb/usr/lib/x86_64-linux-gnu"]

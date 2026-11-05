@@ -1,0 +1,16 @@
+[package]
+name = "navi-demo-xilem"
+version = "0.2.0"
+edition = "2024"
+publish = false
+description = "Navi demo on Xilem (quoin xilem backend)"
+
+[dependencies]
+navi-demo-core = { path = "../demo-core", features = ["xilem"] }
+xilem = { git = "https://github.com/linebender/xilem", branch = "main" }
+quoin = { path = "../../../quoin/quoin", features = ["xilem"] }
+
+
+
+# Standalone example workspace: detached from the navi workspace above.
+[workspace]

@@ -1,0 +1,15 @@
+[package]
+name = "navi-demo-dioxus"
+version = "0.2.0"
+edition = "2024"
+publish = false
+description = "Navi demo on Dioxus desktop (quoin dioxus backend)"
+
+[dependencies]
+navi-demo-core = { path = "../demo-core", features = ["dioxus"] }
+dioxus = { version = "0.7", features = ["desktop"] }
+quoin = { path = "../../../quoin/quoin", features = ["dioxus"] }
+
+
+# Standalone example workspace: detached from the navi workspace above.
+[workspace]

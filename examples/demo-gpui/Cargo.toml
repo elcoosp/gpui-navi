@@ -1,0 +1,18 @@
+[package]
+name = "navi-demo-gpui"
+version = "0.2.0"
+edition = "2024"
+publish = false
+description = "Navi demo on GPUI (quoin gpui backend)"
+
+[dependencies]
+navi-demo-core = { path = "../demo-core", features = ["gpui"] }
+# The `gpui` name must be in scope for the macro-generated GPUI code; same
+# pinned snapshot the navi workspace uses.
+gpui = { package = "gpui-pre", version = "=0.3.10" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+quoin = { path = "../../../quoin/quoin", features = ["gpui"] }
+
+
+# Standalone example workspace: detached from the navi workspace above.
+[workspace]

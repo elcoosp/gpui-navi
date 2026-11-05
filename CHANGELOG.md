@@ -90,6 +90,8 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(router)* Fix trailing formatting assignment statement inside scroller  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truef7ab12405e7d7b13608afd3bcf14c336d7fbe724))
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true8d705fdfe55724bf0617d5fc33602af5297b9339))
 - Logo  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueda0f950c6e5fca4f95ae966c2362e435d211915e))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/truef71d47f8e0a22a36cd3818d7ad7c980ab3d4b3bf))
+- *(config)* Add linker search path for libxkbcommon  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true7ccec4debd7e21c6a9efcbcfaec29bf6edf75b4d))
 
 ### ⚡ Performance
 
@@ -189,6 +191,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(readme)* Rewrite performance section highlighting allocation-free loops  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueeb6ed84075c902ecbb2ef74289fc39d0e6a02e10))
 - *(benchmarks)* Document criterion performance metrics snapshot rules  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6f0325e50405eff8e643947316dfa861594f8044))
 - *(performance)* Document state-of-the-art allocation engineering criteria  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true90c0b63bb3be0eeba48d3fa5d94766616c7f669e))
+- *(readme)* Rewrite for framework-agnostic quoin architecture  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true2c1f2394f5d546eca166fc34b48f96a6e0455902))
 
 ### 🚀 Features
 
@@ -262,6 +265,32 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(core)* Introduce WindowKey opaque window identifier replacement  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true200ee8ee9681f82d275c39d12a86b3e486fabd65))
 - *(example-app)* Add screenshot tour driver orchestration logic  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truebf0d6ed817c07f499cfb30a11c3d2f2c258a7c71))
 - *(router)* Engineer bounded ring buffer for the events timeline  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueac7dab4f41655f8b056da88f03303872c9a39278))
+- *(demo-core)* Add framework-agnostic demo core manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true11d45909d173ba7d942526a010769665e8929fbc))
+- *(demo-core)* Add build script for route tree codegen  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueca64a7a2c83a0152c32142178f284354a79aafd9))
+- *(demo-core)* Add navi codegen configuration  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6348aa5c31b2ee9cdcf7b6396bd23ae4ba9336a2))
+- *(demo-core)* Implement local task driver for router futures  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true9dc87fe753548bcc53ddbb9c985f2aa6ec44a7d8))
+- *(demo-core)* Implement per-framework host seams and router installation  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true91a3710131cb9cc7acda2594c5a0f5348c3a7ecd))
+- *(demo-core)* Add shared demo core library entrypoint  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1451d81040f2c6350a7c2c37bc962d86084b2b34))
+- *(demo-core)* Add generated route tree  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truedbe563c07ca800baff5761f54d66a3fb02c48562))
+- *(demo-core)* Add global splat (404) route  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true82295ed5e2e71917e1f95d595242f72df184e2f6))
+- *(demo-core)* Add root layout route with node-based header  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true44ffd347d5dca199b030772b78151c5e83352c39))
+- *(demo-core)* Add about route  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true135e72245f93b131fb01b25f546ef451f38cdd20))
+- *(demo-core)* Add guarded route with beforeLoad redirect  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true9c8023a3dbac0b47a0f7eedafe65f6e7a5e447ce))
+- *(demo-core)* Add index welcome route  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true8403887a9b14574d02b9273921296091d4f7ddc6))
+- *(demo-core)* Add search params route  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true45d29960eccd7a19a64f569961cff883987b9c07))
+- *(demo-core)* Add slow loader route for suspense demo  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueae7f5895a38e10318ed99208792809eb6ce47050))
+- *(demo-core)* Add dynamic user route with loader  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6d4860d5b1ccbb531dd9d969ce87a4c28a64fa7c))
+- *(demo-core)* Add shared quoin component shell for all backends  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1e483e0482eea6c0b208016f17f4f428b08183c1))
+- *(demo-dioxus)* Add Dioxus desktop demo manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true02dfc589960ba50e397e1f41885649b6b45354bf))
+- *(demo-dioxus)* Add Dioxus desktop host entrypoint  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueed29f7e51c48df9e5478de8c38c5f7d1bdb92f39))
+- *(demo-floem)* Add Floem demo manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true65d9d1b58855e03fa2cdd8c7e279834fb6f90dea))
+- *(demo-floem)* Add Floem host entrypoint  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true7cee08215a892ad2279c72b718ea33f00fd3430f))
+- *(demo-gpui)* Add GPUI demo manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true87d0cad40902d634f716916d110d43662e33a49b))
+- *(demo-gpui)* Add GPUI host entrypoint  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truec07f5682abc222ff9545120fec4203f2003a88a2))
+- *(demo-leptos)* Add Leptos CSR demo manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6eb281a33b3095f51aadc626ba4abf7b411237a9))
+- *(demo-leptos)* Add Leptos CSR host entrypoint  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true5290c5803b83f603166422b052f1f47b9c4449f7))
+- *(demo-xilem)* Add Xilem demo manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true2fdcf00f02f506d7d60545021003f2c985d1a8af))
+- *(demo-xilem)* Add Xilem host entrypoint  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6a092a4bf254258bb9de49d368f4e6c55ce2b6cc))
 
 ### 🚜 Refactor
 

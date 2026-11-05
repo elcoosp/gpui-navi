@@ -1,0 +1,20 @@
+[package]
+name = "navi-demo-floem"
+version = "0.2.0"
+edition = "2024"
+publish = false
+description = "Navi demo on Floem (quoin floem backend)"
+
+[dependencies]
+navi-demo-core = { path = "../demo-core", features = ["floem"] }
+floem = { git = "https://github.com/lapce/floem", branch = "main" }
+quoin = { path = "../../../quoin/quoin", features = ["floem"] }
+
+# Floem's main branch depends on `muda` (with the `gtk` feature on Linux);
+# reuse quoin's in-memory stub so the demo builds without GTK dev files.
+[patch.crates-io]
+muda = { path = "../../../quoin/third_party/muda-stub" }
+
+
+# Standalone example workspace: detached from the navi workspace above.
+[workspace]

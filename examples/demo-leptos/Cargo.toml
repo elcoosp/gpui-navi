@@ -1,0 +1,22 @@
+[package]
+name = "navi-demo-leptos"
+version = "0.2.0"
+edition = "2024"
+publish = false
+description = "Navi demo on Leptos CSR (quoin leptos backend, wasm32)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+navi-demo-core = { path = "../demo-core", features = ["leptos"] }
+leptos = { version = "0.9.0-rc1", features = ["csr"] }
+console_error_panic_hook = "0.1"
+console_log = "1.0"
+log = "0.4"
+wasm-bindgen = "0.2"
+quoin = { path = "../../../quoin/quoin", features = ["leptos"] }
+
+
+# Standalone example workspace: detached from the navi workspace above.
+[workspace]

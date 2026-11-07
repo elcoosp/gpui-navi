@@ -1,0 +1,93 @@
+---
+title: File-Based Routing
+description: Every route file naming convention in Navi — dynamic segments, splats, index routes, layouts, groups, and ignored files.
+type: how-to
+---
+
+import { Aside, FileTree, LinkCard } from '@astrojs/starlight/components';
+
+You define the entire URL structure of your app through file and folder names inside your configured routes directory (default `src/routes`). The `navi-codegen` scanner turns those names into route patterns at build time.
+
+## Naming conventions
+
+| File or folder | Pattern produced | Role |
+| :--- | :--- | :--- |
+| `index.rs` | `/` (or the parent path) | Index route for its directory |
+| `$id.rs` | `/$id` | Dynamic segment — one URL parameter |
+| `$.rs` | splat / not-found | Catch-all; marks the route as not-found |
+| `__root.rs` | `/` | Root layout wrapping every route |
+| `_auth.rs` or `_auth/` | — | Pathless layout — renders children without adding a URL segment |
+| `(marketing)/` | — | Group folder — organizes files without affecting the URL |
+| `-draft.rs` | — | Ignored — files with the ignore prefix are skipped |
+| `users.rs` next to `users/` | `/users` | Layout for the `users/` directory |
+
+All conventions come from the scanner, so they respond to the `route_token`, `index_token`, and `route_file_ignore_prefix` keys in `navi.config.json` (see the [config reference](/reference/navi-config/)).
+
+<Aside type="tip">
+  A route file can also opt into being a layout explicitly with
+  `is_layout: true` in `define_route!`. The scanner honors that flag so the
+  generated parent structure matches the runtime tree.
+</Aside>
+
+## Worked example
+
+This tree is the layout of the repository's own `example-app`:
+
+<FileTree>
+  - src/routes/
+    - __root.rs
+    - index.rs
+    - $.rs
+    - login.rs
+    - about.rs
+    - _auth/
+      - profile.rs
+    - (marketing)/
+      - about.rs
+    - users/
+      - index.rs
+      - $id.rs
+      - $.rs
+    - dashboard/
+      - index.rs
+      - settings.rs
+      - analytics.rs
+    - admin/
+      - dashboard.rs
+    - docs/
+      - $.rs
+</FileTree>
+
+From this tree the scanner produces, among others:
+
+- `/` — the root layout plus index page.
+- `/users` — the users index.
+- `/users/$id` — a dynamic user page.
+- `/dashboard/settings` — a nested page under the dashboard directory.
+- The `$.rs` files mark not-found catch-alls at their level, and `_auth/profile.rs` renders under a pathless layout: the URL is `/profile`, but `profile` renders inside the `_auth` layout.
+
+<Aside type="caution">
+  The scanner derives a route only from files that actually declare one via
+  `define_route!`. A stray `.rs` file without a `define_route!` call is
+  skipped, and a file that contains `define_route!` without a parsable route
+  type name fails the scan with an error.
+</Aside>
+
+## Renaming the conventions
+
+You are not locked into `$` and `index`. The tokens are configuration:
+
+```json
+{
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}
+```
+
+If you change `route_token`, dynamic segments and splats use your token instead of `$` in file names.
+
+## Next steps
+
+<LinkCard title="define_route! reference" href="/reference/define-route/" description="All accepted arguments, including is_layout and is_index." />
+<LinkCard title="navi.config.json reference" href="/reference/navi-config/" description="Every code generation key with types and defaults." />

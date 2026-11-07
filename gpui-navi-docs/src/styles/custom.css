@@ -1,0 +1,20 @@
+/*
+ * Navi brand accent — derived from the project logo's Rust-orange gradient
+ * (#FF6B2B → #C23B0A). The base accent is #C23B0A (hsl(19 90% 40%)), which
+ * passes WCAG AA (≈5.3:1) against the light background. Dark-mode variants
+ * shift lightness up for contrast on the dark surfaces.
+ */
+
+:root {
+	--sl-color-accent-low: hsl(19 100% 96%);
+	--sl-color-accent: hsl(19 90% 40%);
+	--sl-color-accent-high: hsl(19 100% 28%);
+	--sl-color-text-accent: var(--sl-color-accent-high);
+}
+
+[data-theme="dark"] {
+	--sl-color-accent-low: hsl(19 55% 18%);
+	--sl-color-accent: hsl(19 95% 58%);
+	--sl-color-accent-high: hsl(19 100% 76%);
+	--sl-color-text-accent: var(--sl-color-accent-high);
+}

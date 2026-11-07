@@ -1,0 +1,62 @@
+---
+title: define_route!
+description: Every argument accepted by the define_route! macro, its types, and defaults.
+type: reference
+---
+
+`define_route!` declares a route in a route file. It takes a route type name followed by `key: value` pairs. The macro parses values by key — `path` and `parent` as string literals, `is_layout` and `is_index` as booleans, `params`, `search`, `data`, and `component` as types, and everything else as expressions.
+
+## Signature
+
+```rust
+define_route!(
+    MyRoute,
+    path: "/users/$id",
+    params: UserParams,
+    search: UserSearch,
+    data: User,
+    loader: |params, executor| async move { /* fetch data */ },
+    before_load: |ctx| async move { BeforeLoadResult::Ok },
+    on_enter: |loc| log::info!("entered"),
+    on_leave: |loc| log::info!("left"),
+    stale_time: Duration::from_secs(60),
+    gc_time: Duration::from_secs(300),
+    meta: { /* custom metadata */ },
+    node: my_node,
+);
+```
+
+## Arguments
+
+| Argument | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | identifier | yes | The route's Rust type, e.g. `IndexRoute`. First position, before the comma. |
+| `path` | string literal | yes | URL pattern, e.g. `"/users/$id"` or `"/"`. |
+| `parent` | string literal | no | Explicit parent path when the hierarchy cannot be inferred from layout. |
+| `params` | type | no | Typed struct for path parameters (used with `use_params!`). |
+| `search` | type | no | Typed struct for query parameters (used with `use_search!`). |
+| `data` | type | no | Type the loader resolves to (used with `use_loader_data!` and `Awaited`). |
+| `loader` | async closure | no | Data loader; receives `params` and runs on navigation to the route. |
+| `before_load` | async closure | no | Guard hook returning `BeforeLoadResult` — `Ok`, `Redirect`, or `NotFound`. |
+| `on_enter` | closure | no | Fires with the `Location` when someone enters the route. |
+| `on_leave` | closure | no | Fires with the `Location` when someone leaves the route. |
+| `stale_time` | expression | no | How long loader data stays fresh, e.g. `Duration::from_secs(60)`. |
+| `gc_time` | expression | no | How long unused loader data survives in cache, e.g. `Duration::from_secs(300)`. |
+| `meta` | expression | no | Custom metadata attached to the route. |
+| `node` | expression | no | Framework-agnostic UI: an expression building a `quoin_ui::Node`. |
+| `component` | type | no | A component type for adapters that render components (e.g. a GPUI `RenderOnce` type). |
+| `loader_deps` | expression | no | Dependencies the loader re-runs on. |
+| `context_fn` | expression | no | Produces route context data. |
+| `is_layout` | boolean | no | Declares the route as a layout rendering children through `<Outlet>`. |
+| `is_index` | boolean | no | Declares the route as the index of its directory. |
+
+## UI: node or component
+
+Exactly one UI seam applies per route:
+
+- `node:` — a plain `quoin_ui::Node` constructor, the framework-agnostic option (any function returning a `Node`).
+- `component:` — a component type that the adapter renders; used by the GPUI examples with `RenderOnce` types.
+
+## Scanner interaction
+
+The scanner reads your route files at build time and extracts the route type name from `define_route!(Name, ...)` calls. A file that calls `define_route!` without a parsable type name fails the build, and `is_layout: true` participates in layout inference even when file naming alone would not imply it.

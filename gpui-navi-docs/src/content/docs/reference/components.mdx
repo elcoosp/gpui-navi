@@ -1,0 +1,79 @@
+---
+title: Components
+description: The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestoration — with their full builder surface.
+type: reference
+---
+
+`navi_router::components` holds the UI components your routes and layouts render. Components are framework-agnostic: they build `quoin_ui::Node` trees that quoin lowers to your selected framework.
+
+## Link
+
+A navigation link with built-in active styling. Construct with `Link::new(to)` and finish with `.build()`.
+
+| Builder method | Accepts | Description |
+| :--- | :--- | :--- |
+| `new(to)` | anything into `String` | Target href, e.g. `"/users/42"`. |
+| `search(value)` | `serde_json::Value` | Query string for the navigation. |
+| `hash(value)` | anything into `String` | Hash fragment. |
+| `state(value)` | `serde_json::Value` | Navigation state. |
+| `replace(bool)` | boolean | Replace the current history entry instead of pushing. |
+| `disabled(bool)` | boolean | Disable the link. |
+| `active_options(ActiveOptions)` | `ActiveOptions` | Control how active-state matching works. |
+| `reset_scroll(bool)` | boolean | Scroll the target position back to the top. |
+| `active_style(f)` | `Fn(NodeStyle) -> NodeStyle` | Style applied while the link is active. |
+| `inactive_style(f)` | `Fn(NodeStyle) -> NodeStyle` | Style applied while the link is inactive. |
+| `preload(PreloadType)` | `PreloadType` | Preloading strategy (see below). |
+| `preload_delay(Duration)` | `Duration` | Hover delay before an `Intent` preload. |
+| `child(child)` | anything into `NodeChild` | Link content; call repeatedly. |
+| `to()` / `is_disabled()` | — | Accessors for the target and disabled flag. |
+
+External hrefs — `http(s):`, `mailto:`, and `tel:` — are handed to the OS instead of the router (`is_external_href` detects them).
+
+### Active matching
+
+`path_is_active(current, href, exact)` implements the branch-and-byte comparison behind active styling. Active checks are pure comparisons — they allocate nothing.
+
+## PreloadType
+
+| Variant | Behavior |
+| :--- | :--- |
+| `Render` | Preload when the link renders. The `#[default]`. |
+| `Intent` | Preload on first hover, after `preload_delay`. |
+| `Viewport` | Intended for viewport entry; currently behaves like `Render` because adapters lack an intersection observer. |
+
+## Outlet
+
+Renders the matched child route within a layout: `Outlet::new().build()`.
+
+## SuspenseBoundary
+
+Displays a fallback while nested routes load.
+
+| Item | Signature |
+| :--- | :--- |
+| `new(fallback)` | `impl Fn() -> Node + 'static` — the loading UI. |
+| `build()` | Produces the `Node`. |
+
+## Awaited
+
+Waits for and renders the data a route's loader produced.
+
+| Builder method | Accepts | Description |
+| :--- | :--- | :--- |
+| `new()` | typed `Awaited::<Route>` | Binds the component to a route with a `data` type. |
+| `fallback(f)` | `Fn() -> Node` | Rendered while the loader runs. |
+| `child(f)` | `Fn(data) -> Node` | Rendered with the loaded data. |
+| `build()` | — | Produces the `Node`. |
+
+## ScrollRestoration
+
+Remembers and restores scroll positions (see the how-to guide for behavior details).
+
+| Item | Signature |
+| :--- | :--- |
+| `node(handle_id)` | Anything into `String`; returns the tracking `Node`. Also available as the free function `scroll_restoration_node`. |
+| `set_capacity(capacity)` | `usize`; bounds how many positions are remembered. |
+
+## Registration
+
+`register_route_component` registers a route's component with the router — the generated `register_routes()` calls it for you, so you interact with it only when wiring routes manually.

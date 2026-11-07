@@ -1,0 +1,77 @@
+---
+title: Core Types
+description: The engine types re-exported from navi-router-core — Location, RouteTree, RouterCore, NavigationEffect, and the rest.
+type: reference
+---
+
+`navi-router-core` is the pure routing engine: no UI framework, no async runtime. These are the types application and adapter code encounters, all re-exported from `navi-router`.
+
+## Navigation and location
+
+| Type | Role |
+| :--- | :--- |
+| `Location` | A parsed URL: pathname plus query and hash. `Location::new("/")` constructs one. |
+| `NavOp` | One operation in a transaction: `Push(Location)`, `Replace(Location)`, `Back`, `Forward`, `Go(isize)`. |
+| `NavigateOptions` | Per-navigation options — see the [runtime reference](/reference/runtime/). |
+| `NavigationEffect` | What the engine asks the adapter to do after a navigation (below). |
+| `MatchResult` | The outcome of matching a location against the tree. |
+| `ScrollIntoViewOptions` | Scroll behavior for hash navigation. |
+| `ViewTransitionOptions` | View transition preferences. |
+
+## NavigationEffect
+
+The engine is a state machine: `RouterCore::navigate` returns effects the adapter interprets.
+
+| Variant | Fields | Meaning |
+| :--- | :--- | :--- |
+| `SpawnLoader` | `route_id`, `params` | Run the matched route's loader on your async runtime. |
+| `Redirect` | `to`, `replace` | Follow a redirect instead. |
+| `NotFound` | `data: Option<serde_json::Value>` | Resolve as not-found, optionally with data. |
+| `NotifyListeners` | — | Refresh the UI. |
+
+## Route tree and matching
+
+| Type | Role |
+| :--- | :--- |
+| `RouteTree` | The ranked radix trie of routes; O(log n) matching. Shared as `Arc<RouteTree>` between core and adapter. |
+| `RoutePattern` | A compiled route pattern. |
+| `Segment` | One pattern segment — static, dynamic, optional, or splat. |
+| `RouteNode` | A node in the route tree. |
+
+Matching is deterministic: static segments always win over dynamic ones, backed by an FxHash static-child lookup and interned `Arc<str>` segment names. See [Route Matching](/explanation/route-matching/) for the design.
+
+## History and blockers
+
+| Type | Role |
+| :--- | :--- |
+| `History` | Browser-style history stack. Lock-free, single-owner — no `Mutex` in the navigation path. |
+| `Blocker` | A navigation guard; `Blocker::new(should_block)` constructs one, `BlockerId` identifies it. |
+
+## Guards and validation
+
+| Type | Role |
+| :--- | :--- |
+| `BeforeLoadContext` | Passed to `before_load` hooks. |
+| `BeforeLoadResult` | Guard outcome: `Ok`, `Redirect(Redirect)`, or `NotFound(NotFound)`. |
+| `Redirect` / `redirect()` | Redirect value and its constructor helper. |
+| `NotFound` / `not_found()` | Not-found value and its constructor helper. |
+| `ValidateSearch` | Trait for validating typed search params. |
+| `ValidationResult` / `ValidationError` | Validation outcomes and failures. |
+| `RouteContextArgs` | Arguments assembled for route context. |
+
+## Runtime state types
+
+Re-exported from `navi-router::state`:
+
+| Type | Role |
+| :--- | :--- |
+| `RouterState` | The live router state the `RouterHandle` shares. |
+| `RouterEvent` | An event on the bus feeding the devtools timeline. |
+| `LoaderState` / `LoaderOutcome` | Per-route loader status and result. |
+| `AnyData` | Type-erased loader payload storage. |
+| `RouteDef` | A registered route definition. |
+| `RouterHost` | The host seam the adapter implements. |
+
+## Devtools event stages
+
+The devtools timeline filters on six `RouterEventType` stages: `BeforeNavigate`, `BeforeLoad`, `Load`, `BeforeRouteMount`, `Resolved`, `Rendered`.

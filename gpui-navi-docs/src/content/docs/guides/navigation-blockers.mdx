@@ -1,0 +1,52 @@
+---
+title: Navigation Blockers
+description: Prevent navigation with sync or async blockers that guard unsaved changes and destructive in-progress work.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+You block navigation when the user is about to lose unsaved work. A blocker is a guard that Navi consults before a navigation is applied; it can be synchronous or asynchronous.
+
+## Create a blocker
+
+The `use_blocker!` macro wraps an expression in a `Blocker`:
+
+```rust
+use navi_macros::use_blocker;
+
+let blocker = use_blocker!(form.is_dirty());
+```
+
+The expression decides whether navigation should be blocked: while `form.is_dirty()` evaluates to true, navigations away from the route are held.
+
+<Aside type="note">
+  `Blocker::new(should_block)` is the underlying constructor — the macro
+  expands to it directly, so you can create blockers without the macro when
+  you manage lifetimes yourself. Blockers carry a `BlockerId` and are
+  registered in the router state, where the devtools **State** tab lists the
+  currently active navigation blockers.
+</Aside>
+
+## Async blockers
+
+Because blockers guard against data loss, they often need to ask the user first. An async blocker can await that confirmation before it lets the navigation proceed or cancels it — for example, opening a modal and resolving after the user answers.
+
+## Bypassing a blocker
+
+`NavigateOptions` carries an `ignore_blocker` flag. Setting it to `true` pushes a navigation past registered blockers — appropriate for programmatic flows that already obtained consent:
+
+```rust
+use navi_router::{Location, NavigateOptions};
+
+let opts = NavigateOptions {
+    ignore_blocker: true,
+    ..Default::default()
+};
+navigator.push_location_with(Location::new("/goodbye"), &opts);
+```
+
+## Next steps
+
+<LinkCard title="Runtime & Router Options" href="/reference/runtime/" description="NavigateOptions and the Navigator methods used above." />
+<LinkCard title="Devtools" href="/guides/devtools/" description="Inspect active blockers in the State tab." />

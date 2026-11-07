@@ -1,0 +1,58 @@
+---
+title: Framework Agnosticism
+description: Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floem — and what switching frameworks costs.
+type: explanation
+---
+
+Most Rust routers grow inside a framework and stay there. Navi inverts the design: the routing engine, loaders, guards, cache, and devtools live in framework-free crates, and **every** rendering seam is delegated to [quoin](https://github.com/elcoosp/quoin), a reactive core with many frontend backends.
+
+## One route table, five renderers
+
+| Framework | Backend | Status |
+| :--- | :--- | :--- |
+| **GPUI** | quoin `gpui` feature | ✅ first-class — devtools panel, keybindings, `run_app!` host |
+| **Dioxus** | quoin `dioxus` feature | ✅ first-class — Dioxus desktop (wry/tao window) |
+| **Leptos** | quoin `leptos` feature | ✅ first-class — CSR, `wasm32-unknown-unknown` |
+| **Xilem** | quoin `xilem` feature | ✅ first-class — Xilem main, rebuild-pump refresh |
+| **Floem** | quoin `floem` feature | ✅ first-class — Floem main, reactive bridge |
+
+There is nothing GPUI-specific inside the router itself. The repository's workspace configuration is explicit about this: GPUI is a **binding** dependency — only the host application and the quoin GPUI adapter reference it, while every navi library crate builds on quoin instead.
+
+## What you write once
+
+For each route you write:
+
+- a `define_route!` declaration with its path, types, hooks, and UI,
+- a `quoin_ui::Node` constructor (`node:`) or a `component!` shell,
+- optional loaders, guards, and validators.
+
+None of that changes between frameworks. Switching framework means two edits: swap the quoin feature flag, and swap the three-line host bootstrap:
+
+```rust
+// GPUI / Xilem / Floem — quoin's run_app! host
+use navi_demo_core::NaviDemo;
+use quoin::run_app;
+run_app!(NaviDemo);
+```
+
+```rust
+// Dioxus desktop
+fn app() -> Element { rsx! { NaviDemo {} } }
+fn main() { dioxus::LaunchBuilder::desktop().launch(app); }
+```
+
+```rust
+// Leptos CSR (wasm32)
+#[wasm_bindgen(start)]
+pub fn main() {
+    leptos::mount::mount_to_body(|| view! { <NaviDemo /> });
+}
+```
+
+## The proof in the repository
+
+The `examples/` directory ships one shared demo — `demo-core`, with routes, loaders, suspense, guards, search params, a 404 page, and devtools — plus five thin hosts: `demo-gpui`, `demo-dioxus`, `demo-floem`, `demo-xilem`, and `demo-leptos`. Every host is a 1–3 line bootstrap around the same `NaviDemo` shell. Opening them side by side shows how little framework-specific code exists.
+
+## Escape hatch
+
+You are not locked out of your framework's native widgets. GPUI subtrees remain reachable through quoin's `rsx!` escape hatch — `gpui-rsx-classes` is enabled automatically with the `gpui` feature — and the GPUI examples wrap `Node` trees in `NodeElement` inside ordinary GPUI components.

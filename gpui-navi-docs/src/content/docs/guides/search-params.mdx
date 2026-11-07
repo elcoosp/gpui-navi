@@ -1,0 +1,70 @@
+---
+title: Search Params
+description: Type your query strings with typed search structs, navigate with search values, and opt into nested bracket syntax with the nested-search feature.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+You declare a `search` type on a route to work with query strings through typed structs instead of raw strings.
+
+## Declare typed search params
+
+Give the route a `search` type and read it back with `use_search!`:
+
+```rust
+use navi_macros::{define_route, use_search};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct UserSearch {
+    pub sort: Option<String>,
+    pub page: Option<u32>,
+}
+
+define_route!(
+    UsersRoute,
+    path: "/users",
+    search: UserSearch,
+    node: users_node,
+);
+```
+
+Inside the route's UI, `use_search!(UsersRoute)` returns the parsed search struct for the current navigation.
+
+## Navigate with search values
+
+`Link` accepts a `search` value, plus `hash` and `state`, so navigation carries query data without hand-building URLs:
+
+```rust
+use navi_router::components::Link;
+
+Link::new("/users")
+    .search(serde_json::json!({ "sort": "desc", "page": 2 }))
+    .child("Users, descending")
+    .build()
+```
+
+## Validate search params
+
+Navi exposes a `ValidateSearch` trait with `ValidationResult` / `ValidationError`. With the [validation integrations](/guides/validation/) you connect this to `validator`, `garde`, `validify`, or `valico`.
+
+## Nested search params
+
+Enable the `nested-search` feature for typed, bracket-nested query strings of the form `filter[status]=open&tags[0]=rust`, parsed via `serde_qs`. The feature re-exports two helpers from `navi_router`:
+
+| Helper | Purpose |
+| :--- | :--- |
+| `parse_query_nested` | Parse a bracket-nested query string into a nested value. |
+| `query_to_string` | Serialize a nested value back to a query string. |
+
+<Aside type="note">
+  Scroll restoration keys positions by path **plus normalized query**, so
+  sorting or filtering the same page restores its own scroll position — see
+  [Scroll Restoration](/guides/scroll-restoration/).
+</Aside>
+
+## Next steps
+
+<LinkCard title="Validation" href="/guides/validation/" description="Wire validator, garde, validify, or valico into search params." />
+<LinkCard title="Components reference" href="/reference/components/" description="The full Link builder API, including search, hash, and state." />

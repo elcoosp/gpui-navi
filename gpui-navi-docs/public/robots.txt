@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://elcoosp.github.io/gpui-navi/sitemap-index.xml

@@ -27,6 +27,9 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(navi-router)* Forward features to core, remove duplicate deps, inherit lints  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true5323bc49bdd59b9cd4987d830c24683c7cfd9bf9))
 - *(navi-test)* Add dependencies for expanded integration test suite  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truec771d5c9ac1f49e95144c5fff10d6bab5a547e92))
 - *(history-navigation)* Inherit workspace lints in history-navigation stub  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true2d9e2d0caedede8c3bd41170efad43cfac390293))
+- *(docs-site)* Add the Astro Starlight docs-site manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true650d966c4f27c0e69190542a8bf60377074577ac))
+- *(docs-site)* Add pnpm lockfile for the docs site  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true4c835bdbc04449ddaa414dba15af6c5ee49e8227))
+- *(docs-site)* Exclude recently published packages from the release-age gate  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true4c47c32ba8756fb8e97239813b2b77f5af15ecef))
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -92,6 +95,12 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - Logo  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueda0f950c6e5fca4f95ae966c2362e435d211915e))
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/truef71d47f8e0a22a36cd3818d7ad7c980ab3d4b3bf))
 - *(config)* Add linker search path for libxkbcommon  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true7ccec4debd7e21c6a9efcbcfaec29bf6edf75b4d))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/trueecef304b7ac885001d859b39e1803d13238d58f2))
+- *(docs-site)* Ignore build output, dependencies, and QA artifacts  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truef9354a03dd9e498aa9185a0c6cbcd9786f73fc87))
+- *(docs-site)* Configure markdownlint for Starlight MDX content  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true944441d5851db935922fcd9e0967ea9171356a89))
+- *(docs-site)* Hoist typescript and @astrojs/check for astro check  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true7bd8208eb441e1e593d94f1d601abb4379c6b0b6))
+- *(docs-site)* Add a strict Astro tsconfig  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truecc7e40d9be03f48d89a2a62010d2490955580416))
+- *(docs-site)* Reference the Astro client types  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueab5aef92ee322174e84a94810faa78d44df03043))
 
 ### ⚡ Performance
 
@@ -192,6 +201,36 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(benchmarks)* Document criterion performance metrics snapshot rules  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6f0325e50405eff8e643947316dfa861594f8044))
 - *(performance)* Document state-of-the-art allocation engineering criteria  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true90c0b63bb3be0eeba48d3fa5d94766616c7f669e))
 - *(readme)* Rewrite for framework-agnostic quoin architecture  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true2c1f2394f5d546eca166fc34b48f96a6e0455902))
+- *(docs-site)* Add AGENTS.md working guide  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueaf0b8afd952310b1d82ee546f2bf11aa17093d05))
+- *(adr)* Pin TypeScript to 6.x for astro check  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truebdb5ccd91caeb7f9245e5828493d9bd6ddfd6a72))
+- *(adr)* Use SVG logo variants with preserved viewBox  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true80e8cf033a62c3c335e488141fa1532f119d9203))
+- *(adr)* Ship the default Shiki/Expressive Code highlighter  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truee90c2d836a18fe29e5b0a66ad5f0c33be7809724))
+- *(adr)* Screenshot every route as a visual QA gate  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truec333fcb6a0b33e6c91d84bc399c774c5bc24be1d))
+- *(adr)* Record Starlight plugin selection  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truee5eea501b6a2eb50f687e4e73d312fc4f8fb6d84))
+- *(adr)* Set the GitHub Pages site URL for sitemap generation  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true2052ab53410d444d1397b2332374cd0850979622))
+- *(qa)* Record build, check, lint, and visual QA results  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true05ef98326c7c6870a810a0dfa131f07dd40355da))
+- *(explanation)* Add architecture page  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1546e46ea1332ee0602b80d38ccf088ea59a611e))
+- *(explanation)* Add framework agnosticism page  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueebeb65b8b921f817168c40d71d4366f3fa48a49b))
+- *(explanation)* Add performance design page  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true0ab48db79d418e8bb8187c394b939a034e3c0535))
+- *(explanation)* Add route matching page  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true9b086af02b2c665f9ea8841644848946a891e199))
+- *(guides)* Add devtools how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truef076bdeb5d373f1f6cc75f03b785a48ebb293adb))
+- *(guides)* Add file-based routing how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truec207ca76999c3b97d456a843361cc95bf297c477))
+- *(guides)* Add installation how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truebb06c5eb07f6fb7ea08d1ca97939864e58ce8aef))
+- *(guides)* Add loaders and suspense how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true4c2ba43668c0cbca0bee9dcd4e8b9999304c08b4))
+- *(guides)* Add navigation blockers how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true2eb2b13985daf9be644813d635dfa757783b7d76))
+- *(guides)* Add link preloading how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true3549af33238b05f32d7246c7c27d42fad787a199))
+- *(guides)* Add route guards how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true7fddd35998edcf4818169f2e1404f240f10e7258))
+- *(guides)* Add scroll restoration how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true06efc9f878e2f8c900a3c12bfd140250efe7a669))
+- *(guides)* Add search params how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true678fc847c52ef4a70014397b9987161966b45d99))
+- *(guides)* Add validation how-to  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true25751ff6286fe8f94ba86cfca496dcdb4a14a477))
+- *(reference)* Add components reference  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true992a501400d8c37b059820558d925112b2654354))
+- *(reference)* Add core types reference  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true861288bddeadd75855e44047841606901852fdfa))
+- *(reference)* Add workspace crates reference  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6f9929134f5fdd37fbced56c3b643d6339e392f1))
+- *(reference)* Add define_route! reference  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true23e2c84ee0521ea200ea1a2a20976b28b0d203a5))
+- *(reference)* Add macros reference  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true4c63de475b8f4ff0905bc8c7942c72868d844f86))
+- *(reference)* Add navi.config.json reference  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true65dbf441194b887f2024ee2529daab65790ebcac))
+- *(reference)* Add runtime and router options reference  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true70ad869ca24555c628540d3dd88b0e2007bfd783))
+- *(tutorials)* Add the getting started golden path  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truec5bd0f1d310d77bdfb5dad45ad51bf5f76ed9308))
 
 ### 🚀 Features
 
@@ -291,6 +330,19 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(demo-leptos)* Add Leptos CSR host entrypoint  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true5290c5803b83f603166422b052f1f47b9c4449f7))
 - *(demo-xilem)* Add Xilem demo manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true2fdcf00f02f506d7d60545021003f2c985d1a8af))
 - *(demo-xilem)* Add Xilem host entrypoint  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6a092a4bf254258bb9de49d368f4e6c55ce2b6cc))
+- *(docs-site)* Configure Astro Starlight site  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true760dd4a8e68f0a5846c68000c514738c4512b22f))
+- *(docs-site)* Define the docs and i18n content collections  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truea513a18166841ec36b2065fa221e1f8c99ca928b))
+- *(docs-site)* Add English UI translations  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true9ce9854aac533f9a879ddd372310d808b0c1dd45))
+- *(docs-site)* Apply the Rust-orange brand accent  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true8a17767eb62e442b43409d3471dadc24498fdf73))
+- *(docs-site)* Add favicon derived from the logo compass  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true9c7c7f4898e69cd24f4c782f62ea484aa4dca8be))
+- *(docs-site)* Allow crawling and point robots.txt at the sitemap  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true71f076ab80f5057041c0f0dd7daeaae94d6007e9))
+- *(docs-site)* Add light-theme logo variant  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true9a7dd15c7d95c3b08cbb443b620eb43db90b1f35))
+- *(docs-site)* Add dark-theme logo variant  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true845c4611b7cfb4f94e1a2ba098451534c7ac5323))
+- *(docs-site)* Optimize logo assets with SVGO and assertions  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true6719ca034e4168c2c05cd105101e6b351be3ab12))
+- *(docs-site)* Generate llms.txt and llms-full.txt after build  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueb604a854edbb3cb33b8a17888648e237453c7f75))
+- *(docs-site)* Screenshot every route for visual QA  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true3f7acfa812a0c7d9855e8c3e5fe51bfa41908a39))
+- *(docs-site)* Add the Navi splash landing page  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true355319fbb20685104d585ac1d53496e3f8273c7a))
+- *(docs-site)* Add a custom 404 page  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1b25fffacd65701ccd1bc71f7b2252cafba625dd))
 
 ### 🚜 Refactor
 

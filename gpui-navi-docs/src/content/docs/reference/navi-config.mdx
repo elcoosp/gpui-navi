@@ -1,0 +1,42 @@
+---
+title: navi.config.json
+description: Every key of the navi-codegen configuration file — types, defaults, and an example.
+type: reference
+---
+
+`navi.config.json` controls how `navi-codegen` turns your routes directory into a generated route tree. `NaviConfig::from_file` reads it at build time from your `build.rs`.
+
+## Keys
+
+| Key | Type | Default in the examples | Description |
+| :--- | :--- | :--- | :--- |
+| `routes_directory` | string | `"./src/routes"` | Directory the scanner walks for route files. |
+| `generated_route_tree` | string | `"./src/route_tree.gen.rs"` | Output file for the generated route tree module. |
+| `route_token` | string | `"route"` | Token used for dynamic segments and splats in file names. |
+| `index_token` | string | `"index"` | File name that marks an index route. |
+| `route_file_ignore_prefix` | string | `"-"` | Files and folders starting with this prefix are skipped by the scanner. |
+
+## Example
+
+This is the exact configuration from the repository's `example-app`:
+
+```json
+{
+  "routes_directory": "./src/routes",
+  "generated_route_tree": "./src/route_tree.gen.rs",
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}
+```
+
+## Behavior details
+
+- When `routes_directory` does not exist, the scan yields an empty route set rather than an error.
+- The generated module exposes `build_route_tree()` and `register_routes()`, which you call during host bootstrap.
+- The scanner derives layouts from folder structure automatically — a `users.rs` next to a `users/` directory becomes that directory's layout — and honors explicit `is_layout: true` declarations.
+- Route files can carry a `#[cfg(feature = "...")]` attribute; the scanner extracts the feature so generated code keeps the same gating.
+
+## Next steps
+
+See [File-Based Routing](/guides/file-based-routing/) for how file names become URL patterns.

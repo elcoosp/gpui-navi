@@ -1,0 +1,55 @@
+---
+title: Scroll Restoration
+description: Restore scroll positions per path and query, bound the cache, and opt out per route or per navigation.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+You get scroll restoration automatically with Navi: the router remembers scroll positions as the user moves through the app and restores them on return visits.
+
+## How keys work
+
+Positions are keyed by **path plus normalized query**. `/users?sort=asc` and `/users?sort=desc` remember separate positions, so two sorted views of the same list do not fight over one offset. The cache is capacity-bounded with O(1) eviction, so long sessions do not grow memory without bound.
+
+## Opt out
+
+Two levels of opt-out exist:
+
+| Level | Mechanism |
+| :--- | :--- |
+| Whole navigation | Pass `reset_scroll: true` on a `Link` to start the target position from the top. |
+| Per navigation call | `NavigateOptions.reset_scroll` does the same for programmatic navigation. |
+
+```rust
+use navi_router::components::Link;
+
+Link::new("/dashboard")
+    .reset_scroll(true)
+    .child("Dashboard (from the top)")
+    .build()
+```
+
+## Mount the component
+
+The `ScrollRestoration` component attaches a scroll-tracking node to your UI. Give it a handle id:
+
+```rust
+use navi_router::components::ScrollRestoration;
+
+ScrollRestoration::node("main-scroll").build()
+```
+
+`ScrollRestoration::set_capacity(capacity)` bounds how many remembered positions are kept at once.
+
+<Aside type="note">
+  The repository's commit history tracks an example that showcases scroll
+  restoration ("Try to showcase scroll restoration does not work yet"), so
+  treat the behavior as under active repair in the current workspace state and
+  verify against the examples when you adopt it.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Runtime & Router Options" href="/reference/runtime/" description="NavigateOptions and the router state behind restoration." />
+<LinkCard title="Components reference" href="/reference/components/" description="The ScrollRestoration component API." />

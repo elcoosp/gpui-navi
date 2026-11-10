@@ -11,7 +11,7 @@ navi-router = { path = "../../navi-router" }
 navi-macros = { path = "../../navi-macros" }
 quoin-core = { git = "https://github.com/elcoosp/quoin", branch = "main" }
 quoin-ui = { git = "https://github.com/elcoosp/quoin", branch = "main" }
-rs-query = { path = "../../../rs-query" }
+rs-query = { git = "https://github.com/elcoosp/rs-query", branch = "main" }
 # The facade: exactly one framework feature is enabled at a time; the
 # per-framework feature forwarding below drives both the reactive context
 # and the `component!`/`quoin_render!` emitter backend.

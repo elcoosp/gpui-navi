@@ -59,7 +59,7 @@ send_wrapper = "0.6"
 # (`QueryRuntime`) is backed by quoin's worker pool and portable timer, so
 # `QueryClient` works with no UI framework and no ambient async runtime.
 # Navi uses `QueryClient` / `Query` / `QueryKey` for route loaders.
-rs-query = { path = "../rs-query" }
+rs-query = { git = "https://github.com/elcoosp/rs-query", branch = "main" }
 
 # Lean dev profile: line tables only (backtraces still work) and no
 # incremental caches. Cuts target/ size by well over half, which matters

@@ -1,25 +1,42 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import astroTakumi from 'astro-takumi';
+import fs from 'node:fs';
+import { makeRender } from './src/og-render.mjs';
 import starlightLinksValidator from "starlight-links-validator";
 import starlightImageZoom from "starlight-image-zoom";
 
+const __logoB64 = fs.readFileSync("./src/assets/logo.png").toString("base64");
+const __render = makeRender({
+  logoDataUrl: "data:image/png;base64," + __logoB64,
+  accentHex: "#743e3e",
+  accentHexA12: "#743e3e1a",
+  domain: "gpui-navi.vercel.app",
+  projectName: "Navi",
+});
+
 export default defineConfig({
+	vite: {
+		ssr: { external: ["jsdom", "astro-takumi"] },
+	},
         // Conventional GitHub Pages origin for the repo — see
         // docs/decisions/0006-site-url.md. Update robots.txt when this changes.
-        site: "https://elcoosp.github.io/gpui-navi/",
+        site: 'https://gpui-navi.vercel.app',
         integrations: [
                 starlight({
+			routeMiddleware: "./src/routeData.ts",
+                        expressiveCode: {
+                        	themes: ['github-light', 'github-dark'],
+                        },
                         title: "Navi",
                         description:
                                 "A powerful file-based router for Rust UI frameworks — one route table, every frontend, powered by quoin.",
                         // The horizontal logo already contains the "Navi" wordmark, so it
                         // replaces the text title in the header while staying accessible.
-                        logo: {
-                                light: "./src/assets/logo-light.svg",
-                                dark: "./src/assets/logo-dark.svg",
-                                replacesTitle: true,
-                        },
+
+                        logo: { src: './src/assets/logo.png', replacesTitle: true },
+                        favicon: '/favicon.png',
                         customCss: ["./src/styles/custom.css"],
                         social: [
                                 {
@@ -85,5 +102,16 @@ export default defineConfig({
                         disable404Route: true,
                         plugins: [starlightLinksValidator(), starlightImageZoom()],
                 }),
-        ],
+        
+		astroTakumi({
+			options: {
+				domBackend: "linkedom",
+				fonts: [fs.readFileSync("./node_modules/@fontsource/roboto/files/roboto-latin-400-normal.woff2")],
+				width: 1200,
+				height: 630,
+				format: "png",
+			},
+			render: __render,
+		}),
+	],
 });

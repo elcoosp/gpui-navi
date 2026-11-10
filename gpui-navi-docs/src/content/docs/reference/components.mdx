@@ -4,6 +4,8 @@ description: The router UI components — Link, Outlet, Awaited, SuspenseBoundar
 type: reference
 ---
 
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
 `navi_router::components` holds the UI components your routes and layouts render. Components are framework-agnostic: they build `quoin_ui::Node` trees that quoin lowers to your selected framework.
 
 ## Link
@@ -77,3 +79,10 @@ Remembers and restores scroll positions (see the how-to guide for behavior detai
 ## Registration
 
 `register_route_component` registers a route's component with the router — the generated `register_routes()` calls it for you, so you interact with it only when wiring routes manually.
+## Related
+
+<CardGrid>
+<LinkCard title="Core Types" href="/reference/core-types/" description="The engine types re-exported from navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Workspace Crates" href="/reference/crates/" description="The seven crates of the gpui-navi workspace and what each one owns." />
+<LinkCard title="define_route!" href="/reference/define-route/" description="Every argument accepted by the define_route! macro, its types, and defaults." />
+</CardGrid>

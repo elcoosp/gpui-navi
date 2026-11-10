@@ -4,17 +4,23 @@ description: A powerful file-based router for Rust UI frameworks — one route t
 type: explanation
 template: splash
 hero:
+  image:
+    file: ../../assets/logo.png
+    alt: Logo
+  title: "Navi"
   tagline: One route table, every frontend.
   actions:
     - text: Get started in minutes
       link: /tutorials/getting-started/
+      icon: right-arrow
     - text: GitHub
       link: https://github.com/elcoosp/gpui-navi
+      icon: right-arrow
 ---
 
 Navi is a file-based router for Rust UI applications. It is **not tied to any single UI framework**: the routing engine, loaders, guards, cache, and devtools live in framework-free crates, and all rendering seams are delegated to [quoin](https://github.com/elcoosp/quoin) — one reactive core, many frontend backends. The same route table, components, and devtools panel run unmodified on GPUI, Dioxus, Leptos, Xilem, and Floem.
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
 
 ## Choose your path
 
@@ -32,6 +38,8 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
     Why Navi is framework-agnostic, how route matching ranks paths, and where the nanoseconds go.
   </Card>
 </CardGrid>
+
+<LinkButton href="/tutorials/getting-started/" icon="right-arrow">Start the tutorial</LinkButton>
 
 <LinkCard title="Start with the Getting Started tutorial" href="/tutorials/getting-started/" description="Dependencies, your first routes, code generation, and booting the app." />
 

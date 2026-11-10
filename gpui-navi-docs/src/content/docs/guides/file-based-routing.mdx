@@ -4,7 +4,7 @@ description: Every route file naming convention in Navi — dynamic segments, sp
 type: how-to
 ---
 
-import { Aside, FileTree, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, FileTree, LinkCard } from '@astrojs/starlight/components';
 
 You define the entire URL structure of your app through file and folder names inside your configured routes directory (default `src/routes`). The `navi-codegen` scanner turns those names into route patterns at build time.
 
@@ -77,13 +77,11 @@ From this tree the scanner produces, among others:
 
 You are not locked into `$` and `index`. The tokens are configuration:
 
-```json
-{
+<Code lang="json" code={`{
   "route_token": "route",
   "index_token": "index",
   "route_file_ignore_prefix": "-"
-}
-```
+}`} />
 
 If you change `route_token`, dynamic segments and splats use your token instead of `$` in file names.
 

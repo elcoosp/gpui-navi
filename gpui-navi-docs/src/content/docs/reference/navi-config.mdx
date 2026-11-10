@@ -4,6 +4,8 @@ description: Every key of the navi-codegen configuration file — types, default
 type: reference
 ---
 
+import { Code } from '@astrojs/starlight/components';
+
 `navi.config.json` controls how `navi-codegen` turns your routes directory into a generated route tree. `NaviConfig::from_file` reads it at build time from your `build.rs`.
 
 ## Keys
@@ -20,15 +22,13 @@ type: reference
 
 This is the exact configuration from the repository's `example-app`:
 
-```json
-{
+<Code lang="json" code={`{
   "routes_directory": "./src/routes",
   "generated_route_tree": "./src/route_tree.gen.rs",
   "route_token": "route",
   "index_token": "index",
   "route_file_ignore_prefix": "-"
-}
-```
+}`} />
 
 ## Behavior details
 

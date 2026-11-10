@@ -4,7 +4,7 @@ description: Restore scroll positions per path and query, bound the cache, and o
 type: how-to
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 You get scroll restoration automatically with Navi: the router remembers scroll positions as the user moves through the app and restores them on return visits.
 
@@ -21,24 +21,20 @@ Two levels of opt-out exist:
 | Whole navigation | Pass `reset_scroll: true` on a `Link` to start the target position from the top. |
 | Per navigation call | `NavigateOptions.reset_scroll` does the same for programmatic navigation. |
 
-```rust
-use navi_router::components::Link;
+<Code lang="rust" code={`use navi_router::components::Link;
 
 Link::new("/dashboard")
     .reset_scroll(true)
     .child("Dashboard (from the top)")
-    .build()
-```
+    .build()`} />
 
 ## Mount the component
 
 The `ScrollRestoration` component attaches a scroll-tracking node to your UI. Give it a handle id:
 
-```rust
-use navi_router::components::ScrollRestoration;
+<Code lang="rust" code={`use navi_router::components::ScrollRestoration;
 
-ScrollRestoration::node("main-scroll").build()
-```
+ScrollRestoration::node("main-scroll").build()`} />
 
 `ScrollRestoration::set_capacity(capacity)` bounds how many remembered positions are kept at once.
 

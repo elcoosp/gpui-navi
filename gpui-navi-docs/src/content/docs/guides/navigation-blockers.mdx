@@ -4,7 +4,7 @@ description: Prevent navigation with sync or async blockers that guard unsaved c
 type: how-to
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 You block navigation when the user is about to lose unsaved work. A blocker is a guard that Navi consults before a navigation is applied; it can be synchronous or asynchronous.
 
@@ -12,11 +12,9 @@ You block navigation when the user is about to lose unsaved work. A blocker is a
 
 The `use_blocker!` macro wraps an expression in a `Blocker`:
 
-```rust
-use navi_macros::use_blocker;
+<Code lang="rust" code={`use navi_macros::use_blocker;
 
-let blocker = use_blocker!(form.is_dirty());
-```
+let blocker = use_blocker!(form.is_dirty());`} />
 
 The expression decides whether navigation should be blocked: while `form.is_dirty()` evaluates to true, navigations away from the route are held.
 
@@ -36,15 +34,13 @@ Because blockers guard against data loss, they often need to ask the user first.
 
 `NavigateOptions` carries an `ignore_blocker` flag. Setting it to `true` pushes a navigation past registered blockers — appropriate for programmatic flows that already obtained consent:
 
-```rust
-use navi_router::{Location, NavigateOptions};
+<Code lang="rust" code={`use navi_router::{Location, NavigateOptions};
 
 let opts = NavigateOptions {
     ignore_blocker: true,
     ..Default::default()
 };
-navigator.push_location_with(Location::new("/goodbye"), &opts);
-```
+navigator.push_location_with(Location::new("/goodbye"), &opts);`} />
 
 ## Next steps
 

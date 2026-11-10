@@ -4,7 +4,7 @@ description: Protect routes with before_load hooks that redirect, 404, or allow 
 type: how-to
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 You guard a route with a `before_load` hook. Navi runs it before the route loads, and the hook decides whether navigation proceeds, redirects elsewhere, or resolves as not-found.
 
@@ -20,21 +20,19 @@ The hook receives a `BeforeLoadContext` and returns a `BeforeLoadResult`:
 
 The `redirect()` and `not_found()` helper functions construct the non-Ok variants, re-exported from `navi_router`:
 
-```rust
-use navi_router::{BeforeLoadResult, redirect, not_found};
+<Code lang="rust" code={`use navi_router::{BeforeLoadResult, redirect, not_found};
 
 define_route!(
     AdminDashboardRoute,
     path: "/admin/dashboard",
     before_load: |ctx| async move {
-        if !is_signed_in(&ctx) {
-            return BeforeLoadResult::Redirect(redirect("/login"));
-        }
-        BeforeLoadResult::Ok
+                    if !is_signed_in(&ctx) {
+                                    return BeforeLoadResult::Redirect(redirect("/login"));
+                    }
+                    BeforeLoadResult::Ok
     },
     node: admin_node,
-);
-```
+);`} />
 
 <Aside type="note">
   `before_load` is async: you can perform session checks, permission lookups,
@@ -52,15 +50,13 @@ Routes also accept two synchronous lifecycle callbacks, each receiving the `Loca
 | `on_enter` | When someone enters the route. |
 | `on_leave` | When someone leaves the route. |
 
-```rust
-define_route!(
+<Code lang="rust" code={`define_route!(
     ProfileRoute,
     path: "/profile",
     on_enter: |loc| log::info!("entered {}", loc.pathname),
     on_leave: |loc| log::info!("left {}", loc.pathname),
     node: profile_node,
-);
-```
+);`} />
 
 ## Order of operations
 

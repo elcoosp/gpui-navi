@@ -4,6 +4,8 @@ description: The seven crates of the gpui-navi workspace and what each one owns.
 type: reference
 ---
 
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
 The Navi router ships as a Cargo workspace of seven crates. The layering is strict: lower layers never depend on higher ones, and no library crate below `navi-router` touches a UI framework.
 
 | Crate | Purpose |
@@ -34,3 +36,10 @@ With the `nested-search` feature enabled, `parse_query_nested` and `query_to_str
 ## Rendering seam
 
 All rendering goes through [quoin](https://github.com/elcoosp/quoin): route UI is expressed as `quoin_ui::Node` trees (or `component!` shells), and quoin's macro emitters lower them to the selected framework. The data stack is [rs-query](https://github.com/elcoosp/rs-query), the query cache with stale-time and GC behind route loaders.
+## Related
+
+<CardGrid>
+<LinkCard title="Components" href="/reference/components/" description="The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Core Types" href="/reference/core-types/" description="The engine types re-exported from navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="define_route!" href="/reference/define-route/" description="Every argument accepted by the define_route! macro, its types, and defaults." />
+</CardGrid>

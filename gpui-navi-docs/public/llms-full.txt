@@ -1,0 +1,1710 @@
+---
+title: "404"
+description: The page you are looking for does not exist or has moved.
+type: explanation
+---
+
+import { LinkCard } from '@astrojs/starlight/components';
+
+This page does not exist. The URL may be mistyped, or the page may have moved.
+
+## Where to go from here
+
+<LinkCard title="Getting Started" href="/tutorials/getting-started/" description="The golden path from an empty Cargo project to a routed Navi app." />
+<LinkCard title="Home" href="/" description="Back to the docs landing page with all four Diátaxis sections." />
+
+If you followed a link from the docs to get here, that is a bug — please
+[open an issue](https://github.com/elcoosp/gpui-navi/issues) describing the
+page you started from and the link you followed.
+
+
+---
+
+---
+title: Architecture
+description: How the Navi crates layer from the pure routing engine up to framework adapters, and how a navigation flows through them.
+type: explanation
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Navi separates routing logic from rendering so completely that the engine cannot tell which UI framework is displaying it. This page walks the layers from the inside out.
+
+## The layers
+
+1. **`navi-core`** — shared primitives: window keys, ids, config types. Everything above depends on it; it depends on nothing.
+2. **`navi-router-core`** — the pure engine: `RouterCore`, `RouteTree`, `History`, `Blocker`, `Location`, `Redirect`, `NotFound`, and the validation traits. It has no UI dependency and no async runtime.
+3. **`navi-router`** — the adapter layer: it wraps `RouterCore`, interprets `NavigationEffect`s, and hosts the components, blockers, and scroll restoration your app renders.
+4. **`navi-macros` and `navi-codegen`** — the authoring surface: macros for hooks and route definitions, and build-time generation of the route tree from the filesystem.
+5. **`navi-devtools` and `navi-test`** — tooling that observes or exercises the router, framework-agnostic like everything below the adapter.
+
+## The engine is a state machine
+
+`RouterCore` never performs side effects. Given a `Location`, `core.navigate(loc)` returns a `NavigationEffect`:
+
+- `SpawnLoader` — the adapter runs the matched route's loader on its async runtime.
+- `Redirect` — the adapter navigates to the redirect target.
+- `NotFound` — the adapter resolves the not-found UI.
+- `NotifyListeners` — the adapter refreshes its UI.
+
+Because effects are plain data, any framework can interpret them. The upstream architecture note describes the recipe for a new adapter: instantiate `RouterCore` with a `RouteTree`, call `core.navigate(loc)` on navigation, run loaders on your framework's async runtime for `SpawnLoader`, and refresh your UI for `NotifyListeners`.
+
+## Rendering is delegated to quoin
+
+Route UI is expressed as `quoin_ui::Node` trees — plain data any backend understands — or `component!` shells for richer screens. Quoin's macro emitters lower those trees to the selected framework, which is why the same route table runs on GPUI, Dioxus, Leptos, Xilem, and Floem unmodified. The data side delegates symmetrically: loaders cache through rs-query's `QueryClient`, whose runtime seam is backed by quoin's worker pool and portable timer, so it needs no UI framework and no ambient async runtime.
+
+## What code generation contributes
+
+At build time, `navi-codegen` scans `src/routes` and writes `route_tree.gen.rs`, exposing `build_route_tree()` and `register_routes()`. The host calls both during bootstrap. The generated tree carries the same structure the scanner saw on disk — including layout inference and feature-gated routes — so the runtime trie and the filesystem never disagree.
+
+## One navigation, end to end
+
+1. A `Link` click or `Navigator::push` produces a navigation request.
+2. The timeline records `BeforeNavigate`.
+3. Registered blockers are consulted; a held navigation stops here.
+4. `RouterCore` matches the location against the trie and returns effects.
+5. `BeforeLoad` fires; guards may redirect or 404 before loaders run.
+6. `SpawnLoader` resolves loader data through the rs-query cache.
+7. The match resolves (`Resolved`), the UI re-renders (`Rendered`), and scroll restoration reapplies the remembered position.
+## Related
+
+<CardGrid>
+<LinkCard title="Framework Agnosticism" href="/explanation/framework-agnosticism/" description="Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floe" />
+<LinkCard title="Performance Design" href="/explanation/performance/" description="The allocation-free hot paths, bounded memory, and lock-free history behind Navi" />
+<LinkCard title="Route Matching" href="/explanation/route-matching/" description="How the ranked radix trie matches locations in O(log n) and why static segments " />
+</CardGrid>
+
+
+---
+
+---
+title: Framework Agnosticism
+description: Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floem — and what switching frameworks costs.
+type: explanation
+---
+
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
+Most Rust routers grow inside a framework and stay there. Navi inverts the design: the routing engine, loaders, guards, cache, and devtools live in framework-free crates, and **every** rendering seam is delegated to [quoin](https://github.com/elcoosp/quoin), a reactive core with many frontend backends.
+
+## One route table, five renderers
+
+| Framework | Backend | Status |
+| :--- | :--- | :--- |
+| **GPUI** | quoin `gpui` feature | ✅ first-class — devtools panel, keybindings, `run_app!` host |
+| **Dioxus** | quoin `dioxus` feature | ✅ first-class — Dioxus desktop (wry/tao window) |
+| **Leptos** | quoin `leptos` feature | ✅ first-class — CSR, `wasm32-unknown-unknown` |
+| **Xilem** | quoin `xilem` feature | ✅ first-class — Xilem main, rebuild-pump refresh |
+| **Floem** | quoin `floem` feature | ✅ first-class — Floem main, reactive bridge |
+
+There is nothing GPUI-specific inside the router itself. The repository's workspace configuration is explicit about this: GPUI is a **binding** dependency — only the host application and the quoin GPUI adapter reference it, while every navi library crate builds on quoin instead.
+
+## What you write once
+
+For each route you write:
+
+- a `define_route!` declaration with its path, types, hooks, and UI,
+- a `quoin_ui::Node` constructor (`node:`) or a `component!` shell,
+- optional loaders, guards, and validators.
+
+None of that changes between frameworks. Switching framework means two edits: swap the quoin feature flag, and swap the three-line host bootstrap:
+
+<Code lang="rust" code={`// GPUI / Xilem / Floem — quoin's run_app! host
+use navi_demo_core::NaviDemo;
+use quoin::run_app;
+run_app!(NaviDemo);`} />
+
+<Code lang="rust" code={`// Dioxus desktop
+fn app() -> Element { rsx! { NaviDemo {} } }
+fn main() { dioxus::LaunchBuilder::desktop().launch(app); }`} />
+
+<Code lang="rust" code={`// Leptos CSR (wasm32)
+#[wasm_bindgen(start)]
+pub fn main() {
+    leptos::mount::mount_to_body(|| view! { <NaviDemo /> });
+}`} />
+
+## The proof in the repository
+
+The `examples/` directory ships one shared demo — `demo-core`, with routes, loaders, suspense, guards, search params, a 404 page, and devtools — plus five thin hosts: `demo-gpui`, `demo-dioxus`, `demo-floem`, `demo-xilem`, and `demo-leptos`. Every host is a 1–3 line bootstrap around the same `NaviDemo` shell. Opening them side by side shows how little framework-specific code exists.
+
+## Escape hatch
+
+You are not locked out of your framework's native widgets. GPUI subtrees remain reachable through quoin's `rsx!` escape hatch — `gpui-rsx-classes` is enabled automatically with the `gpui` feature — and the GPUI examples wrap `Node` trees in `NodeElement` inside ordinary GPUI components.
+## Related
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="How the Navi crates layer from the pure routing engine up to framework adapters," />
+<LinkCard title="Performance Design" href="/explanation/performance/" description="The allocation-free hot paths, bounded memory, and lock-free history behind Navi" />
+<LinkCard title="Route Matching" href="/explanation/route-matching/" description="How the ranked radix trie matches locations in O(log n) and why static segments " />
+</CardGrid>
+
+
+---
+
+---
+title: Performance Design
+description: The allocation-free hot paths, bounded memory, and lock-free history behind Navi's benchmark numbers.
+type: explanation
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Navi's router is engineered for allocation-free hot paths. This page explains where the guarantees come from and what they bought, with the numbers from the repository's own benchmarks (`docs/BENCHMARKS.md`, criterion medians, 130-route tree).
+
+## The guarantees
+
+| Guarantee | Where you see it |
+| :--- | :--- |
+| **Zero-copy route matching** | Stack-collected parameter bindings, interned `Arc<str>` segment names, FxHash static-child lookup, `HashMap` materialized once on success. Matching is 14–38% faster across the board. |
+| **Per-frame paths allocate nothing** | `use_params!`, `use_search!`, and `use_loader_data!` read navigation-time caches; `Link` active checks are branch-and-byte comparisons (−94%); loader `QueryKey`s are memoized per navigation. |
+| **Bounded memory everywhere** | Ring-buffered event log, capped preload registry, O(1) scroll-eviction, `Arc<RouteTree>` shared between core and adapter (no deep tree clone at startup). |
+| **Lock-free single-owner history** | No `Mutex` in the navigation path; back/forward is −67%. |
+
+## Selected benchmark medians
+
+Matching (per navigation, 130-route tree):
+
+| Benchmark | Before | After | Δ |
+| :--- | ---: | ---: | ---: |
+| match_path/static | 64.8 ns | 41.8 ns | −35% |
+| match_path/dynamic | 163.2 ns | 131.0 ns | −19% |
+| match_path/static_beats_dynamic | 60.7 ns | 46.5 ns | −23% |
+| match_path/deep_nested | 242.1 ns | 151.3 ns | −38% |
+| match_path/splat | 204.6 ns | 139.4 ns | −32% |
+
+Navigation and history (per navigation):
+
+| Benchmark | Before | After | Δ |
+| :--- | ---: | ---: | ---: |
+| navigate/replace_static | 128.1 ns | 108.6 ns | −15% |
+| navigate/replace_dynamic | 292.1 ns | 190.1 ns | −35% |
+| history/back_forward | 212.8 ns | 70.3 ns | −67% |
+| transact/two_replaces | 499.2 ns | 373.1 ns | −25% |
+
+Location parsing (per navigation):
+
+| Benchmark | Before | After | Δ |
+| :--- | ---: | ---: | ---: |
+| location_new/query | 323.4 ns | 302.4 ns | −7% |
+| location_new/query_hash | 446.0 ns | 325.2 ns | −27% |
+| location_new/coerce (7 values) | 760.5 ns | 632.7 ns | −17% |
+
+You can reproduce the numbers with the commands documented in `docs/BENCHMARKS.md` (`cargo bench --bench core --bench adapter` against the saved baselines).
+
+## Quality gates that keep it honest
+
+The workspace enforces the same discipline in CI:
+
+- `cargo clippy --workspace --all-targets -- -W clippy::pedantic -D warnings` — zero warnings, with no `#[allow]` attributes in the codebase (suppressions use targeted `#[expect]`, which errors when stale).
+- The four validation integrations (`validator`, `garde`, `validify`, `valico`) are mutually exclusive blanket impls, so they are linted and tested **per feature** instead of under `--all-features`.
+- `clippy.toml` calibrates a few shape thresholds for the devtools UI module's large render methods instead of scattering allow attributes.
+- Criterion benchmarks (`benches/core.rs` for the engine, `benches/adapter.rs` for the runtime) guard the hot paths against regressions.
+
+The rendering stack is quoin and the data stack is rs-query — both chosen so the router itself never blocks on a framework or an ambient async runtime.
+## Related
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="How the Navi crates layer from the pure routing engine up to framework adapters," />
+<LinkCard title="Framework Agnosticism" href="/explanation/framework-agnosticism/" description="Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floe" />
+<LinkCard title="Route Matching" href="/explanation/route-matching/" description="How the ranked radix trie matches locations in O(log n) and why static segments " />
+</CardGrid>
+
+
+---
+
+---
+title: Route Matching
+description: How the ranked radix trie matches locations in O(log n) and why static segments always beat dynamic ones.
+type: explanation
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+When someone navigates to `/users/42/settings`, the router must decide — deterministically — which route that is. Navi answers with a ranked radix trie in `navi-router-core`, and the design choices there explain both the correctness guarantees and the benchmark numbers.
+
+## The data structure
+
+The `RouteTree` is a ranked radix trie over pattern segments. Each `Segment` is one of:
+
+- **static** — a literal path segment (`users`),
+- **dynamic** — a parameter (`$id`),
+- **optional** — a segment that may be absent,
+- **splat** — a catch-all tail (`$`).
+
+Radix compression means shared prefixes are stored once; the trie shape mirrors your filesystem layout because that is what code generation feeds it. Structural route-tree validation runs against the tree, so contradictory or unreachable structures surface at build time instead of producing surprising matches.
+
+## Determinism: static beats dynamic
+
+Ranking guarantees that static segments always win over dynamic ones. With `users/new.rs` and `users/$id.rs` both defined, `/users/new` always matches the static route — the outcome never depends on definition order or hash iteration. This is the property the `static_beats_dynamic` benchmark exists to protect.
+
+## The hot path allocates nothing
+
+Matching is designed to be allocation-free per navigation:
+
+- Parameter bindings collect on the stack; the `HashMap` materializes **once, on success** — failed matches never allocate.
+- Static-child lookup uses an FxHash map.
+- Segment names are interned `Arc<str>` values, so comparisons are cheap pointer-or-byte operations.
+
+The measured result across the repository's benchmark suite is a 14–38% speedup over the pre-optimization baseline, with the deepest nested path (`deep_nested`) dropping from 242.1 ns to 151.3 ns. The full table lives in the repository's `docs/BENCHMARKS.md`.
+
+## Where the rest of the time goes
+
+- **Location parsing** — `Location::new` splits path, query, and hash; the query path is optimized to avoid re-allocation (−27% on `query_hash`).
+- **History** — a lock-free, single-owner stack: no `Mutex` on the navigation path, which is why `back_forward` improved by 67%.
+- **Transactions** — batched `NavOp`s apply atomically; `transact/two_replaces` measures the single re-render guarantee.
+
+The consequence for your app is simple to state: the router work per navigation is measured in nanoseconds, so your loaders — not your routing — decide perceived speed.
+## Related
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="How the Navi crates layer from the pure routing engine up to framework adapters," />
+<LinkCard title="Framework Agnosticism" href="/explanation/framework-agnosticism/" description="Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floe" />
+<LinkCard title="Performance Design" href="/explanation/performance/" description="The allocation-free hot paths, bounded memory, and lock-free history behind Navi" />
+</CardGrid>
+
+
+---
+
+---
+title: Devtools
+description: Open Navi's built-in devtools panel and use its Routes, Cache, Timeline, and State tabs to debug navigation, loaders, and blockers.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+You inspect your router at runtime with the built-in devtools panel. It runs in-app on every supported framework — the panel itself renders through quoin, so GPUI, Dioxus, Leptos, Xilem, and Floem all get the same interface.
+
+## Open the panel
+
+Press the devtools keybinding:
+
+| Platform | Shortcut |
+| :--- | :--- |
+| macOS | `Cmd+Shift+D` |
+| Windows / Linux | `Ctrl+Shift+D` |
+
+The keybinding is exposed through `DevtoolsModel::keybindings()`, so a host can also wire it into its own keymap.
+
+## The four tabs
+
+| Tab | What you do there |
+| :--- | :--- |
+| **Routes** | See the route tree visually and trigger test navigation. |
+| **Cache** | Inspect and invalidate the rs-query loader cache. |
+| **Timeline** | Read the event log with search, filter, and export capabilities. |
+| **State** | Review router state, active navigation blockers, and metadata. |
+
+## Read the timeline
+
+The timeline records the navigation lifecycle as events. Each `DevtoolsEvent` carries a badge and badge color (`badge()`, `badge_color()`) plus a description, and `LoggedEvent` formats the time for display. The router-side `RouterEventType` enumerates the six lifecycle stages the panel filters on:
+
+`BeforeNavigate`, `BeforeLoad`, `Load`, `BeforeRouteMount`, `Resolved`, `Rendered`
+
+Use the timeline to answer questions like "did my `before_load` guard redirect?" or "how long did the loader take?" — the `BeforeNavigate → BeforeLoad → Resolved` sequence tells the whole story of one navigation.
+
+<Aside type="note">
+  The devtools model is framework-agnostic (`navi-devtools`), built on the
+  `DevtoolsModel` struct with a `render` seam that the host framework
+  materializes. Timeline search is also settable programmatically through
+  `tour_set_timeline_search` — handy for tests.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Architecture" href="/explanation/architecture/" description="Where the devtools model sits relative to the router core." />
+<LinkCard title="Workspace Crates" href="/reference/crates/" description="navi-devtools and the crates it talks to." />
+
+
+---
+
+---
+title: File-Based Routing
+description: Every route file naming convention in Navi — dynamic segments, splats, index routes, layouts, groups, and ignored files.
+type: how-to
+---
+
+import { Aside, Code, FileTree, LinkCard } from '@astrojs/starlight/components';
+
+You define the entire URL structure of your app through file and folder names inside your configured routes directory (default `src/routes`). The `navi-codegen` scanner turns those names into route patterns at build time.
+
+## Naming conventions
+
+| File or folder | Pattern produced | Role |
+| :--- | :--- | :--- |
+| `index.rs` | `/` (or the parent path) | Index route for its directory |
+| `$id.rs` | `/$id` | Dynamic segment — one URL parameter |
+| `$.rs` | splat / not-found | Catch-all; marks the route as not-found |
+| `__root.rs` | `/` | Root layout wrapping every route |
+| `_auth.rs` or `_auth/` | — | Pathless layout — renders children without adding a URL segment |
+| `(marketing)/` | — | Group folder — organizes files without affecting the URL |
+| `-draft.rs` | — | Ignored — files with the ignore prefix are skipped |
+| `users.rs` next to `users/` | `/users` | Layout for the `users/` directory |
+
+All conventions come from the scanner, so they respond to the `route_token`, `index_token`, and `route_file_ignore_prefix` keys in `navi.config.json` (see the [config reference](/reference/navi-config/)).
+
+<Aside type="tip">
+  A route file can also opt into being a layout explicitly with
+  `is_layout: true` in `define_route!`. The scanner honors that flag so the
+  generated parent structure matches the runtime tree.
+</Aside>
+
+## Worked example
+
+This tree is the layout of the repository's own `example-app`:
+
+<FileTree>
+  - src/routes/
+    - __root.rs
+    - index.rs
+    - $.rs
+    - login.rs
+    - about.rs
+    - _auth/
+      - profile.rs
+    - (marketing)/
+      - about.rs
+    - users/
+      - index.rs
+      - $id.rs
+      - $.rs
+    - dashboard/
+      - index.rs
+      - settings.rs
+      - analytics.rs
+    - admin/
+      - dashboard.rs
+    - docs/
+      - $.rs
+</FileTree>
+
+From this tree the scanner produces, among others:
+
+- `/` — the root layout plus index page.
+- `/users` — the users index.
+- `/users/$id` — a dynamic user page.
+- `/dashboard/settings` — a nested page under the dashboard directory.
+- The `$.rs` files mark not-found catch-alls at their level, and `_auth/profile.rs` renders under a pathless layout: the URL is `/profile`, but `profile` renders inside the `_auth` layout.
+
+<Aside type="caution">
+  The scanner derives a route only from files that actually declare one via
+  `define_route!`. A stray `.rs` file without a `define_route!` call is
+  skipped, and a file that contains `define_route!` without a parsable route
+  type name fails the scan with an error.
+</Aside>
+
+## Renaming the conventions
+
+You are not locked into `$` and `index`. The tokens are configuration:
+
+<Code lang="json" code={`{
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}`} />
+
+If you change `route_token`, dynamic segments and splats use your token instead of `$` in file names.
+
+## Next steps
+
+<LinkCard title="define_route! reference" href="/reference/define-route/" description="All accepted arguments, including is_layout and is_index." />
+<LinkCard title="navi.config.json reference" href="/reference/navi-config/" description="Every code generation key with types and defaults." />
+
+
+---
+
+---
+title: Installation
+description: Add the Navi crates to your Rust project, select your UI framework with a quoin feature flag, and wire up route-tree code generation.
+type: how-to
+---
+
+import { Aside, Code, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
+
+You add Navi to a Rust UI application in three steps: declare the crates, select your framework through a quoin feature, and wire route-tree generation into `build.rs`.
+
+## Prerequisites
+
+- Rust 1.85+ (edition 2024).
+- A UI framework supported by quoin: GPUI, Dioxus, Leptos, Xilem, or Floem.
+
+## 1. Add the crates
+
+<Tabs>
+  <TabItem label="Cargo.toml">
+<Code lang="toml" code={`  [dependencies]
+  navi-router = { path = "../gpui-navi/navi-router" }
+  navi-macros = { path = "../gpui-navi/navi-macros" }
+  quoin      = { path = "../quoin/quoin", features = ["gpui"] }`} />
+  </TabItem>
+  <TabItem label="cargo add">
+<Code lang="bash" code={` cargo add navi-router --path ../gpui-navi/navi-router
+ cargo add navi-macros --path ../gpui-navi/navi-macros
+ cargo add quoin --path ../quoin/quoin --features gpui`} />
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+  The quoin and rs-query crates Navi builds on are consumed as local path
+  dependencies today: the workspace expects the `quoin` and `rs-query` clones
+  to sit side by side with the `gpui-navi` clone (a `workspaces/` directory
+  containing all three). Once quoin and rs-query publish releases carrying the
+  required changes, these become plain version dependencies. The examples in
+  the repository already use this layout.
+</Aside>
+
+## 2. Select your framework
+
+The framework is a feature flag on quoin. The route table, components, loaders, and devtools do not change when you switch.
+
+| Framework | quoin feature | Bootstrap style |
+| :--- | :--- | :--- |
+| GPUI | `gpui` | `run_app!(App)` |
+| Dioxus | `dioxus` | `LaunchBuilder::desktop().launch(app)` |
+| Leptos | `leptos` | `mount_to_body` on `wasm32-unknown-unknown` |
+| Xilem | `xilem` | `run_app!(App)` |
+| Floem | `floem` | `run_app!(App)` |
+
+Enabling the `gpui` feature automatically enables `gpui-rsx-classes`, which keeps GPUI subtrees reachable through quoin's `rsx!` escape hatch.
+
+## 3. Wire up code generation
+
+Create `navi.config.json` in your project root (see the [config reference](/reference/navi-config/) for every key):
+
+<Code lang="json" code={`{
+  "routes_directory": "./src/routes",
+  "generated_route_tree": "./src/route_tree.gen.rs",
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}`} />
+
+Then call the generator from `build.rs`:
+
+<Code lang="rust" code={`fn main() {
+    let config = navi_codegen::NaviConfig::from_file("navi.config.json")
+                    .expect("Failed to read config");
+    navi_codegen::generator::write_route_tree(&config).unwrap();
+}`} />
+
+## 4. Verify
+
+Build the workspace and confirm the generated file appears:
+
+<Code lang="bash" code={`cargo build
+ls src/route_tree.gen.rs`} />
+
+The generated module exposes `build_route_tree()` and `register_routes()`, which you use to boot the router — see [Getting Started](/tutorials/getting-started/#4-boot-the-app) for the full bootstrap.
+
+## Next steps
+
+<LinkCard title="Getting Started" href="/tutorials/getting-started/" description="The complete golden path from an empty project to a routed app." />
+<LinkCard title="File-Based Routing" href="/guides/file-based-routing/" description="Learn the route file naming conventions." />
+
+
+---
+
+---
+title: Loaders & Suspense
+description: Fetch route data with loaders backed by the rs-query cache, control staleness and GC, and render granular loading states with Awaited.
+type: how-to
+---
+
+import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
+
+You attach a `loader` to any route and Navi runs it when someone navigates to that route, caches the result through [rs-query](https://github.com/elcoosp/rs-query), and hands the data to your UI.
+
+## Declare a loader
+
+The loader receives the route's typed `params` and returns the type declared as `data`. The example below comes from the repository's own `example-app`:
+
+<Code lang="rust" code={`define_route!(
+    UsersParamIdRoute,
+    path: "/users/$id",
+    params: UserParams,
+    data: UserData,
+    loader: |params: UserParams| async move {
+                    let id = params.id;
+                    navi_router::sleep(std::time::Duration::from_millis(800)).await;
+                    Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(UserData {
+                                    id: id.clone(),
+                                    name: format!("User {id}"),
+                                    email: format!("user{id}@example.com"),
+                    }))
+    },
+    component: UserDetailPage,
+);`} />
+
+## Control caching
+
+Two `define_route!` arguments tune the cache behavior of a route's data:
+
+| Argument | Meaning |
+| :--- | :--- |
+| `stale_time` | How long loaded data stays fresh, e.g. `Duration::from_secs(60)`. |
+| `gc_time` | How long unused data survives in the cache, e.g. `Duration::from_secs(300)`. |
+
+The cache is a real query cache — the devtools **Cache** tab lets you inspect and invalidate entries at runtime (see [Devtools](/guides/devtools/)).
+
+## Render data with Awaited
+
+`Awaited` is the suspense component for route data: it renders a fallback while the loader runs and calls your closure with the data once resolved. This is the pattern the repository's `awaited.rs` example uses:
+
+<Code lang="rust" code={`use navi_router::components::Awaited;
+
+Awaited::<AwaitedDemoRoute>::new()
+    .fallback(|| quoin_ui::Node::div().child("Loading...").build())
+    .child(|data: String| {
+                    quoin_ui::Node::div().child(format!("Data: {data}")).build()
+    })
+    .build()`} />
+
+The `.child` closure receives the loaded data value.
+
+## Wrap loading regions with SuspenseBoundary
+
+`SuspenseBoundary` displays a fallback UI while nested routes load. It takes a fallback closure and renders the matched child route inside once loading completes:
+
+<Code lang="rust" code={`use navi_router::components::SuspenseBoundary;
+
+SuspenseBoundary::new(|| quoin_ui::Node::text("Loading section…").build()).build()`} />
+
+Place it in a layout to give an entire subtree a shared loading state.
+
+<Aside type="note">
+  Loader `QueryKey`s are memoized per navigation, so re-renders during a
+  navigation do not re-key the query. Reading loader data through
+  `use_loader_data!` in the render path allocates nothing — it reads a
+  navigation-time cache.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Route Guards" href="/guides/route-guards/" description="Redirect or 404 before a route loads with before_load." />
+<LinkCard title="Macros reference" href="/reference/macros/" description="use_loader_data! and the other typed hooks." />
+
+
+---
+
+---
+title: Navigation Blockers
+description: Prevent navigation with sync or async blockers that guard unsaved changes and destructive in-progress work.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+You block navigation when the user is about to lose unsaved work. A blocker is a guard that Navi consults before a navigation is applied; it can be synchronous or asynchronous.
+
+## Create a blocker
+
+The `use_blocker!` macro wraps an expression in a `Blocker`:
+
+<Code lang="rust" code={`use navi_macros::use_blocker;
+
+let blocker = use_blocker!(form.is_dirty());`} />
+
+The expression decides whether navigation should be blocked: while `form.is_dirty()` evaluates to true, navigations away from the route are held.
+
+<Aside type="note">
+  `Blocker::new(should_block)` is the underlying constructor — the macro
+  expands to it directly, so you can create blockers without the macro when
+  you manage lifetimes yourself. Blockers carry a `BlockerId` and are
+  registered in the router state, where the devtools **State** tab lists the
+  currently active navigation blockers.
+</Aside>
+
+## Async blockers
+
+Because blockers guard against data loss, they often need to ask the user first. An async blocker can await that confirmation before it lets the navigation proceed or cancels it — for example, opening a modal and resolving after the user answers.
+
+## Bypassing a blocker
+
+`NavigateOptions` carries an `ignore_blocker` flag. Setting it to `true` pushes a navigation past registered blockers — appropriate for programmatic flows that already obtained consent:
+
+<Code lang="rust" code={`use navi_router::{Location, NavigateOptions};
+
+let opts = NavigateOptions {
+    ignore_blocker: true,
+    ..Default::default()
+};
+navigator.push_location_with(Location::new("/goodbye"), &opts);`} />
+
+## Next steps
+
+<LinkCard title="Runtime & Router Options" href="/reference/runtime/" description="NavigateOptions and the Navigator methods used above." />
+<LinkCard title="Devtools" href="/guides/devtools/" description="Inspect active blockers in the State tab." />
+
+
+---
+
+---
+title: Link Preloading
+description: Warm the loader cache before navigation with Render, Intent, and Viewport preload strategies and per-href deduplication.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+You preload a link's data before the user commits to navigating, so the target route renders without waiting for its loader. Preloading is per-`<Link>` and deduplicated per href — many links to the same target trigger one preload.
+
+## Choose a strategy
+
+Set the `preload` builder method on a `Link` with a `PreloadType`:
+
+| Strategy | Behavior |
+| :--- | :--- |
+| `PreloadType::Render` | Preload as soon as the link renders. **This is the default.** |
+| `PreloadType::Intent` | Preload on the first mouse move over the link, after a delay. |
+| `PreloadType::Viewport` | Preload when the link enters the viewport. |
+
+<Code lang="rust" code={`use navi_router::components::{Link, PreloadType};
+use std::time::Duration;
+
+Link::new("/users/42")
+    .preload(PreloadType::Intent)
+    .preload_delay(Duration::from_millis(120))
+    .child("Open user 42")
+    .build()`} />
+
+Tune how long the pointer must hover before an `Intent` preload fires with `preload_delay`.
+
+<Aside type="caution">
+  Adapters have no intersection observer yet, so `Viewport` currently behaves
+  like `Render`. The strategy is in the API today so your code is future-proof
+  when true viewport observation lands.
+</Aside>
+
+## Preload programmatically
+
+The `Navigator` exposes a `preload` method for the same purpose outside of links:
+
+<Code lang="rust" code={`let navigator = Navigator::new();
+navigator.preload("/users/42");`} />
+
+## Next steps
+
+<LinkCard title="Loaders & Suspense" href="/guides/loaders-and-suspense/" description="What a preload actually warms — the route's loader cache." />
+<LinkCard title="Components reference" href="/reference/components/" description="The complete Link builder surface." />
+
+
+---
+
+---
+title: Route Guards
+description: Protect routes with before_load hooks that redirect, 404, or allow navigation — plus on_enter and on_leave lifecycle callbacks.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+You guard a route with a `before_load` hook. Navi runs it before the route loads, and the hook decides whether navigation proceeds, redirects elsewhere, or resolves as not-found.
+
+## Return one of three outcomes
+
+The hook receives a `BeforeLoadContext` and returns a `BeforeLoadResult`:
+
+| Result | Effect |
+| :--- | :--- |
+| `BeforeLoadResult::Ok` | Navigation continues. |
+| `BeforeLoadResult::Redirect(Redirect)` | Navi follows the redirect target instead. |
+| `BeforeLoadResult::NotFound(NotFound)` | Navi resolves the navigation as not-found. |
+
+The `redirect()` and `not_found()` helper functions construct the non-Ok variants, re-exported from `navi_router`:
+
+<Code lang="rust" code={`use navi_router::{BeforeLoadResult, redirect, not_found};
+
+define_route!(
+    AdminDashboardRoute,
+    path: "/admin/dashboard",
+    before_load: |ctx| async move {
+                    if !is_signed_in(&ctx) {
+                                    return BeforeLoadResult::Redirect(redirect("/login"));
+                    }
+                    BeforeLoadResult::Ok
+    },
+    node: admin_node,
+);`} />
+
+<Aside type="note">
+  `before_load` is async: you can perform session checks, permission lookups,
+  or any other awaitable work inside it. The event timeline records the
+  `BeforeLoad` stage, and the devtools timeline shows where a navigation
+  changed course (see [Devtools](/guides/devtools/)).
+</Aside>
+
+## React to route lifecycle changes
+
+Routes also accept two synchronous lifecycle callbacks, each receiving the `Location`:
+
+| Argument | Fires |
+| :--- | :--- |
+| `on_enter` | When someone enters the route. |
+| `on_leave` | When someone leaves the route. |
+
+<Code lang="rust" code={`define_route!(
+    ProfileRoute,
+    path: "/profile",
+    on_enter: |loc| log::info!("entered {}", loc.pathname),
+    on_leave: |loc| log::info!("left {}", loc.pathname),
+    node: profile_node,
+);`} />
+
+## Order of operations
+
+A navigation flows through `BeforeNavigate → BeforeLoad → Resolved` events. The `before_load` hook sits between the navigation decision and data resolution, which is why a guard can redirect before any loader runs.
+
+## Next steps
+
+<LinkCard title="Loaders & Suspense" href="/guides/loaders-and-suspense/" description="What runs after the guard allows the navigation." />
+<LinkCard title="Core Types reference" href="/reference/core-types/" description="BeforeLoadContext, BeforeLoadResult, Redirect, and NotFound." />
+
+
+---
+
+---
+title: Scroll Restoration
+description: Restore scroll positions per path and query, bound the cache, and opt out per route or per navigation.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+You get scroll restoration automatically with Navi: the router remembers scroll positions as the user moves through the app and restores them on return visits.
+
+## How keys work
+
+Positions are keyed by **path plus normalized query**. `/users?sort=asc` and `/users?sort=desc` remember separate positions, so two sorted views of the same list do not fight over one offset. The cache is capacity-bounded with O(1) eviction, so long sessions do not grow memory without bound.
+
+## Opt out
+
+Two levels of opt-out exist:
+
+| Level | Mechanism |
+| :--- | :--- |
+| Whole navigation | Pass `reset_scroll: true` on a `Link` to start the target position from the top. |
+| Per navigation call | `NavigateOptions.reset_scroll` does the same for programmatic navigation. |
+
+<Code lang="rust" code={`use navi_router::components::Link;
+
+Link::new("/dashboard")
+    .reset_scroll(true)
+    .child("Dashboard (from the top)")
+    .build()`} />
+
+## Mount the component
+
+The `ScrollRestoration` component attaches a scroll-tracking node to your UI. Give it a handle id:
+
+<Code lang="rust" code={`use navi_router::components::ScrollRestoration;
+
+ScrollRestoration::node("main-scroll").build()`} />
+
+`ScrollRestoration::set_capacity(capacity)` bounds how many remembered positions are kept at once.
+
+<Aside type="note">
+  The repository's commit history tracks an example that showcases scroll
+  restoration ("Try to showcase scroll restoration does not work yet"), so
+  treat the behavior as under active repair in the current workspace state and
+  verify against the examples when you adopt it.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Runtime & Router Options" href="/reference/runtime/" description="NavigateOptions and the router state behind restoration." />
+<LinkCard title="Components reference" href="/reference/components/" description="The ScrollRestoration component API." />
+
+
+---
+
+---
+title: Search Params
+description: Type your query strings with typed search structs, navigate with search values, and opt into nested bracket syntax with the nested-search feature.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+You declare a `search` type on a route to work with query strings through typed structs instead of raw strings.
+
+## Declare typed search params
+
+Give the route a `search` type and read it back with `use_search!`:
+
+<Code lang="rust" code={`use navi_macros::{define_route, use_search};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct UserSearch {
+    pub sort: Option<String>,
+    pub page: Option<u32>,
+}
+
+define_route!(
+    UsersRoute,
+    path: "/users",
+    search: UserSearch,
+    node: users_node,
+);`} />
+
+Inside the route's UI, `use_search!(UsersRoute)` returns the parsed search struct for the current navigation.
+
+## Navigate with search values
+
+`Link` accepts a `search` value, plus `hash` and `state`, so navigation carries query data without hand-building URLs:
+
+<Code lang="rust" code={`use navi_router::components::Link;
+
+Link::new("/users")
+    .search(serde_json::json!({ "sort": "desc", "page": 2 }))
+    .child("Users, descending")
+    .build()`} />
+
+## Validate search params
+
+Navi exposes a `ValidateSearch` trait with `ValidationResult` / `ValidationError`. With the [validation integrations](/guides/validation/) you connect this to `validator`, `garde`, `validify`, or `valico`.
+
+## Nested search params
+
+Enable the `nested-search` feature for typed, bracket-nested query strings of the form `filter[status]=open&tags[0]=rust`, parsed via `serde_qs`. The feature re-exports two helpers from `navi_router`:
+
+| Helper | Purpose |
+| :--- | :--- |
+| `parse_query_nested` | Parse a bracket-nested query string into a nested value. |
+| `query_to_string` | Serialize a nested value back to a query string. |
+
+<Aside type="note">
+  Scroll restoration keys positions by path **plus normalized query**, so
+  sorting or filtering the same page restores its own scroll position — see
+  [Scroll Restoration](/guides/scroll-restoration/).
+</Aside>
+
+## Next steps
+
+<LinkCard title="Validation" href="/guides/validation/" description="Wire validator, garde, validify, or valico into search params." />
+<LinkCard title="Components reference" href="/reference/components/" description="The full Link builder API, including search, hash, and state." />
+
+
+---
+
+---
+title: Validation
+description: Integrate validator, garde, validify, or valico with Navi's ValidateSearch trait — one integration per crate, enforced per feature.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+You validate search params and route data with the validation library your project already uses. Navi integrates four of them through mutually exclusive feature flags.
+
+## Choose one integration
+
+| Feature | Crate |
+| :--- | :--- |
+| `validator` | [validator](https://crates.io/crates/validator) |
+| `garde` | [garde](https://crates.io/crates/garde) |
+| `validify` | [validify](https://crates.io/crates/validify) |
+| `valico` | [valico](https://crates.io/crates/valico) |
+
+Enable exactly one in your `Cargo.toml`:
+
+<Code lang="toml" code={`[dependencies]
+navi-router = { path = "../gpui-navi/navi-router", features = ["garde"] }`} />
+
+<Aside type="caution">
+  The four integrations are mutually exclusive blanket impls. Enabling more
+  than one on the same crate is not a supported configuration. This is also
+  why the workspace lints and tests each integration **per feature** instead
+  of under `--all-features`.
+</Aside>
+
+## The validation surface
+
+All four integrations feed the same trait surface, re-exported from `navi_router`:
+
+| Item | Role |
+| :--- | :--- |
+| `ValidateSearch` | Trait a search type implements to validate itself. |
+| `ValidationResult` | Outcome of a validation pass. |
+| `ValidationError` | A single validation failure. |
+
+Implement `ValidateSearch` for your typed search struct (see [Search Params](/guides/search-params/)), and the router consults it when matching navigations carry query data.
+
+## Verify
+
+Run the workspace tests for the feature you enabled:
+
+<Code lang="bash" code={`cargo test -p navi-router --features garde`} />
+
+The repository's `example-app` ships a `validation-test` route directory with one page per integration (`validator.rs`, `garde.rs`, `validify.rs`, `valico.rs`) that you can open side by side.
+
+## Next steps
+
+<LinkCard title="Search Params" href="/guides/search-params/" description="Declare the typed search structs you validate here." />
+<LinkCard title="Core Types reference" href="/reference/core-types/" description="ValidateSearch, ValidationResult, and ValidationError." />
+
+
+---
+
+---
+title: Navi
+description: A powerful file-based router for Rust UI frameworks — one route table, every frontend, powered by quoin.
+type: explanation
+template: splash
+hero:
+  image:
+    file: ../../assets/logo.png
+    alt: Logo
+  title: "Navi"
+  tagline: One route table, every frontend.
+  actions:
+    - text: Get started in minutes
+      link: /tutorials/getting-started/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/elcoosp/gpui-navi
+      icon: right-arrow
+---
+
+Navi is a file-based router for Rust UI applications. It is **not tied to any single UI framework**: the routing engine, loaders, guards, cache, and devtools live in framework-free crates, and all rendering seams are delegated to [quoin](https://github.com/elcoosp/quoin) — one reactive core, many frontend backends. The same route table, components, and devtools panel run unmodified on GPUI, Dioxus, Leptos, Xilem, and Floem.
+
+import { Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
+
+## Choose your path
+
+<CardGrid stagger>
+  <Card title="Build your first app">
+    Follow the golden path from an empty Cargo project to a routed app on your framework of choice.
+  </Card>
+  <Card title="Ship a feature">
+    Task-focused guides: loaders, guards, blockers, search params, validation, preloading, and more.
+  </Card>
+  <Card title="Look something up">
+    Reference pages for every crate, macro, component, config key, and core type.
+  </Card>
+  <Card title="Understand the design">
+    Why Navi is framework-agnostic, how route matching ranks paths, and where the nanoseconds go.
+  </Card>
+</CardGrid>
+
+<LinkButton href="/tutorials/getting-started/" icon="right-arrow">Start the tutorial</LinkButton>
+
+<LinkCard title="Start with the Getting Started tutorial" href="/tutorials/getting-started/" description="Dependencies, your first routes, code generation, and booting the app." />
+
+## What you get
+
+- **File-based routing** — define routes intuitively through the filesystem; `navi-codegen` generates a type-checked route tree at build time.
+- **Nested layouts** — hierarchical layouts powered by `<Outlet>`.
+- **Loaders** — data fetching with caching, stale-time, and garbage collection, backed by [rs-query](https://github.com/elcoosp/rs-query).
+- **Suspense boundaries** — granular loading states with `Awaited` and `SuspenseBoundary`.
+- **`beforeLoad` guards** — robust route protection with redirect and not-found results.
+- **Navigation blockers** — async and sync guards that prevent data loss from unsaved changes.
+- **Scroll restoration** — automatic memory and restoration of scroll positions, keyed by path plus normalized query.
+- **Navigation transactions** — batch `Push`, `Replace`, `Back`, `Forward`, and `Go` operations applied atomically with a single re-render.
+- **Devtools** — inspect routes, cache, timeline, and state directly inside your app, on every supported framework.
+- **Link preloading** — `Render`, `Intent` (hover plus delay), and `Viewport` strategies with per-href deduplication.
+
+## Frameworks
+
+Selecting a framework is a feature flag on your crate. There is nothing GPUI-specific inside the router itself.
+
+| Framework | quoin feature | Status |
+| :--- | :--- | :--- |
+| **GPUI** | `gpui` | ✅ first-class — devtools panel, keybindings, `run_app!` host |
+| **Dioxus** | `dioxus` | ✅ first-class — Dioxus desktop (wry/tao window) |
+| **Leptos** | `leptos` | ✅ first-class — CSR, `wasm32-unknown-unknown` |
+| **Xilem** | `xilem` | ✅ first-class — Xilem main, rebuild-pump refresh |
+| **Floem** | `floem` | ✅ first-class — Floem main, reactive bridge |
+
+## Explore the docs
+
+- [Workspace crates](/reference/crates/) — what each of the seven crates owns.
+- [define_route!](/reference/define-route/) — every accepted argument, with defaults.
+- [Architecture](/explanation/architecture/) — how the engine, adapter, and renderer layers relate.
+- [Performance design](/explanation/performance/) — the allocation-free hot paths, with benchmark numbers.
+
+
+---
+
+---
+title: Components
+description: The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestoration — with their full builder surface.
+type: reference
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+`navi_router::components` holds the UI components your routes and layouts render. Components are framework-agnostic: they build `quoin_ui::Node` trees that quoin lowers to your selected framework.
+
+## Link
+
+A navigation link with built-in active styling. Construct with `Link::new(to)` and finish with `.build()`.
+
+| Builder method | Accepts | Description |
+| :--- | :--- | :--- |
+| `new(to)` | anything into `String` | Target href, e.g. `"/users/42"`. |
+| `search(value)` | `serde_json::Value` | Query string for the navigation. |
+| `hash(value)` | anything into `String` | Hash fragment. |
+| `state(value)` | `serde_json::Value` | Navigation state. |
+| `replace(bool)` | boolean | Replace the current history entry instead of pushing. |
+| `disabled(bool)` | boolean | Disable the link. |
+| `active_options(ActiveOptions)` | `ActiveOptions` | Control how active-state matching works. |
+| `reset_scroll(bool)` | boolean | Scroll the target position back to the top. |
+| `active_style(f)` | `Fn(NodeStyle) -> NodeStyle` | Style applied while the link is active. |
+| `inactive_style(f)` | `Fn(NodeStyle) -> NodeStyle` | Style applied while the link is inactive. |
+| `preload(PreloadType)` | `PreloadType` | Preloading strategy (see below). |
+| `preload_delay(Duration)` | `Duration` | Hover delay before an `Intent` preload. |
+| `child(child)` | anything into `NodeChild` | Link content; call repeatedly. |
+| `to()` / `is_disabled()` | — | Accessors for the target and disabled flag. |
+
+External hrefs — `http(s):`, `mailto:`, and `tel:` — are handed to the OS instead of the router (`is_external_href` detects them).
+
+### Active matching
+
+`path_is_active(current, href, exact)` implements the branch-and-byte comparison behind active styling. Active checks are pure comparisons — they allocate nothing.
+
+## PreloadType
+
+| Variant | Behavior |
+| :--- | :--- |
+| `Render` | Preload when the link renders. The `#[default]`. |
+| `Intent` | Preload on first hover, after `preload_delay`. |
+| `Viewport` | Intended for viewport entry; currently behaves like `Render` because adapters lack an intersection observer. |
+
+## Outlet
+
+Renders the matched child route within a layout: `Outlet::new().build()`.
+
+## SuspenseBoundary
+
+Displays a fallback while nested routes load.
+
+| Item | Signature |
+| :--- | :--- |
+| `new(fallback)` | `impl Fn() -> Node + 'static` — the loading UI. |
+| `build()` | Produces the `Node`. |
+
+## Awaited
+
+Waits for and renders the data a route's loader produced.
+
+| Builder method | Accepts | Description |
+| :--- | :--- | :--- |
+| `new()` | typed `Awaited::<Route>` | Binds the component to a route with a `data` type. |
+| `fallback(f)` | `Fn() -> Node` | Rendered while the loader runs. |
+| `child(f)` | `Fn(data) -> Node` | Rendered with the loaded data. |
+| `build()` | — | Produces the `Node`. |
+
+## ScrollRestoration
+
+Remembers and restores scroll positions (see the how-to guide for behavior details).
+
+| Item | Signature |
+| :--- | :--- |
+| `node(handle_id)` | Anything into `String`; returns the tracking `Node`. Also available as the free function `scroll_restoration_node`. |
+| `set_capacity(capacity)` | `usize`; bounds how many positions are remembered. |
+
+## Registration
+
+`register_route_component` registers a route's component with the router — the generated `register_routes()` calls it for you, so you interact with it only when wiring routes manually.
+## Related
+
+<CardGrid>
+<LinkCard title="Core Types" href="/reference/core-types/" description="The engine types re-exported from navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Workspace Crates" href="/reference/crates/" description="The seven crates of the gpui-navi workspace and what each one owns." />
+<LinkCard title="define_route!" href="/reference/define-route/" description="Every argument accepted by the define_route! macro, its types, and defaults." />
+</CardGrid>
+
+
+---
+
+---
+title: Core Types
+description: The engine types re-exported from navi-router-core — Location, RouteTree, RouterCore, NavigationEffect, and the rest.
+type: reference
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+`navi-router-core` is the pure routing engine: no UI framework, no async runtime. These are the types application and adapter code encounters, all re-exported from `navi-router`.
+
+## Navigation and location
+
+| Type | Role |
+| :--- | :--- |
+| `Location` | A parsed URL: pathname plus query and hash. `Location::new("/")` constructs one. |
+| `NavOp` | One operation in a transaction: `Push(Location)`, `Replace(Location)`, `Back`, `Forward`, `Go(isize)`. |
+| `NavigateOptions` | Per-navigation options — see the [runtime reference](/reference/runtime/). |
+| `NavigationEffect` | What the engine asks the adapter to do after a navigation (below). |
+| `MatchResult` | The outcome of matching a location against the tree. |
+| `ScrollIntoViewOptions` | Scroll behavior for hash navigation. |
+| `ViewTransitionOptions` | View transition preferences. |
+
+## NavigationEffect
+
+The engine is a state machine: `RouterCore::navigate` returns effects the adapter interprets.
+
+| Variant | Fields | Meaning |
+| :--- | :--- | :--- |
+| `SpawnLoader` | `route_id`, `params` | Run the matched route's loader on your async runtime. |
+| `Redirect` | `to`, `replace` | Follow a redirect instead. |
+| `NotFound` | `data: Option<serde_json::Value>` | Resolve as not-found, optionally with data. |
+| `NotifyListeners` | — | Refresh the UI. |
+
+## Route tree and matching
+
+| Type | Role |
+| :--- | :--- |
+| `RouteTree` | The ranked radix trie of routes; O(log n) matching. Shared as `Arc<RouteTree>` between core and adapter. |
+| `RoutePattern` | A compiled route pattern. |
+| `Segment` | One pattern segment — static, dynamic, optional, or splat. |
+| `RouteNode` | A node in the route tree. |
+
+Matching is deterministic: static segments always win over dynamic ones, backed by an FxHash static-child lookup and interned `Arc<str>` segment names. See [Route Matching](/explanation/route-matching/) for the design.
+
+## History and blockers
+
+| Type | Role |
+| :--- | :--- |
+| `History` | Browser-style history stack. Lock-free, single-owner — no `Mutex` in the navigation path. |
+| `Blocker` | A navigation guard; `Blocker::new(should_block)` constructs one, `BlockerId` identifies it. |
+
+## Guards and validation
+
+| Type | Role |
+| :--- | :--- |
+| `BeforeLoadContext` | Passed to `before_load` hooks. |
+| `BeforeLoadResult` | Guard outcome: `Ok`, `Redirect(Redirect)`, or `NotFound(NotFound)`. |
+| `Redirect` / `redirect()` | Redirect value and its constructor helper. |
+| `NotFound` / `not_found()` | Not-found value and its constructor helper. |
+| `ValidateSearch` | Trait for validating typed search params. |
+| `ValidationResult` / `ValidationError` | Validation outcomes and failures. |
+| `RouteContextArgs` | Arguments assembled for route context. |
+
+## Runtime state types
+
+Re-exported from `navi-router::state`:
+
+| Type | Role |
+| :--- | :--- |
+| `RouterState` | The live router state the `RouterHandle` shares. |
+| `RouterEvent` | An event on the bus feeding the devtools timeline. |
+| `LoaderState` / `LoaderOutcome` | Per-route loader status and result. |
+| `AnyData` | Type-erased loader payload storage. |
+| `RouteDef` | A registered route definition. |
+| `RouterHost` | The host seam the adapter implements. |
+
+## Devtools event stages
+
+The devtools timeline filters on six `RouterEventType` stages: `BeforeNavigate`, `BeforeLoad`, `Load`, `BeforeRouteMount`, `Resolved`, `Rendered`.
+## Related
+
+<CardGrid>
+<LinkCard title="Components" href="/reference/components/" description="The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Workspace Crates" href="/reference/crates/" description="The seven crates of the gpui-navi workspace and what each one owns." />
+<LinkCard title="define_route!" href="/reference/define-route/" description="Every argument accepted by the define_route! macro, its types, and defaults." />
+</CardGrid>
+
+
+---
+
+---
+title: Workspace Crates
+description: The seven crates of the gpui-navi workspace and what each one owns.
+type: reference
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+The Navi router ships as a Cargo workspace of seven crates. The layering is strict: lower layers never depend on higher ones, and no library crate below `navi-router` touches a UI framework.
+
+| Crate | Purpose |
+| :--- | :--- |
+| `navi-core` | Shared primitives — window keys, ids, config types. |
+| `navi-router-core` | Pure routing engine: patterns, ranked radix trie matching, route-tree validation. No UI, no async runtime. |
+| `navi-router` | Router runtime: `Navigator`, `RouterProvider`, components (`Link`, `Outlet`, `Awaited`, …), blockers, scroll restoration. |
+| `navi-macros` | Procedural macros: `define_route!`, `use_params!`, `use_search!`, `use_loader_data!`, and friends. |
+| `navi-codegen` | Build-time route-tree generation from `src/routes`, driven by `navi.config.json`. |
+| `navi-devtools` | Framework-agnostic devtools model: routes, cache, timeline, state. |
+| `navi-test` | Test utilities for router-based applications. |
+
+## What `navi-router` re-exports
+
+`navi-router` is the single dependency application code touches most. It re-exports the whole engine surface from `navi-router-core` — `Blocker`, `BlockerId`, `History`, `Location`, `MatchResult`, `NavOp`, `NavigateOptions`, `NavigationEffect`, `NotFound`, `Redirect`, `RouteNode`, `RoutePattern`, `RouteTree`, `RouterCore`, `ScrollIntoViewOptions`, `Segment`, `ValidateSearch`, `ValidationError`, `ValidationResult`, `ViewTransitionOptions`, `not_found`, `redirect` — plus its own modules:
+
+| Module or item | Contents |
+| :--- | :--- |
+| `components` | `Awaited`, `Link`, `Outlet`, `PreloadType`, `RouterProvider`, `ScrollRestoration`, `SuspenseBoundary`, `register_route_component` |
+| `navigator` | `Navigator` |
+| `state` | `AnyData`, `LoaderOutcome`, `LoaderState`, `NotFoundMode`, `RouteDef`, `RouterEvent`, `RouterHandle`, `RouterHost`, `RouterOptions`, `RouterState` |
+| `event_bus` | Router event plumbing feeding the devtools timeline. |
+| `route_tree` | `BeforeLoadContext`, `BeforeLoadResult`, `RouteContextArgs`, and related tree types. |
+| root | `sleep` (re-exported from `quoin_core`) for portable async delays. |
+
+With the `nested-search` feature enabled, `parse_query_nested` and `query_to_string` are re-exported as well.
+
+## Rendering seam
+
+All rendering goes through [quoin](https://github.com/elcoosp/quoin): route UI is expressed as `quoin_ui::Node` trees (or `component!` shells), and quoin's macro emitters lower them to the selected framework. The data stack is [rs-query](https://github.com/elcoosp/rs-query), the query cache with stale-time and GC behind route loaders.
+## Related
+
+<CardGrid>
+<LinkCard title="Components" href="/reference/components/" description="The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Core Types" href="/reference/core-types/" description="The engine types re-exported from navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="define_route!" href="/reference/define-route/" description="Every argument accepted by the define_route! macro, its types, and defaults." />
+</CardGrid>
+
+
+---
+
+---
+title: define_route!
+description: Every argument accepted by the define_route! macro, its types, and defaults.
+type: reference
+---
+
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
+`define_route!` declares a route in a route file. It takes a route type name followed by `key: value` pairs. The macro parses values by key — `path` and `parent` as string literals, `is_layout` and `is_index` as booleans, `params`, `search`, `data`, and `component` as types, and everything else as expressions.
+
+## Signature
+
+<Code lang="rust" code={`define_route!(
+    MyRoute,
+    path: "/users/$id",
+    params: UserParams,
+    search: UserSearch,
+    data: User,
+    loader: |params, executor| async move { /* fetch data */ },
+    before_load: |ctx| async move { BeforeLoadResult::Ok },
+    on_enter: |loc| log::info!("entered"),
+    on_leave: |loc| log::info!("left"),
+    stale_time: Duration::from_secs(60),
+    gc_time: Duration::from_secs(300),
+    meta: { /* custom metadata */ },
+    node: my_node,
+);`} />
+
+## Arguments
+
+| Argument | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | identifier | yes | The route's Rust type, e.g. `IndexRoute`. First position, before the comma. |
+| `path` | string literal | yes | URL pattern, e.g. `"/users/$id"` or `"/"`. |
+| `parent` | string literal | no | Explicit parent path when the hierarchy cannot be inferred from layout. |
+| `params` | type | no | Typed struct for path parameters (used with `use_params!`). |
+| `search` | type | no | Typed struct for query parameters (used with `use_search!`). |
+| `data` | type | no | Type the loader resolves to (used with `use_loader_data!` and `Awaited`). |
+| `loader` | async closure | no | Data loader; receives `params` and runs on navigation to the route. |
+| `before_load` | async closure | no | Guard hook returning `BeforeLoadResult` — `Ok`, `Redirect`, or `NotFound`. |
+| `on_enter` | closure | no | Fires with the `Location` when someone enters the route. |
+| `on_leave` | closure | no | Fires with the `Location` when someone leaves the route. |
+| `stale_time` | expression | no | How long loader data stays fresh, e.g. `Duration::from_secs(60)`. |
+| `gc_time` | expression | no | How long unused loader data survives in cache, e.g. `Duration::from_secs(300)`. |
+| `meta` | expression | no | Custom metadata attached to the route. |
+| `node` | expression | no | Framework-agnostic UI: an expression building a `quoin_ui::Node`. |
+| `component` | type | no | A component type for adapters that render components (e.g. a GPUI `RenderOnce` type). |
+| `loader_deps` | expression | no | Dependencies the loader re-runs on. |
+| `context_fn` | expression | no | Produces route context data. |
+| `is_layout` | boolean | no | Declares the route as a layout rendering children through `<Outlet>`. |
+| `is_index` | boolean | no | Declares the route as the index of its directory. |
+
+## UI: node or component
+
+Exactly one UI seam applies per route:
+
+- `node:` — a plain `quoin_ui::Node` constructor, the framework-agnostic option (any function returning a `Node`).
+- `component:` — a component type that the adapter renders; used by the GPUI examples with `RenderOnce` types.
+
+## Scanner interaction
+
+The scanner reads your route files at build time and extracts the route type name from `define_route!(Name, ...)` calls. A file that calls `define_route!` without a parsable type name fails the build, and `is_layout: true` participates in layout inference even when file naming alone would not imply it.
+## Related
+
+<CardGrid>
+<LinkCard title="Components" href="/reference/components/" description="The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Core Types" href="/reference/core-types/" description="The engine types re-exported from navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Workspace Crates" href="/reference/crates/" description="The seven crates of the gpui-navi workspace and what each one owns." />
+</CardGrid>
+
+
+---
+
+---
+title: Macros
+description: The twelve procedural macros of navi-macros — signatures, what they expand to, and what they return.
+type: reference
+---
+
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
+`navi-macros` provides the type-safe hooks and route definition macros. All hooks read from the current `RouterHandle` and are cheap — the per-frame hooks read navigation-time caches and allocate nothing.
+
+## Hook macros
+
+| Macro | Signature | What it does |
+| :--- | :--- | :--- |
+| `use_params!(RouteType)` | route type argument | Extracts typed path parameters for the route. |
+| `use_search!(RouteType)` | route type argument | Extracts typed search/query parameters. |
+| `use_loader_data!(RouteType)` | route type argument | Accesses data returned by the route's loader. |
+| `use_loader_state!(RouteType)` | route type argument | Returns the route's `LoaderState` from the router state. |
+| `use_route_context!(RouteType)` | route type argument | Returns the full typed route context. |
+| `use_matched_route!()` | none | Returns `(params_map, route_node)` for the currently matched route. Panics if nothing matched. |
+| `use_match!()` | none | Returns `(route_id, params)` for the current match, or the default if none. |
+| `use_navigate!()` | none | Expands to `Navigator::new()` — the programmatic navigation handle. |
+| `use_blocker!(expr)` | boolean expression | Expands to `Blocker::new(expr)` — a navigation blocker. |
+| `use_can_go_back!()` | none | Expands to `Navigator::can_go_back()`. |
+
+## Definition macros
+
+| Macro | Purpose |
+| :--- | :--- |
+| `define_route!(Name, ...)` | Declares a route with its path, data hooks, and UI — see the [define_route! reference](/reference/define-route/). |
+| `define_router!(...)` | Declares a router from a list of route types; expands to the calls that add each route's node to the tree (`tree.add_route(Route::build_node())`) and register each component (`Route::register()`). |
+
+## Usage notes
+
+- The typed hooks (`use_params!`, `use_search!`, `use_loader_data!`, `use_loader_state!`, `use_route_context!`) take the **route type** as their argument, so extraction is checked against the route you declare.
+- `use_matched_route!` expects a matched route — calling it before any navigation matched raises an error by design.
+- `use_blocker!` accepts any boolean expression; it is the ergonomic path to `Blocker::new` (see [Navigation Blockers](/guides/navigation-blockers/)).
+
+## Example
+
+Two hooks cooperating in one route's render function:
+
+<Code lang="rust" code={`use navi_macros::{use_loader_data, use_params};
+
+fn user_node() -> Node {
+    let data = use_loader_data!(UsersParamIdRoute);
+    match data.map(|d| (*d).clone()) {
+                    Some(user) => Node::text(format!("{} — {}", user.name, user.email)),
+                    None => Node::text("Loading..."),
+    }
+}`} />
+## Related
+
+<CardGrid>
+<LinkCard title="Components" href="/reference/components/" description="The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Core Types" href="/reference/core-types/" description="The engine types re-exported from navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Workspace Crates" href="/reference/crates/" description="The seven crates of the gpui-navi workspace and what each one owns." />
+</CardGrid>
+
+
+---
+
+---
+title: navi.config.json
+description: Every key of the navi-codegen configuration file — types, defaults, and an example.
+type: reference
+---
+
+import { Code } from '@astrojs/starlight/components';
+
+`navi.config.json` controls how `navi-codegen` turns your routes directory into a generated route tree. `NaviConfig::from_file` reads it at build time from your `build.rs`.
+
+## Keys
+
+| Key | Type | Default in the examples | Description |
+| :--- | :--- | :--- | :--- |
+| `routes_directory` | string | `"./src/routes"` | Directory the scanner walks for route files. |
+| `generated_route_tree` | string | `"./src/route_tree.gen.rs"` | Output file for the generated route tree module. |
+| `route_token` | string | `"route"` | Token used for dynamic segments and splats in file names. |
+| `index_token` | string | `"index"` | File name that marks an index route. |
+| `route_file_ignore_prefix` | string | `"-"` | Files and folders starting with this prefix are skipped by the scanner. |
+
+## Example
+
+This is the exact configuration from the repository's `example-app`:
+
+<Code lang="json" code={`{
+  "routes_directory": "./src/routes",
+  "generated_route_tree": "./src/route_tree.gen.rs",
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}`} />
+
+## Behavior details
+
+- When `routes_directory` does not exist, the scan yields an empty route set rather than an error.
+- The generated module exposes `build_route_tree()` and `register_routes()`, which you call during host bootstrap.
+- The scanner derives layouts from folder structure automatically — a `users.rs` next to a `users/` directory becomes that directory's layout — and honors explicit `is_layout: true` declarations.
+- Route files can carry a `#[cfg(feature = "...")]` attribute; the scanner extracts the feature so generated code keeps the same gating.
+
+## Next steps
+
+See [File-Based Routing](/guides/file-based-routing/) for how file names become URL patterns.
+
+
+---
+
+---
+title: Runtime & Router Options
+description: RouterProvider, RouterOptions, NotFoundMode, Navigator, and NavigateOptions — the runtime surface that boots and drives the router.
+type: reference
+---
+
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
+The runtime module boots the router and drives navigation from your host application.
+
+## RouterProvider
+
+`RouterProvider` installs the router into your app. The README bootstrap shows the canonical construction:
+
+<Code lang="rust" code={`use navi_router::{Location, NotFoundMode, RouterOptions, RouterProvider};
+
+let tree = route_tree::build_route_tree();
+let router = RouterProvider::new_with_options(
+    window_id,
+    window_handle,
+    Location::new("/"),
+    tree,
+    RouterOptions {
+                    not_found_mode: NotFoundMode::Fuzzy,
+                    ..Default::default()
+    },
+    cx,
+);
+route_tree::register_routes(cx);`} />
+
+A `RouterHandle` is the shared handle to the running router state; hooks and `Navigator` read and drive it.
+
+## RouterOptions
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `default_pending_ms` | `u64` | Default pending-navigation timeout in milliseconds. |
+| `default_pending_min_ms` | `u64` | Minimum time a pending state is shown, avoiding flicker. |
+| `not_found_mode` | `NotFoundMode` | How unmatched URLs resolve to the not-found UI. |
+
+## NotFoundMode
+
+| Variant | Behavior |
+| :--- | :--- |
+| `Root` | Unmatched navigations resolve against the root not-found route. |
+| `Fuzzy` | Unmatched navigations fall back fuzzily to the closest match. |
+
+## Navigator
+
+`Navigator` is the programmatic navigation API. `use_navigate!()` returns a fresh one; `from_route(base)`, `from_handle(handle)`, and `from_handle_route(handle, base)` construct it scoped to a base path.
+
+| Method | Description |
+| :--- | :--- |
+| `push(path)` / `push_location(loc)` | Navigate, adding a history entry. |
+| `push_location_with(loc, options)` | Navigate with `NavigateOptions`. |
+| `replace(path)` / `replace_location(loc)` | Navigate, overwriting the current entry. |
+| `replace_location_with(loc, options)` | Replace with `NavigateOptions`. |
+| `transact(ops)` | Apply a batch of `NavOp`s atomically with a single re-render. |
+| `back()` / `forward()` | Step one entry back or forward. |
+| `go(delta)` | Relative traversal, clamped to the valid range. |
+| `can_go_back()` / `can_go_forward()` | Associated functions — query history bounds. |
+| `preload(path)` | Warm the loader cache for a path. |
+| `handle()` | Access the underlying `RouterHandle`. |
+
+## NavigateOptions
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `replace` | `bool` | Replace instead of push. |
+| `reset_scroll` | `Option<bool>` | Force the target scroll to the top. |
+| `hash_scroll_into_view` | `Option<ScrollIntoViewOptions>` | Scroll behavior for hash navigations. |
+| `view_transition` | `Option<ViewTransitionOptions>` | View transition preferences. |
+| `ignore_blocker` | `bool` | Bypass registered navigation blockers. |
+| `reload_document` | `bool` | Force a document reload semantics. |
+| `href` | `Option<String>` | Explicit href override. |
+
+## Transactions
+
+`Navigator::transact` takes any iterator of `NavOp` — `Push(Location)`, `Replace(Location)`, `Back`, `Forward`, `Go(isize)` — and applies them as one atomic navigation with a single re-render.
+## Related
+
+<CardGrid>
+<LinkCard title="Components" href="/reference/components/" description="The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Core Types" href="/reference/core-types/" description="The engine types re-exported from navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Workspace Crates" href="/reference/crates/" description="The seven crates of the gpui-navi workspace and what each one owns." />
+</CardGrid>
+
+
+---
+
+---
+title: Getting Started
+description: Build a small routed application with Navi on GPUI — from empty Cargo project to loaders, layouts, and links.
+type: tutorial
+---
+
+import { Code, LinkCard } from '@astrojs/starlight/components';
+
+You build a small routed application in this tutorial: a root layout, an index page, a user detail page with a loader, and typed navigation between them. The same route table you create here runs on GPUI, Dioxus, Leptos, Xilem, and Floem — only the three-line host bootstrap differs.
+
+## Prerequisites
+
+- [Rust](https://rustup.rs) 1.85 or newer (Navi uses edition 2024).
+- A working GPUI toolchain for your platform if you follow the GPUI host step.
+- A clone of the [gpui-navi workspace](https://github.com/elcoosp/gpui-navi) next to your project, because the quoin and rs-query crates it builds on are consumed as local path dependencies (see [Installation](/guides/installation/)).
+
+## 1. Add the dependencies
+
+Add the Navi crates plus quoin with your framework's feature to `Cargo.toml`:
+
+<Code lang="toml" code={`[dependencies]
+navi-router = { path = "../gpui-navi/navi-router" }
+navi-macros = { path = "../gpui-navi/navi-macros" }
+quoin      = { path = "../quoin/quoin", features = ["gpui"] }`} />
+
+The `features` value selects your UI framework: `gpui`, `dioxus`, `leptos`, `xilem`, or `floem`. Everything else in this tutorial stays identical across the five.
+
+## 2. Create the route files
+
+Routes are plain Rust files under `src/routes`. Create a root layout at `src/routes/__root.rs` — files named `__root` or starting with `_` become layouts that render their children through an `<Outlet>`:
+
+<Code lang="rust" code={`// src/routes/__root.rs
+use navi_macros::define_route;
+use navi_router::components::{Link, Outlet};
+use quoin_ui::{Node, StyleCmd};
+
+fn root_node() -> Node {
+    Node::div()
+                    .styles([StyleCmd::FlexCol])
+                    .child(Link::new("/").child("Home").build())
+                    .child(Outlet::new().build())
+                    .build()
+}
+
+define_route!(RootRoute, path: "/", is_layout: true, node: root_node);`} />
+
+Create the index page at `src/routes/index.rs`:
+
+<Code lang="rust" code={`// src/routes/index.rs
+use navi_macros::define_route;
+use navi_router::components::Link;
+use quoin_ui::{Node, StyleCmd};
+
+fn index_node() -> Node {
+    Node::div()
+                    .styles([StyleCmd::FlexCol, StyleCmd::Gap(6.0), StyleCmd::Padding(12.0)])
+                    .child(Node::text("Welcome!"))
+                    .child(Link::new("/users/42").child("Open /users/42").build())
+                    .build()
+}
+
+define_route!(IndexRoute, path: "/", is_index: true, node: index_node);`} />
+
+Add the dynamic user route at `src/routes/users/$id.rs`. The `$id` file name declares a path parameter, and the `loader` runs when someone navigates to the route:
+
+<Code lang="rust" code={`// src/routes/users/$id.rs
+use std::sync::Arc;
+
+use navi_macros::{define_route, use_loader_data};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct UserParams {
+    pub id: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct UserData {
+    pub id: String,
+    pub name: String,
+    pub email: String,
+}
+
+define_route!(
+    UsersParamIdRoute,
+    path: "/users/$id",
+    params: UserParams,
+    data: UserData,
+    loader: |params: UserParams| async move {
+                    let id = params.id;
+                    navi_router::sleep(std::time::Duration::from_millis(800)).await;
+                    Ok::<_, Box<dyn std::error::Error + Send + Sync>>(Arc::new(UserData {
+                                    id: id.clone(),
+                                    name: format!("User {id}"),
+                                    email: format!("user{id}@example.com"),
+                    }))
+    },
+    node: user_node,
+);
+
+fn user_node() -> Node {
+    // Reads the data the loader returned for this route.
+    let data = use_loader_data!(UsersParamIdRoute);
+    match data.map(|d| (*d).clone()) {
+                    Some(user) => Node::text(format!("{} — {}", user.name, user.email)),
+                    None => Node::text("Loading..."),
+    }
+}`} />
+
+## 3. Configure code generation
+
+Navi generates the route tree from your `src/routes` directory at build time. Create `navi.config.json` in your project root:
+
+<Code lang="json" code={`{
+  "routes_directory": "./src/routes",
+  "generated_route_tree": "./src/route_tree.gen.rs",
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}`} />
+
+Then wire the generator into `build.rs`:
+
+<Code lang="rust" code={`// build.rs
+fn main() {
+    let config = navi_codegen::NaviConfig::from_file("navi.config.json")
+                    .expect("Failed to read config");
+    navi_codegen::generator::write_route_tree(&config).unwrap();
+}`} />
+
+Every build now regenerates `src/route_tree.gen.rs`, which exposes `build_route_tree()` and `register_routes()`.
+
+## 4. Boot the app
+
+On GPUI, Xilem, and Floem you boot through quoin's `run_app!` host macro. Initialize the router inside your host with the generated tree:
+
+<Code lang="rust" code={`use navi_router::{Location, NotFoundMode, RouterOptions, RouterProvider};
+
+mod route_tree {
+    include!("route_tree.gen.rs");
+}
+
+let tree = route_tree::build_route_tree();
+let router = RouterProvider::new_with_options(
+    window_id,
+    window_handle,
+    Location::new("/"),
+    tree,
+    RouterOptions {
+                    not_found_mode: NotFoundMode::Fuzzy,
+                    ..Default::default()
+    },
+    cx,
+);
+route_tree::register_routes(cx);`} />
+
+For the other frameworks only the bootstrap changes — the route table, loaders, guards, and devtools do not:
+
+<Code lang="rust" code={`// Dioxus desktop
+fn app() -> Element { rsx! { NaviDemo {} } }
+fn main() { dioxus::LaunchBuilder::desktop().launch(app); }`} />
+
+<Code lang="rust" code={`// Leptos CSR (wasm32)
+#[wasm_bindgen(start)]
+pub fn main() {
+    leptos::mount::mount_to_body(|| view! { <NaviDemo /> });
+}`} />
+
+## 5. Run it
+
+<Code lang="bash" code={`cargo run`} />
+
+You start on `/`, follow the link to `/users/42`, and watch the loader resolve into rendered user data. Static segments always win over dynamic ones during matching, so adding `src/routes/users/new.rs` later shadows `$id` for that exact path deterministically.
+
+## Next steps
+
+<LinkCard title="File-Based Routing" href="/guides/file-based-routing/" description="Every route file naming convention: dynamic segments, splats, groups, and pathless layouts." />
+<LinkCard title="Loaders & Suspense" href="/guides/loaders-and-suspense/" description="Cache data with stale-time and GC, and render granular fallbacks with Awaited." />
+<LinkCard title="Devtools" href="/guides/devtools/" description="Open the built-in panel and inspect routes, cache, timeline, and state." />

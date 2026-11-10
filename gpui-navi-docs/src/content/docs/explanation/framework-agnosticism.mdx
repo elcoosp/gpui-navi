@@ -4,6 +4,8 @@ description: Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xi
 type: explanation
 ---
 
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
 Most Rust routers grow inside a framework and stay there. Navi inverts the design: the routing engine, loaders, guards, cache, and devtools live in framework-free crates, and **every** rendering seam is delegated to [quoin](https://github.com/elcoosp/quoin), a reactive core with many frontend backends.
 
 ## One route table, five renderers
@@ -28,26 +30,20 @@ For each route you write:
 
 None of that changes between frameworks. Switching framework means two edits: swap the quoin feature flag, and swap the three-line host bootstrap:
 
-```rust
-// GPUI / Xilem / Floem — quoin's run_app! host
+<Code lang="rust" code={`// GPUI / Xilem / Floem — quoin's run_app! host
 use navi_demo_core::NaviDemo;
 use quoin::run_app;
-run_app!(NaviDemo);
-```
+run_app!(NaviDemo);`} />
 
-```rust
-// Dioxus desktop
+<Code lang="rust" code={`// Dioxus desktop
 fn app() -> Element { rsx! { NaviDemo {} } }
-fn main() { dioxus::LaunchBuilder::desktop().launch(app); }
-```
+fn main() { dioxus::LaunchBuilder::desktop().launch(app); }`} />
 
-```rust
-// Leptos CSR (wasm32)
+<Code lang="rust" code={`// Leptos CSR (wasm32)
 #[wasm_bindgen(start)]
 pub fn main() {
     leptos::mount::mount_to_body(|| view! { <NaviDemo /> });
-}
-```
+}`} />
 
 ## The proof in the repository
 
@@ -56,3 +52,10 @@ The `examples/` directory ships one shared demo — `demo-core`, with routes, lo
 ## Escape hatch
 
 You are not locked out of your framework's native widgets. GPUI subtrees remain reachable through quoin's `rsx!` escape hatch — `gpui-rsx-classes` is enabled automatically with the `gpui` feature — and the GPUI examples wrap `Node` trees in `NodeElement` inside ordinary GPUI components.
+## Related
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="How the Navi crates layer from the pure routing engine up to framework adapters," />
+<LinkCard title="Performance Design" href="/explanation/performance/" description="The allocation-free hot paths, bounded memory, and lock-free history behind Navi" />
+<LinkCard title="Route Matching" href="/explanation/route-matching/" description="How the ranked radix trie matches locations in O(log n) and why static segments " />
+</CardGrid>

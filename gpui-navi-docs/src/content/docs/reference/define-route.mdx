@@ -4,12 +4,13 @@ description: Every argument accepted by the define_route! macro, its types, and 
 type: reference
 ---
 
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
 `define_route!` declares a route in a route file. It takes a route type name followed by `key: value` pairs. The macro parses values by key — `path` and `parent` as string literals, `is_layout` and `is_index` as booleans, `params`, `search`, `data`, and `component` as types, and everything else as expressions.
 
 ## Signature
 
-```rust
-define_route!(
+<Code lang="rust" code={`define_route!(
     MyRoute,
     path: "/users/$id",
     params: UserParams,
@@ -23,8 +24,7 @@ define_route!(
     gc_time: Duration::from_secs(300),
     meta: { /* custom metadata */ },
     node: my_node,
-);
-```
+);`} />
 
 ## Arguments
 
@@ -60,3 +60,10 @@ Exactly one UI seam applies per route:
 ## Scanner interaction
 
 The scanner reads your route files at build time and extracts the route type name from `define_route!(Name, ...)` calls. A file that calls `define_route!` without a parsable type name fails the build, and `is_layout: true` participates in layout inference even when file naming alone would not imply it.
+## Related
+
+<CardGrid>
+<LinkCard title="Components" href="/reference/components/" description="The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Core Types" href="/reference/core-types/" description="The engine types re-exported from navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Workspace Crates" href="/reference/crates/" description="The seven crates of the gpui-navi workspace and what each one owns." />
+</CardGrid>

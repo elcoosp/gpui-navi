@@ -4,6 +4,8 @@ description: The allocation-free hot paths, bounded memory, and lock-free histor
 type: explanation
 ---
 
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
 Navi's router is engineered for allocation-free hot paths. This page explains where the guarantees come from and what they bought, with the numbers from the repository's own benchmarks (`docs/BENCHMARKS.md`, criterion medians, 130-route tree).
 
 ## The guarantees
@@ -56,3 +58,10 @@ The workspace enforces the same discipline in CI:
 - Criterion benchmarks (`benches/core.rs` for the engine, `benches/adapter.rs` for the runtime) guard the hot paths against regressions.
 
 The rendering stack is quoin and the data stack is rs-query — both chosen so the router itself never blocks on a framework or an ambient async runtime.
+## Related
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="How the Navi crates layer from the pure routing engine up to framework adapters," />
+<LinkCard title="Framework Agnosticism" href="/explanation/framework-agnosticism/" description="Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floe" />
+<LinkCard title="Route Matching" href="/explanation/route-matching/" description="How the ranked radix trie matches locations in O(log n) and why static segments " />
+</CardGrid>

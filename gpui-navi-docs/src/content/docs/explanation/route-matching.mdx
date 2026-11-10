@@ -4,6 +4,8 @@ description: How the ranked radix trie matches locations in O(log n) and why sta
 type: explanation
 ---
 
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
 When someone navigates to `/users/42/settings`, the router must decide — deterministically — which route that is. Navi answers with a ranked radix trie in `navi-router-core`, and the design choices there explain both the correctness guarantees and the benchmark numbers.
 
 ## The data structure
@@ -38,3 +40,10 @@ The measured result across the repository's benchmark suite is a 14–38% speedu
 - **Transactions** — batched `NavOp`s apply atomically; `transact/two_replaces` measures the single re-render guarantee.
 
 The consequence for your app is simple to state: the router work per navigation is measured in nanoseconds, so your loaders — not your routing — decide perceived speed.
+## Related
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="How the Navi crates layer from the pure routing engine up to framework adapters," />
+<LinkCard title="Framework Agnosticism" href="/explanation/framework-agnosticism/" description="Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floe" />
+<LinkCard title="Performance Design" href="/explanation/performance/" description="The allocation-free hot paths, bounded memory, and lock-free history behind Navi" />
+</CardGrid>

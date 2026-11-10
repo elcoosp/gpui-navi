@@ -4,7 +4,7 @@ description: Type your query strings with typed search structs, navigate with se
 type: how-to
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 You declare a `search` type on a route to work with query strings through typed structs instead of raw strings.
 
@@ -12,8 +12,7 @@ You declare a `search` type on a route to work with query strings through typed 
 
 Give the route a `search` type and read it back with `use_search!`:
 
-```rust
-use navi_macros::{define_route, use_search};
+<Code lang="rust" code={`use navi_macros::{define_route, use_search};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -27,8 +26,7 @@ define_route!(
     path: "/users",
     search: UserSearch,
     node: users_node,
-);
-```
+);`} />
 
 Inside the route's UI, `use_search!(UsersRoute)` returns the parsed search struct for the current navigation.
 
@@ -36,14 +34,12 @@ Inside the route's UI, `use_search!(UsersRoute)` returns the parsed search struc
 
 `Link` accepts a `search` value, plus `hash` and `state`, so navigation carries query data without hand-building URLs:
 
-```rust
-use navi_router::components::Link;
+<Code lang="rust" code={`use navi_router::components::Link;
 
 Link::new("/users")
     .search(serde_json::json!({ "sort": "desc", "page": 2 }))
     .child("Users, descending")
-    .build()
-```
+    .build()`} />
 
 ## Validate search params
 

@@ -4,7 +4,7 @@ description: Warm the loader cache before navigation with Render, Intent, and Vi
 type: how-to
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 You preload a link's data before the user commits to navigating, so the target route renders without waiting for its loader. Preloading is per-`<Link>` and deduplicated per href — many links to the same target trigger one preload.
 
@@ -18,16 +18,14 @@ Set the `preload` builder method on a `Link` with a `PreloadType`:
 | `PreloadType::Intent` | Preload on the first mouse move over the link, after a delay. |
 | `PreloadType::Viewport` | Preload when the link enters the viewport. |
 
-```rust
-use navi_router::components::{Link, PreloadType};
+<Code lang="rust" code={`use navi_router::components::{Link, PreloadType};
 use std::time::Duration;
 
 Link::new("/users/42")
     .preload(PreloadType::Intent)
     .preload_delay(Duration::from_millis(120))
     .child("Open user 42")
-    .build()
-```
+    .build()`} />
 
 Tune how long the pointer must hover before an `Intent` preload fires with `preload_delay`.
 
@@ -41,10 +39,8 @@ Tune how long the pointer must hover before an `Intent` preload fires with `prel
 
 The `Navigator` exposes a `preload` method for the same purpose outside of links:
 
-```rust
-let navigator = Navigator::new();
-navigator.preload("/users/42");
-```
+<Code lang="rust" code={`let navigator = Navigator::new();
+navigator.preload("/users/42");`} />
 
 ## Next steps
 

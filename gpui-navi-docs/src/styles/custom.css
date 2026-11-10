@@ -6,15 +6,15 @@
  */
 
 :root {
-	--sl-color-accent-low: hsl(19 100% 96%);
-	--sl-color-accent: hsl(19 90% 40%);
-	--sl-color-accent-high: hsl(19 100% 28%);
+	--sl-color-accent-low: hsl(0 30% 93%);
+	--sl-color-accent: hsl(0 30% 35%);
+	--sl-color-accent-high: hsl(0 30% 28%);
 	--sl-color-text-accent: var(--sl-color-accent-high);
 }
 
 [data-theme="dark"] {
-	--sl-color-accent-low: hsl(19 55% 18%);
-	--sl-color-accent: hsl(19 95% 58%);
-	--sl-color-accent-high: hsl(19 100% 76%);
+	--sl-color-accent-low: hsl(0 30% 16%);
+	--sl-color-accent: hsl(0 30% 60%);
+	--sl-color-accent-high: hsl(0 30% 75%);
 	--sl-color-text-accent: var(--sl-color-accent-high);
 }

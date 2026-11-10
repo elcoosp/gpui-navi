@@ -4,7 +4,7 @@ description: Fetch route data with loaders backed by the rs-query cache, control
 type: how-to
 ---
 
-import { Aside, LinkCard, Steps } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
 
 You attach a `loader` to any route and Navi runs it when someone navigates to that route, caches the result through [rs-query](https://github.com/elcoosp/rs-query), and hands the data to your UI.
 
@@ -12,24 +12,22 @@ You attach a `loader` to any route and Navi runs it when someone navigates to th
 
 The loader receives the route's typed `params` and returns the type declared as `data`. The example below comes from the repository's own `example-app`:
 
-```rust
-define_route!(
+<Code lang="rust" code={`define_route!(
     UsersParamIdRoute,
     path: "/users/$id",
     params: UserParams,
     data: UserData,
     loader: |params: UserParams| async move {
-        let id = params.id;
-        navi_router::sleep(std::time::Duration::from_millis(800)).await;
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(UserData {
-            id: id.clone(),
-            name: format!("User {id}"),
-            email: format!("user{id}@example.com"),
-        }))
+                    let id = params.id;
+                    navi_router::sleep(std::time::Duration::from_millis(800)).await;
+                    Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(UserData {
+                                    id: id.clone(),
+                                    name: format!("User {id}"),
+                                    email: format!("user{id}@example.com"),
+                    }))
     },
     component: UserDetailPage,
-);
-```
+);`} />
 
 ## Control caching
 
@@ -46,16 +44,14 @@ The cache is a real query cache — the devtools **Cache** tab lets you inspect 
 
 `Awaited` is the suspense component for route data: it renders a fallback while the loader runs and calls your closure with the data once resolved. This is the pattern the repository's `awaited.rs` example uses:
 
-```rust
-use navi_router::components::Awaited;
+<Code lang="rust" code={`use navi_router::components::Awaited;
 
 Awaited::<AwaitedDemoRoute>::new()
     .fallback(|| quoin_ui::Node::div().child("Loading...").build())
     .child(|data: String| {
-        quoin_ui::Node::div().child(format!("Data: {data}")).build()
+                    quoin_ui::Node::div().child(format!("Data: {data}")).build()
     })
-    .build()
-```
+    .build()`} />
 
 The `.child` closure receives the loaded data value.
 
@@ -63,11 +59,9 @@ The `.child` closure receives the loaded data value.
 
 `SuspenseBoundary` displays a fallback UI while nested routes load. It takes a fallback closure and renders the matched child route inside once loading completes:
 
-```rust
-use navi_router::components::SuspenseBoundary;
+<Code lang="rust" code={`use navi_router::components::SuspenseBoundary;
 
-SuspenseBoundary::new(|| quoin_ui::Node::text("Loading section…").build()).build()
-```
+SuspenseBoundary::new(|| quoin_ui::Node::text("Loading section…").build()).build()`} />
 
 Place it in a layout to give an entire subtree a shared loading state.
 

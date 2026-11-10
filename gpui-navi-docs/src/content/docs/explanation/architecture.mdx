@@ -4,6 +4,8 @@ description: How the Navi crates layer from the pure routing engine up to framew
 type: explanation
 ---
 
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
 Navi separates routing logic from rendering so completely that the engine cannot tell which UI framework is displaying it. This page walks the layers from the inside out.
 
 ## The layers
@@ -42,3 +44,10 @@ At build time, `navi-codegen` scans `src/routes` and writes `route_tree.gen.rs`,
 5. `BeforeLoad` fires; guards may redirect or 404 before loaders run.
 6. `SpawnLoader` resolves loader data through the rs-query cache.
 7. The match resolves (`Resolved`), the UI re-renders (`Rendered`), and scroll restoration reapplies the remembered position.
+## Related
+
+<CardGrid>
+<LinkCard title="Framework Agnosticism" href="/explanation/framework-agnosticism/" description="Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floe" />
+<LinkCard title="Performance Design" href="/explanation/performance/" description="The allocation-free hot paths, bounded memory, and lock-free history behind Navi" />
+<LinkCard title="Route Matching" href="/explanation/route-matching/" description="How the ranked radix trie matches locations in O(log n) and why static segments " />
+</CardGrid>

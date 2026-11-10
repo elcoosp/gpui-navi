@@ -110,6 +110,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/truec6486f6d46c89991213cbfc9bb93d4eef423e221))
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true0d251ab7d150aa9444f041e526b726f1906e615d))
 - *(toolkit)* Bump to 0.2.3 — TechArticle restored, home breadcrumb skip  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truece570c69e0b3c9a90594262d6082e8e7771398a1))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/truee934649dcfbbc6ba9b679f2958feb529521ea9a6))
 
 ### ⚡ Performance
 
@@ -355,6 +356,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(og)* Per-page OG images via astro-takumi fork (linkedom backend)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true773f3deba7d0f443124c0c077848ea195a65db7d))
 - *(og)* Adopt @elcoosp/docs-toolkit — remove per-project OG boilerplate  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true615b1be13d9a82ea944cf0733ef6a322103db03f))
 - *(og)* JSON-LD + 404 card + robots.txt + .qa gitignore (toolkit 0.2.1)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true07db1fbb1242879da6f934204f6771af4374e181))
+- *(og)* Bigger logo (160) + name (52) via toolkit 0.3.0  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truee6d9cebf29a0c69dbc69950f30c10bf8fb25261f))
 
 ### 🚜 Refactor
 

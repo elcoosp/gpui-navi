@@ -107,6 +107,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(scripts)* Add bootstrap-artifacts.mjs  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true30d4a1e2e5cae61ca81b3291f4ee8096cc870113))
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true9c7d906588cddb812c43b5a197d7605baa0c2ad8))
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true499bf1c799fd6828ee456a7108c1056cd7e66644))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/truec6486f6d46c89991213cbfc9bb93d4eef423e221))
 
 ### ⚡ Performance
 
@@ -351,6 +352,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(docs-site)* Add a custom 404 page  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1b25fffacd65701ccd1bc71f7b2252cafba625dd))
 - *(og)* Per-page OG images via astro-takumi fork (linkedom backend)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true773f3deba7d0f443124c0c077848ea195a65db7d))
 - *(og)* Adopt @elcoosp/docs-toolkit — remove per-project OG boilerplate  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true615b1be13d9a82ea944cf0733ef6a322103db03f))
+- *(og)* JSON-LD + 404 card + robots.txt + .qa gitignore (toolkit 0.2.1)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true07db1fbb1242879da6f934204f6771af4374e181))
 
 ### 🚜 Refactor
 

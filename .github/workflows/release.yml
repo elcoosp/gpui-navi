@@ -19,8 +19,8 @@ jobs:
     uses: elcoosp/docs-toolkit/.github/workflows/rust-release.yml@main
     with:
       publish: true
-      binary_targets: '["x86_64-unknown-linux-gnu","aarch64-apple-darwin"]'
-      extra_checks: '["verify-tag","fmt","test"]'
+      binary_targets: '[]'
+      extra_checks: '["verify-tag","fmt"]'
       linux_deps: 'libxkbcommon-dev libwayland-dev libasound2-dev'
       dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
     secrets:

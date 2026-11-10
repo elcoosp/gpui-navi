@@ -106,6 +106,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(scripts)* Add qa-components.mjs  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truecdb882628185790a3a3f79ee932df5e68dadc671))
 - *(scripts)* Add bootstrap-artifacts.mjs  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true30d4a1e2e5cae61ca81b3291f4ee8096cc870113))
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true9c7d906588cddb812c43b5a197d7605baa0c2ad8))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true499bf1c799fd6828ee456a7108c1056cd7e66644))
 
 ### ⚡ Performance
 

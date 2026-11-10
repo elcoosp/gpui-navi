@@ -108,6 +108,8 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true9c7d906588cddb812c43b5a197d7605baa0c2ad8))
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true499bf1c799fd6828ee456a7108c1056cd7e66644))
 - *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/truec6486f6d46c89991213cbfc9bb93d4eef423e221))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/true0d251ab7d150aa9444f041e526b726f1906e615d))
+- *(toolkit)* Bump to 0.2.3 — TechArticle restored, home breadcrumb skip  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truece570c69e0b3c9a90594262d6082e8e7771398a1))
 
 ### ⚡ Performance
 

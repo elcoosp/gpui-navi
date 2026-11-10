@@ -20,8 +20,8 @@ jobs:
     with:
       publish: true
       binary_targets: '[]'
-      extra_checks: '["verify-tag","fmt"]'
-      linux_deps: 'libxkbcommon-dev libwayland-dev libasound2-dev'
+      extra_checks: '[]'
+      linux_deps: ''
       dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
     secrets:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

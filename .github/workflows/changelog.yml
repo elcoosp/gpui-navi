@@ -22,7 +22,7 @@ jobs:
         id: cliff
         with:
           config: cliff.toml
-          args: --verbose
+          args: "--verbose --config-url https://raw.githubusercontent.com/elcoosp/docs-toolkit/main/git-cliff/cliff.toml"
         env:
           OUTPUT: CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}

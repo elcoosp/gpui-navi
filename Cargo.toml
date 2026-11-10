@@ -50,9 +50,9 @@ gpui-component = "0.8.1"
 # the three clones must sit side by side (workspaces/{quoin,rs-query,
 # gpui-navi}). Once quoin/rs-query publish releases carrying these changes,
 # these become plain version/git dependencies.
-quoin-core = { path = "../quoin/quoin-core" }
-quoin-ui = { path = "../quoin/quoin-ui" }
-quoin-ui-gpui = { path = "../quoin/quoin-ui-gpui" }
+quoin-core = { git = "https://github.com/elcoosp/quoin", branch = "main" }
+quoin-ui = { git = "https://github.com/elcoosp/quoin", branch = "main" }
+quoin-ui-gpui = { git = "https://github.com/elcoosp/quoin", branch = "main" }
 send_wrapper = "0.6"
 
 # rs-query main (0.2.0) — fully GUI-framework agnostic: its runtime seam

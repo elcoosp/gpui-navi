@@ -30,6 +30,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(docs-site)* Add the Astro Starlight docs-site manifest  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true650d966c4f27c0e69190542a8bf60377074577ac))
 - *(docs-site)* Add pnpm lockfile for the docs site  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true4c835bdbc04449ddaa414dba15af6c5ee49e8227))
 - *(docs-site)* Exclude recently published packages from the release-age gate  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true4c47c32ba8756fb8e97239813b2b77f5af15ecef))
+- Docs + frontmatter YAML quoting fixes  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1056438bde3b416c2cdf659bc26ad3a7aa5b8c0f))
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -101,6 +102,9 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(docs-site)* Hoist typescript and @astrojs/check for astro check  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true7bd8208eb441e1e593d94f1d601abb4379c6b0b6))
 - *(docs-site)* Add a strict Astro tsconfig  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truecc7e40d9be03f48d89a2a62010d2490955580416))
 - *(docs-site)* Reference the Astro client types  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/trueab5aef92ee322174e84a94810faa78d44df03043))
+- *(changelog)* Update CHANGELOG.md [skip ci]  (by [@github-actions[bot]](https://github.com/elcoosp/gpui-navi/truef5aeb1cabda43b84b2cee69cac7c0b63ced0d693))
+- *(scripts)* Add qa-components.mjs  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/truecdb882628185790a3a3f79ee932df5e68dadc671))
+- *(scripts)* Add bootstrap-artifacts.mjs  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true30d4a1e2e5cae61ca81b3291f4ee8096cc870113))
 
 ### ⚡ Performance
 
@@ -343,6 +347,7 @@ test: add unit tests for History, Blocker, Validation; remove broken … ([#3](h
 - *(docs-site)* Screenshot every route for visual QA  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true3f7acfa812a0c7d9855e8c3e5fe51bfa41908a39))
 - *(docs-site)* Add the Navi splash landing page  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true355319fbb20685104d585ac1d53496e3f8273c7a))
 - *(docs-site)* Add a custom 404 page  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true1b25fffacd65701ccd1bc71f7b2252cafba625dd))
+- *(og)* Per-page OG images via astro-takumi fork (linkedom backend)  (by [@elcoosp](https://github.com/elcoosp/gpui-navi/true773f3deba7d0f443124c0c077848ea195a65db7d))
 
 ### 🚜 Refactor
 

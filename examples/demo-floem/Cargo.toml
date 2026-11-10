@@ -8,12 +8,12 @@ description = "Navi demo on Floem (quoin floem backend)"
 [dependencies]
 navi-demo-core = { path = "../demo-core", features = ["floem"] }
 floem = { git = "https://github.com/lapce/floem", branch = "main" }
-quoin = { path = "../../../quoin/quoin", features = ["floem"] }
+quoin = { git = "https://github.com/elcoosp/quoin", branch = "main", features = ["floem"] }
 
 # Floem's main branch depends on `muda` (with the `gtk` feature on Linux);
 # reuse quoin's in-memory stub so the demo builds without GTK dev files.
 [patch.crates-io]
-muda = { path = "../../../quoin/third_party/muda-stub" }
+muda = { git = "https://github.com/elcoosp/quoin", branch = "main" }
 
 
 # Standalone example workspace: detached from the navi workspace above.

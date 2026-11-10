@@ -9,13 +9,13 @@ description = "Framework-agnostic demo shared by every Navi example app (gpui, d
 navi-core = { path = "../../navi-core" }
 navi-router = { path = "../../navi-router" }
 navi-macros = { path = "../../navi-macros" }
-quoin-core = { path = "../../../quoin/quoin-core" }
-quoin-ui = { path = "../../../quoin/quoin-ui" }
+quoin-core = { git = "https://github.com/elcoosp/quoin", branch = "main" }
+quoin-ui = { git = "https://github.com/elcoosp/quoin", branch = "main" }
 rs-query = { path = "../../../rs-query" }
 # The facade: exactly one framework feature is enabled at a time; the
 # per-framework feature forwarding below drives both the reactive context
 # and the `component!`/`quoin_render!` emitter backend.
-quoin = { path = "../../../quoin/quoin", optional = true }
+quoin = { git = "https://github.com/elcoosp/quoin", branch = "main", optional = true }
 # In scope for the macro-generated backend code (`gpui::…`, `dioxus::…`,
 # `leptos::…`, `xilem::…`, `floem::…` paths).
 gpui = { package = "gpui-pre", version = "=0.3.10", optional = true }
@@ -49,7 +49,7 @@ navi-codegen = { path = "../../navi-codegen" }
 # Floem's main branch depends on `muda` (with the `gtk` feature on Linux,
 # which needs GTK dev files); reuse quoin's in-memory stub.
 [patch.crates-io]
-muda = { path = "../../../quoin/third_party/muda-stub" }
+muda = { git = "https://github.com/elcoosp/quoin", branch = "main" }
 
 
 # Standalone example workspace: detached from the navi workspace above.

@@ -8,7 +8,7 @@ description = "Navi demo on Dioxus desktop (quoin dioxus backend)"
 [dependencies]
 navi-demo-core = { path = "../demo-core", features = ["dioxus"] }
 dioxus = { version = "0.7", features = ["desktop"] }
-quoin = { path = "../../../quoin/quoin", features = ["dioxus"] }
+quoin = { git = "https://github.com/elcoosp/quoin", branch = "main", features = ["dioxus"] }
 
 
 # Standalone example workspace: detached from the navi workspace above.

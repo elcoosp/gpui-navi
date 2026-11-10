@@ -8,7 +8,7 @@ description = "Navi demo on Xilem (quoin xilem backend)"
 [dependencies]
 navi-demo-core = { path = "../demo-core", features = ["xilem"] }
 xilem = { git = "https://github.com/linebender/xilem", branch = "main" }
-quoin = { path = "../../../quoin/quoin", features = ["xilem"] }
+quoin = { git = "https://github.com/elcoosp/quoin", branch = "main", features = ["xilem"] }
 
 
 

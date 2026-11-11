@@ -4,6 +4,7 @@ import starlightImageZoom from "starlight-image-zoom";
 
 
 export default await defineDocsConfig({
+  llmsTxt: {},
   changelog: { repo: 'elcoosp/gpui-navi' },
   site: 'https://gpui-navi.vercel.app',
   domain: 'gpui-navi.vercel.app',

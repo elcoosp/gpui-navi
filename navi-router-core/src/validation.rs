@@ -45,6 +45,7 @@ pub trait ValidateSearch: Sized {
     feature = "validify",
     feature = "valico"
 ))]
+#[allow(dead_code)]
 fn single_error(message: impl Into<String>) -> Vec<ValidationError> {
     vec![ValidationError {
         field: None,
@@ -58,6 +59,7 @@ fn single_error(message: impl Into<String>) -> Vec<ValidationError> {
     feature = "validify",
     feature = "valico"
 ))]
+#[allow(dead_code)]
 fn raw_to_json(raw: &HashMap<String, String>) -> Result<serde_json::Value, Vec<ValidationError>> {
     serde_json::to_value(raw)
         .map_err(|e| single_error(format!("Failed to serialize raw params: {e}")))
@@ -66,6 +68,7 @@ fn raw_to_json(raw: &HashMap<String, String>) -> Result<serde_json::Value, Vec<V
 // Used by the deserializing integrations (validator/garde/validify); valico
 // validates the raw JSON value against a schema instead.
 #[cfg(any(feature = "validator", feature = "garde", feature = "validify"))]
+#[allow(dead_code)]
 fn deserialize_from_raw<T: serde::de::DeserializeOwned>(
     raw: &HashMap<String, String>,
 ) -> Result<T, Vec<ValidationError>> {
@@ -79,6 +82,7 @@ fn deserialize_from_raw<T: serde::de::DeserializeOwned>(
     feature = "validify",
     feature = "valico"
 ))]
+#[allow(dead_code)]
 fn json_obj_to_query(obj: &serde_json::Map<String, serde_json::Value>) -> HashMap<String, String> {
     obj.iter()
         .filter_map(|(k, v)| {
@@ -98,6 +102,7 @@ fn json_obj_to_query(obj: &serde_json::Map<String, serde_json::Value>) -> HashMa
     feature = "validify",
     feature = "valico"
 ))]
+#[allow(dead_code)]
 fn to_query_via_json<T: serde::Serialize>(value: &T) -> HashMap<String, String> {
     serde_json::to_value(value)
         .ok()
@@ -108,7 +113,12 @@ fn to_query_via_json<T: serde::Serialize>(value: &T) -> HashMap<String, String> 
 // ----------------------------------------------------------------------------
 // Integration with validator crate
 // ----------------------------------------------------------------------------
-#[cfg(feature = "validator")]
+#[cfg(all(
+    feature = "validator",
+    not(feature = "garde"),
+    not(feature = "validify"),
+    not(feature = "valico")
+))]
 impl<T> ValidateSearch for T
 where
     T: serde::de::DeserializeOwned + serde::Serialize + validator::Validate + Default,
@@ -137,7 +147,12 @@ where
 // ----------------------------------------------------------------------------
 // Integration with garde crate
 // ----------------------------------------------------------------------------
-#[cfg(feature = "garde")]
+#[cfg(all(
+    feature = "garde",
+    not(feature = "validator"),
+    not(feature = "validify"),
+    not(feature = "valico")
+))]
 impl<T> ValidateSearch for T
 where
     T: serde::de::DeserializeOwned + serde::Serialize + garde::Validate + Default,
@@ -165,7 +180,12 @@ where
 // ----------------------------------------------------------------------------
 // Integration with validify crate
 // ----------------------------------------------------------------------------
-#[cfg(feature = "validify")]
+#[cfg(all(
+    feature = "validify",
+    not(feature = "validator"),
+    not(feature = "garde"),
+    not(feature = "valico")
+))]
 impl<T> ValidateSearch for T
 where
     T: serde::de::DeserializeOwned + serde::Serialize + validify::Validate + Default,
@@ -192,7 +212,12 @@ where
 // ----------------------------------------------------------------------------
 // Integration with valico crate (JSON Schema validation)
 // ----------------------------------------------------------------------------
-#[cfg(feature = "valico")]
+#[cfg(all(
+    feature = "valico",
+    not(feature = "validator"),
+    not(feature = "garde"),
+    not(feature = "validify")
+))]
 impl<T> ValidateSearch for T
 where
     T: serde::de::DeserializeOwned + serde::Serialize + Default + schemars::JsonSchema,

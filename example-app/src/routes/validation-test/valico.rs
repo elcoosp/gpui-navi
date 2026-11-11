@@ -1,5 +1,6 @@
 #[cfg(feature = "valico")]
 use gpui::prelude::*;
+use quoin_ui_gpui::NodeElement;
 #[cfg(feature = "valico")]
 use gpui::*;
 #[cfg(feature = "valico")]
@@ -61,7 +62,7 @@ impl RenderOnce for ValicoTestPage {
             ))
             .child(NodeElement(Link::new("/validation-test/valico?page=50&sort=desc").child("Valid params").build()))
             .child(
-                NodeElement(Link::new("/validation-test/valico?page=999&sort=invalid").child("Invalid params").build()),
+                (NodeElement(Link::new("/validation-test/valico?page=999&sort=invalid").child("Invalid params").build())),
             )
             .child(NodeElement(Link::new("/validation-test").child("Back").build()))
     }

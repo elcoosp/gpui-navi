@@ -1,5 +1,6 @@
 #[cfg(feature = "garde")]
 use gpui::prelude::*;
+use quoin_ui_gpui::NodeElement;
 #[cfg(feature = "garde")]
 use gpui::*;
 #[cfg(feature = "garde")]

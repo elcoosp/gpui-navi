@@ -1,6 +1,7 @@
 
 #[cfg(feature = "validator")]
 use gpui::prelude::*;
+use quoin_ui_gpui::NodeElement;
 #[cfg(feature = "validator")]
 use gpui::*;
 #[cfg(feature = "validator")]

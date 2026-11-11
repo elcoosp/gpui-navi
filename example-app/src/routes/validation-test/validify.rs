@@ -1,5 +1,6 @@
 #[cfg(feature = "validify")]
 use gpui::prelude::*;
+use quoin_ui_gpui::NodeElement;
 #[cfg(feature = "validify")]
 use gpui::*;
 #[cfg(feature = "validify")]
@@ -14,7 +15,7 @@ use validify::Validate;
 #[cfg(feature = "validify")]
 #[derive(Debug, Deserialize, Validate, Clone, Default)]
 pub struct ValidifySearch {
-    #[validate(range(min = 1, max = 100))]
+    #[validate(range(min = 1.0, max = 100.0))]
     pub page: Option<u32>,
     #[validate(length(min = 1, max = 10))]
     pub sort: Option<String>,

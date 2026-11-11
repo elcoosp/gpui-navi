@@ -42,7 +42,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -75,7 +75,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run all tests (default features)
@@ -98,7 +98,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -129,7 +129,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install Linux deps
@@ -147,7 +147,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-0 libwayland-dev libasound2-dev
+            libxkbcommon-x11-0 libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build docs (deny broken intra-doc links)

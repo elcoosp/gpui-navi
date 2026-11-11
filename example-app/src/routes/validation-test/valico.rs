@@ -1,6 +1,5 @@
 #[cfg(feature = "valico")]
 use gpui::prelude::*;
-use quoin_ui_gpui::NodeElement;
 #[cfg(feature = "valico")]
 use gpui::*;
 #[cfg(feature = "valico")]

@@ -1,6 +1,5 @@
 #[cfg(feature = "validify")]
 use gpui::prelude::*;
-use quoin_ui_gpui::NodeElement;
 #[cfg(feature = "validify")]
 use gpui::*;
 #[cfg(feature = "validify")]

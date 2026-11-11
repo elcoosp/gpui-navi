@@ -132,6 +132,8 @@ jobs:
             libxkbcommon-x11-0 libwayland-dev libasound2-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install Linux deps
+        run: sudo apt-get update && sudo apt-get install -y libxcb1-dev libxkbcommon-x11-dev
       - name: Build example app (debug)
         run: cargo build -p example-app
 

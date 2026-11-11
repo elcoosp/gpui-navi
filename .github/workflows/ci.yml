@@ -39,10 +39,13 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install Linux dependencies (gpui)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          for attempt in 1 2 3 4 5; do
+            sudo apt-get update -o Acquire::Retries=3 \
+              && sudo apt-get install -y -o Acquire::Retries=3 libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+              && break
+            echo "apt-get attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -72,10 +75,13 @@ jobs:
       - name: Install Linux dependencies (gpui)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          for attempt in 1 2 3 4 5; do
+            sudo apt-get update -o Acquire::Retries=3 \
+              && sudo apt-get install -y -o Acquire::Retries=3 libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+              && break
+            echo "apt-get attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run all tests (default features)
@@ -95,10 +101,13 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install Linux dependencies (gpui)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          for attempt in 1 2 3 4 5; do
+            sudo apt-get update -o Acquire::Retries=3 \
+              && sudo apt-get install -y -o Acquire::Retries=3 libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+              && break
+            echo "apt-get attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -126,10 +135,13 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install Linux dependencies (gpui)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          for attempt in 1 2 3 4 5; do
+            sudo apt-get update -o Acquire::Retries=3 \
+              && sudo apt-get install -y -o Acquire::Retries=3 libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+              && break
+            echo "apt-get attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install Linux deps
@@ -144,10 +156,13 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install Linux dependencies (gpui)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
-            libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          for attempt in 1 2 3 4 5; do
+            sudo apt-get update -o Acquire::Retries=3 \
+              && sudo apt-get install -y -o Acquire::Retries=3 libfontconfig1-dev libfreetype6-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libasound2-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+              && break
+            echo "apt-get attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build docs (deny broken intra-doc links)

@@ -36,7 +36,7 @@ pub struct GardeTestPage;
 
 #[cfg(feature = "garde")]
 impl RenderOnce for GardeTestPage {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let raw = use_search!(GardeTestRoute);
         let validated = raw.validate().ok().map(|_| raw).unwrap_or_default();
         div()

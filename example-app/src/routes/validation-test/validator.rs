@@ -36,7 +36,7 @@ pub struct ValidatorTestPage;
 
 #[cfg(feature = "validator")]
 impl RenderOnce for ValidatorTestPage {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let raw = use_search!(ValidatorTestRoute);
         let validated = raw.validate().ok().map(|_| raw).unwrap_or_default();
         div()

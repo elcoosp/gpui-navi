@@ -50,7 +50,7 @@ pub struct ValicoTestPage;
 
 #[cfg(feature = "valico")]
 impl RenderOnce for ValicoTestPage {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let raw = use_search!(ValicoTestRoute);
         let validated = raw.validate().ok().map(|_| raw).unwrap_or_default();
         div()
@@ -62,7 +62,7 @@ impl RenderOnce for ValicoTestPage {
             ))
             .child(NodeElement(Link::new("/validation-test/valico?page=50&sort=desc").child("Valid params").build()))
             .child(
-                (NodeElement(Link::new("/validation-test/valico?page=999&sort=invalid").child("Invalid params").build())),
+                NodeElement(Link::new("/validation-test/valico?page=999&sort=invalid").child("Invalid params").build()),
             )
             .child(NodeElement(Link::new("/validation-test").child("Back").build()))
     }

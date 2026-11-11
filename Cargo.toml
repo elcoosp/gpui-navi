@@ -28,8 +28,8 @@ edition = "2024"
 # GPUI is a **binding** dependency in this workspace: only `example-app`
 # (the host application) and the quoin GPUI adapter reference it. Every
 # navi library crate is GUI-framework agnostic and builds on quoin instead.
-gpui = { package = "gpui-pre", version = "0.4" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.4", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui = { package = "gpui-pre", version = "0.3.12" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.12", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 # Post-restructure stack: `gpui-kit` is the application facade (re-exports
 # GPUI, gpui-base, gpui-component and the bundled assets), `gpui-component`
 # 0.8 is the styled component catalog used by navi-devtools.

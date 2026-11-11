@@ -19,6 +19,11 @@ minimumReleaseAgeExclude:
 - '@volar/typescript@2.4.31'
 - satteri@0.11.7
 allowBuilds:
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/5f81909ef959d9ea743bbaf54013280addc91d06': true
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/2a50b8798540da2542676787fc4be5b7d68cb237': true
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/fb46a9f550f2b6d6f98819c5a2f7ec922f6550d6': true
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/651af6ef41d4cb4442bec528cb9f9435345c6217': true
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/6d76923a7901421615cb3c6673ffd2a096070dfe': true
   esbuild: true
   sharp: true
   astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e: true

@@ -30,7 +30,7 @@
     "sharp": "^0.35.5",
     "svgo": "^4.1.0",
     "typescript": "6.0.3",
-    "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#5f81909ef959d9ea743bbaf54013280addc91d06"
+    "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#3464b8bf304b5030d25ae72328c2fe3863ffd881"
   },
   "pnpm": {
     "overrides": {

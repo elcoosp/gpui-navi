@@ -1,2 +1,4 @@
 target
 wr.sh
+.vercel
+.env*

@@ -1,18 +1,11 @@
-import { defineCollection } from "astro:content";
-import { docsLoader, i18nLoader } from "@astrojs/starlight/loaders";
-import { docsSchema, i18nSchema } from "@astrojs/starlight/schema";
+import { defineCollection } from 'astro:content';
+import { docsLoader, i18nLoader } from '@astrojs/starlight/loaders';
+import { docsSchema, i18nSchema } from '@astrojs/starlight/schema';
+import { fileURLToPath } from 'node:url';
 
-const docs = defineCollection({
-        loader: docsLoader(),
-        schema: docsSchema(),
-});
+const toolkitI18nPath = fileURLToPath(new URL('../node_modules/@elcoosp/docs-toolkit/i18n/', import.meta.url));
 
-// Starlight's optional UI-translation collection. Defining it (even with a
-// single en.json) keeps the content sync from warning about a missing or
-// empty "i18n" collection.
-const i18n = defineCollection({
-        loader: i18nLoader(),
-        schema: i18nSchema(),
-});
-
-export const collections = { docs, i18n };
+export const collections = {
+  docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
+  i18n: defineCollection({ loader: i18nLoader({ base: toolkitI18nPath }), schema: i18nSchema() }),
+};

@@ -2,7 +2,6 @@ import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
 import starlightLinksValidator from "starlight-links-validator";
 import starlightImageZoom from "starlight-image-zoom";
 
-
 export default await defineDocsConfig({
   llmsTxt: {},
   changelog: { repo: 'elcoosp/navi' },
@@ -34,10 +33,7 @@ export default await defineDocsConfig({
                                 baseUrl:
                                         "https://github.com/elcoosp/navi/edit/main/docs-site/src/content/docs/"
                         },
-                        defaultLocale: "root",
-                        locales: {
-                                root: { label: "English", lang: "en" }
-                        },
+                                
                         sidebar: [
                                 {
                                         label: "Tutorials",

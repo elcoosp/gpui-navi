@@ -1,9 +1,9 @@
 [package]
-documentation = "https://gpui-navi.vercel.app"
+documentation = "https://navi.vercel.app"
 
-description = "The navi-core crate for the gpui-navi ecosystem"
+description = "The navi-core crate for the navi ecosystem"
 license = "MIT"
-repository = "https://github.com/elcoosp/gpui-navi"
+repository = "https://github.com/elcoosp/navi"
 readme = "../README.md"
 name = "navi-core"
 keywords = ["gpui", "router", "navigation", "desktop", "ui"]

@@ -1,6 +1,6 @@
-# gpui-navi Enhancement Plan — TanStack Router Feature Parity
+# navi Enhancement Plan — TanStack Router Feature Parity
 
-> **Goal:** Bring `gpui-navi` to full feature parity with TanStack Router and update the `example-app` to demonstrate every capability.
+> **Goal:** Bring `navi` to full feature parity with TanStack Router and update the `example-app` to demonstrate every capability.
 
 ---
 
@@ -425,7 +425,7 @@ Add `navi-test/` to the workspace with a headless GPUI test harness that:
 
 ### 7.3 `README.md` Rewrite
 
-Document every feature with a minimal code snippet, organized by the same phases above. Include a feature-parity checklist table comparing gpui-navi with TanStack Router.
+Document every feature with a minimal code snippet, organized by the same phases above. Include a feature-parity checklist table comparing navi with TanStack Router.
 
 ---
 
@@ -452,7 +452,7 @@ Phase 5    Devtools expansion
 Phase 6    Example app overhaul
 Phase 7    Tests + docs
 ```
-The enhancement plan for `gpui-navi` is well‑reasoned and aligns closely with the GPUI framework's architecture. Below is a feature‑by‑feature review, highlighting where GPUI idioms may require specific implementation patterns and where the plan is already on solid ground.
+The enhancement plan for `navi` is well‑reasoned and aligns closely with the GPUI framework's architecture. Below is a feature‑by‑feature review, highlighting where GPUI idioms may require specific implementation patterns and where the plan is already on solid ground.
 
 ---
 
@@ -602,7 +602,7 @@ The proposed routes exercise all features in a realistic way. No GPUI‑specific
 ## Conclusion
 
 The plan is **fully compatible with GPUI** and thoughtfully maps TanStack Router concepts to GPUI’s paradigms. The few areas that require adaptation (async hooks, scroll restoration timing) are well within GPUI’s capabilities and are correctly identified in the plan. Proceeding with the proposed implementation order will yield a robust, feature‑complete router for GPUI applications.
-I'll write the full implementation plan for bringing `gpui-navi` to feature parity with TanStack Router, following the writing-plans skill guidelines.
+I'll write the full implementation plan for bringing `navi` to feature parity with TanStack Router, following the writing-plans skill guidelines.
 
 I'm using the writing-plans skill to create the implementation plan.
 
@@ -615,7 +615,7 @@ The plan will be structured into multiple chunks, each with detailed, actionable
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Bring `gpui-navi` to full feature parity with TanStack Router, including loader redirects, beforeLoad hooks, route context, scroll restoration, and comprehensive devtools.
+**Goal:** Bring `navi` to full feature parity with TanStack Router, including loader redirects, beforeLoad hooks, route context, scroll restoration, and comprehensive devtools.
 
 **Architecture:** Enhance the existing file‑based routing system with new runtime hooks, a more powerful loader interception mechanism, and an expanded devtools panel. Changes are isolated to `navi-router`, `navi-macros`, `navi-codegen`, and `navi-devtools`, with a demonstration‑rich `example-app`.
 

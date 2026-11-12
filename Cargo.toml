@@ -48,7 +48,7 @@ gpui-component = "0.9.1"
 # model + renderer) are local commits, and the latest rs-query main depends
 # on quoin through a relative `path = "../quoin/quoin-core"` dependency, so
 # the three clones must sit side by side (workspaces/{quoin,rs-query,
-# gpui-navi}). Once quoin/rs-query publish releases carrying these changes,
+# navi}). Once quoin/rs-query publish releases carrying these changes,
 # these become plain version/git dependencies.
 quoin-core = { git = "https://github.com/elcoosp/quoin", branch = "main" }
 quoin-ui = { git = "https://github.com/elcoosp/quoin", branch = "main" }

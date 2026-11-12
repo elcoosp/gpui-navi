@@ -1,10 +1,10 @@
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
+import starlightChangelogs from 'starlight-changelogs';
 import starlightLinksValidator from "starlight-links-validator";
 import starlightImageZoom from "starlight-image-zoom";
 
 export default await defineDocsConfig({
   llmsTxt: {},
-  changelog: { repo: 'elcoosp/navi' },
   site: 'https://navi.vercel.app',
   domain: 'navi.vercel.app',
   title: "Navi",
@@ -81,6 +81,6 @@ export default await defineDocsConfig({
                         // route renders at /404 — Starlight's built-in 404
                         // route is disabled to avoid a route conflict.
                         disable404Route: true,
-                        plugins: [starlightLinksValidator(), starlightImageZoom()]
+                        plugins: [ starlightChangelogs(), starlightLinksValidator(), starlightImageZoom()]
                 },
 });

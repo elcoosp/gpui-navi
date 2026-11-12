@@ -1,4 +1,6 @@
 [package]
+documentation = "https://gpui-navi.vercel.app"
+
 description = "The navi-core crate for the gpui-navi ecosystem"
 license = "MIT"
 repository = "https://github.com/elcoosp/gpui-navi"

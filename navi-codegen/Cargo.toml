@@ -1,5 +1,7 @@
 # navi-codegen/Cargo.toml
 [package]
+documentation = "https://gpui-navi.vercel.app"
+
 description = "The navi-codegen crate for the gpui-navi ecosystem"
 license = "MIT"
 repository = "https://github.com/elcoosp/gpui-navi"

@@ -1,5 +1,6 @@
 [package]
 name = "navi-router-core"
+keywords = ["gpui", "router", "core", "ui", "navigation"]
 version.workspace = true
 edition = "2024"
 

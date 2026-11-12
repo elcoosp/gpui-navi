@@ -1,5 +1,6 @@
 [package]
 name = "navi-macros"
+keywords = ["gpui", "router", "macro", "codegen", "derive"]
 version.workspace = true
 edition = "2024"
 

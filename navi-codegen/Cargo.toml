@@ -1,6 +1,7 @@
 # navi-codegen/Cargo.toml
 [package]
 name = "navi-codegen"
+keywords = ["gpui", "router", "codegen", "macro", "derive"]
 version.workspace = true
 edition = "2024"
 

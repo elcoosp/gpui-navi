@@ -1,5 +1,6 @@
 [package]
 name = "navi-router"
+keywords = ["gpui", "router", "navigation", "desktop", "ui"]
 version.workspace = true
 edition = "2024"
 

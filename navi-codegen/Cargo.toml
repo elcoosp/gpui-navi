@@ -1,5 +1,9 @@
 # navi-codegen/Cargo.toml
 [package]
+description = "The navi-codegen crate for the gpui-navi ecosystem"
+license = "MIT"
+repository = "https://github.com/elcoosp/gpui-navi"
+readme = "../README.md"
 name = "navi-codegen"
 keywords = ["gpui", "router", "codegen", "macro", "derive"]
 version.workspace = true

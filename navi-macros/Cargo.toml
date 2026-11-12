@@ -1,4 +1,8 @@
 [package]
+description = "The navi-macros crate for the gpui-navi ecosystem"
+license = "MIT"
+repository = "https://github.com/elcoosp/gpui-navi"
+readme = "../README.md"
 name = "navi-macros"
 keywords = ["gpui", "router", "macro", "codegen", "derive"]
 version.workspace = true

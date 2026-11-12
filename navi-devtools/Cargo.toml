@@ -1,4 +1,8 @@
 [package]
+description = "The navi-devtools crate for the gpui-navi ecosystem"
+license = "MIT"
+repository = "https://github.com/elcoosp/gpui-navi"
+readme = "../README.md"
 name = "navi-devtools"
 keywords = ["gpui", "router", "devtools", "ui", "desktop"]
 version.workspace = true

@@ -27,3 +27,9 @@ minimumReleaseAgeExclude:
 - satteri@0.11.7
 - '@elcoosp/docs-toolkit@0.5.0'
 - '@elcoosp/docs-toolkit'
+onlyBuiltDependencies:
+- astro-takumi
+- esbuild
+- sharp
+overrides:
+  '@emnapi/runtime': 1.11.3

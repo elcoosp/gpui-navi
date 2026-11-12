@@ -17,7 +17,8 @@
     "starlight-image-zoom": "^0.16.2",
     "starlight-links-validator": "^0.27.0",
     "linkedom": "^0.18.0",
-    "mermaid": "^11.0.0"
+    "mermaid": "^11.0.0",
+    "@elcoosp/docs-toolkit": "^0.5.5"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
@@ -31,15 +32,6 @@
     "sharp": "^0.35.5",
     "svgo": "^4.1.0",
     "typescript": "6.0.3",
-    "@elcoosp/docs-toolkit": "^0.5.4"
-  },
-  "pnpm": {
-    "overrides": {
-      "@emnapi/runtime": "1.11.3"
-    },
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "sharp"
-    ]
+    "@elcoosp/docs-toolkit": "^0.5.5"
   }
 }

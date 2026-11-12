@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@emnapi/runtime': 1.11.3
+
 importers:
 
   .:
@@ -11,6 +14,9 @@ importers:
       '@astrojs/starlight':
         specifier: ^0.42.10
         version: 0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3)
+      '@elcoosp/docs-toolkit':
+        specifier: ^0.5.5
+        version: 0.5.5(@astrojs/markdown-satteri@0.4.8)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)(supports-color@10.2.2)
       astro:
         specifier: ^7.4.7
         version: 7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1)
@@ -30,9 +36,6 @@ importers:
       '@astrojs/check':
         specifier: ^0.9.12
         version: 0.9.12(prettier@3.9.10)(typescript@6.0.3)
-      '@elcoosp/docs-toolkit':
-        specifier: ^0.5.4
-        version: 0.5.4(@astrojs/markdown-satteri@0.4.8)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)(supports-color@10.2.2)
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
@@ -363,9 +366,9 @@ packages:
     resolution: {integrity: sha512-6V0+8vw/GmH92URQ/Ki12FPhoB3nqaQUJE+5xgbFbB5ok0OXYK5jCQsQQoyR3BzCddHsCpyCFRnIcI1PSOVYkQ==}
     engines: {node: '>=14'}
 
-  '@elcoosp/docs-toolkit@0.5.4':
-    resolution: {integrity: sha512-lPOGTiBH3u7qs/xgiAVmkz1Iuu7IQS89NE22NtovW9TlQZZDbB/jtusYvGQl0PpPeiwL8+EI0aaU91ABZB56DQ==}
-    version: 0.5.4
+  '@elcoosp/docs-toolkit@0.5.5':
+    resolution: {integrity: sha512-+T/nMBkZ8LD+XjGgjTvyDtrgsXWom26t2XByeFbzqa9/rmALUn0cJjPD/Q5BgX1B9GE7LZzOU8Lx+TP/DlzItw==}
+    version: 0.5.5
     engines: {node: '>=22.18.0'}
     hasBin: true
     peerDependencies:
@@ -405,9 +408,6 @@ packages:
 
   '@emnapi/core@1.11.3':
     resolution: {integrity: sha512-zLpS5asjEb7lq8jYLq37N6XKaE41DIexlY1rF/z4/tIl3wo13Sqm28fRyfIsKZD+NZ8mM5RoKkpW/rBcuoSZSg==}
-
-  '@emnapi/runtime@1.11.1':
-    resolution: {integrity: sha512-vgj7R3y3Wgx24IQaGPA/R6YFXLHVMOZ0uVEyIQPaWs+rd1AzfEMXlAC22FYwO1XkKR6NPsq7mUandH8oIRdZFw==}
 
   '@emnapi/runtime@1.11.3':
     resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
@@ -621,14 +621,14 @@ packages:
     engines: {node: ^20.19.0 || ^22.13.0 || >=23.5.0}
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
-      '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
+      '@emnapi/runtime': 1.11.3
 
   '@napi-rs/wasm-runtime@1.2.7':
     resolution: {integrity: sha512-zJccwplOAbgfZju95IUHazLnx9RAPtPN2YGJXI6UbrgeaR9QfPjGrQL6ERkSAtnVCA4Q+83ApGyaX5zdpCaKkQ==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=23.5.0}
     peerDependencies:
       '@emnapi/core': ^1.7.1 || 2.0.0-beta.2 || 2.0.0-beta.3
-      '@emnapi/runtime': ^1.7.1 || 2.0.0-beta.2 || 2.0.0-beta.3
+      '@emnapi/runtime': 1.11.3
 
   '@nodable/entities@3.1.0':
     resolution: {integrity: sha512-LsS/DjHr+uDM647Gru/cA8+J3a3HfhttwCKLyuoyN7yXTFCxKBtSgMQBvrW9yNPa2/zDRUNuGPaH5QUFoa4arQ==}
@@ -3458,15 +3458,15 @@ snapshots:
   '@bruits/satteri-wasm32-wasi@0.10.5':
     dependencies:
       '@emnapi/core': 1.11.1
-      '@emnapi/runtime': 1.11.1
-      '@napi-rs/wasm-runtime': 1.2.7(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
+      '@emnapi/runtime': 1.11.3
+      '@napi-rs/wasm-runtime': 1.2.7(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)
     optional: true
 
   '@bruits/satteri-wasm32-wasi@0.11.7':
     dependencies:
       '@emnapi/core': 1.11.1
-      '@emnapi/runtime': 1.11.1
-      '@napi-rs/wasm-runtime': 1.2.7(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
+      '@emnapi/runtime': 1.11.3
+      '@napi-rs/wasm-runtime': 1.2.7(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)
     optional: true
 
   '@bruits/satteri-win32-arm64-msvc@0.10.5':
@@ -3502,7 +3502,7 @@ snapshots:
 
   '@ctrl/tinycolor@4.3.0': {}
 
-  '@elcoosp/docs-toolkit@0.5.4(@astrojs/markdown-satteri@0.4.8)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)(supports-color@10.2.2)':
+  '@elcoosp/docs-toolkit@0.5.5(@astrojs/markdown-satteri@0.4.8)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)(supports-color@10.2.2)':
     dependencies:
       '@astrojs/rss': 4.0.19
       '@astrojs/starlight': 0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3)
@@ -3557,11 +3557,6 @@ snapshots:
     dependencies:
       '@emnapi/wasi-threads': 1.2.3
       tslib: 2.9.1
-
-  '@emnapi/runtime@1.11.1':
-    dependencies:
-      tslib: 2.9.1
-    optional: true
 
   '@emnapi/runtime@1.11.3':
     dependencies:
@@ -3760,10 +3755,10 @@ snapshots:
       '@emnapi/runtime': 1.11.3
       '@tybys/wasm-util': 0.10.4
 
-  '@napi-rs/wasm-runtime@1.2.7(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
+  '@napi-rs/wasm-runtime@1.2.7(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)':
     dependencies:
       '@emnapi/core': 1.11.1
-      '@emnapi/runtime': 1.11.1
+      '@emnapi/runtime': 1.11.3
       '@tybys/wasm-util': 0.10.4
     optional: true
 

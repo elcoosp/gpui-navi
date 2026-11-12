@@ -1,6 +1,4 @@
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
-import starlightChangelogs from 'starlight-changelogs';
-import starlightLinksValidator from "starlight-links-validator";
 import starlightImageZoom from "starlight-image-zoom";
 
 export default await defineDocsConfig({
@@ -81,6 +79,6 @@ export default await defineDocsConfig({
                         // route renders at /404 — Starlight's built-in 404
                         // route is disabled to avoid a route conflict.
                         disable404Route: true,
-                        plugins: [ starlightChangelogs(), starlightLinksValidator(), starlightImageZoom()]
+                        plugins: [starlightImageZoom()]
                 },
 });

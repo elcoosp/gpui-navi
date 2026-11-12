@@ -36,11 +36,11 @@ export default await defineDocsConfig({
                                 
                         sidebar: [
                                 {
-                                        label: "Tutorials",
+                                        label: "Tutorials", translations: { fr: 'Tutoriels' },
                                         items: [{ label: "Getting Started", slug: "tutorials/getting-started" }]
                                 },
                                 {
-                                        label: "Guides",
+                                        label: "Guides", translations: { fr: 'Guides' },
                                         items: [
                                                 { label: "Installation", slug: "guides/installation" },
                                                 { label: "File-Based Routing", slug: "guides/file-based-routing" },
@@ -55,7 +55,7 @@ export default await defineDocsConfig({
                                         ]
                                 },
                                 {
-                                        label: "Reference",
+                                        label: "Reference", translations: { fr: 'Référence' },
                                         items: [
                                                 { label: "Workspace Crates", slug: "reference/crates" },
                                                 { label: "navi.config.json", slug: "reference/navi-config" },
@@ -67,7 +67,7 @@ export default await defineDocsConfig({
                                         ]
                                 },
                                 {
-                                        label: "Explanation",
+                                        label: "Explanation", translations: { fr: 'Explication' },
                                         items: [
                                                 { label: "Architecture", slug: "explanation/architecture" },
                                                 { label: "Framework Agnosticism", slug: "explanation/framework-agnosticism" },

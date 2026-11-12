@@ -1,0 +1,28 @@
+# navi
+
+> AI-agent index.
+
+- [404](/404/) — The page you are looking for does not exist or has moved.
+- [Architecture](/explanation/architecture/) — How the Navi crates layer from the pure routing engine up to framework adapters, and how a navigation flows through them.
+- [Framework Agnosticism](/explanation/framework-agnosticism/) — Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floem — and what switching frameworks costs.
+- [Performance Design](/explanation/performance/) — The allocation-free hot paths, bounded memory, and lock-free history behind Navi's benchmark numbers.
+- [Route Matching](/explanation/route-matching/) — How the ranked radix trie matches locations in O(log n) and why static segments always beat dynamic ones.
+- [Devtools](/guides/devtools/) — Open Navi's built-in devtools panel and use its Routes, Cache, Timeline, and State tabs to debug navigation, loaders, and blockers.
+- [File-Based Routing](/guides/file-based-routing/) — Every route file naming convention in Navi — dynamic segments, splats, index routes, layouts, groups, and ignored files.
+- [Installation](/guides/installation/) — Add the Navi crates to your Rust project, select your UI framework with a quoin feature flag, and wire up route-tree code generation.
+- [Loaders & Suspense](/guides/loaders-and-suspense/) — Fetch route data with loaders backed by the rs-query cache, control staleness and GC, and render granular loading states with Awaited.
+- [Navigation Blockers](/guides/navigation-blockers/) — Prevent navigation with sync or async blockers that guard unsaved changes and destructive in-progress work.
+- [Link Preloading](/guides/preloading/) — Warm the loader cache before navigation with Render, Intent, and Viewport preload strategies and per-href deduplication.
+- [Route Guards](/guides/route-guards/) — Protect routes with before_load hooks that redirect, 404, or allow navigation — plus on_enter and on_leave lifecycle callbacks.
+- [Scroll Restoration](/guides/scroll-restoration/) — Restore scroll positions per path and query, bound the cache, and opt out per route or per navigation.
+- [Search Params](/guides/search-params/) — Type your query strings with typed search structs, navigate with search values, and opt into nested bracket syntax with the nested-search feature.
+- [Validation](/guides/validation/) — Integrate validator, garde, validify, or valico with Navi's ValidateSearch trait — one integration per crate, enforced per feature.
+- [Navi](/) — A powerful file-based router for Rust UI frameworks — one route table, every frontend, powered by quoin.
+- [Components](/reference/components/) — The router UI components — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestoration — with their full builder surface.
+- [Core Types](/reference/core-types/) — The engine types re-exported from navi-router-core — Location, RouteTree, RouterCore, NavigationEffect, and the rest.
+- [Workspace Crates](/reference/crates/) — The seven crates of the navi workspace and what each one owns.
+- [define_route!](/reference/define-route/) — Every argument accepted by the define_route! macro, its types, and defaults.
+- [Macros](/reference/macros/) — The twelve procedural macros of navi-macros — signatures, what they expand to, and what they return.
+- [navi.config.json](/reference/navi-config/) — Every key of the navi-codegen configuration file — types, defaults, and an example.
+- [Runtime & Router Options](/reference/runtime/) — RouterProvider, RouterOptions, NotFoundMode, Navigator, and NavigateOptions — the runtime surface that boots and drives the router.
+- [Getting Started](/tutorials/getting-started/) — Build a small routed application with Navi on GPUI — from empty Cargo project to loaders, layouts, and links.

@@ -1,0 +1,53 @@
+---
+title: Architecture
+description: How the Navi crates layer from the pure routing engine up to framework adapters, and how a navigation flows through them.
+type: explanation
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Navi separates routing logic from rendering so completely that the engine cannot tell which UI framework is displaying it. This page walks the layers from the inside out.
+
+## The layers
+
+1. **`navi-core`** — shared primitives: window keys, ids, config types. Everything above depends on it; it depends on nothing.
+2. **`navi-router-core`** — the pure engine: `RouterCore`, `RouteTree`, `History`, `Blocker`, `Location`, `Redirect`, `NotFound`, and the validation traits. It has no UI dependency and no async runtime.
+3. **`navi-router`** — the adapter layer: it wraps `RouterCore`, interprets `NavigationEffect`s, and hosts the components, blockers, and scroll restoration your app renders.
+4. **`navi-macros` and `navi-codegen`** — the authoring surface: macros for hooks and route definitions, and build-time generation of the route tree from the filesystem.
+5. **`navi-devtools` and `navi-test`** — tooling that observes or exercises the router, framework-agnostic like everything below the adapter.
+
+## The engine is a state machine
+
+`RouterCore` never performs side effects. Given a `Location`, `core.navigate(loc)` returns a `NavigationEffect`:
+
+- `SpawnLoader` — the adapter runs the matched route's loader on its async runtime.
+- `Redirect` — the adapter navigates to the redirect target.
+- `NotFound` — the adapter resolves the not-found UI.
+- `NotifyListeners` — the adapter refreshes its UI.
+
+Because effects are plain data, any framework can interpret them. The upstream architecture note describes the recipe for a new adapter: instantiate `RouterCore` with a `RouteTree`, call `core.navigate(loc)` on navigation, run loaders on your framework's async runtime for `SpawnLoader`, and refresh your UI for `NotifyListeners`.
+
+## Rendering is delegated to quoin
+
+Route UI is expressed as `quoin_ui::Node` trees — plain data any backend understands — or `component!` shells for richer screens. Quoin's macro emitters lower those trees to the selected framework, which is why the same route table runs on GPUI, Dioxus, Leptos, Xilem, and Floem unmodified. The data side delegates symmetrically: loaders cache through rs-query's `QueryClient`, whose runtime seam is backed by quoin's worker pool and portable timer, so it needs no UI framework and no ambient async runtime.
+
+## What code generation contributes
+
+At build time, `navi-codegen` scans `src/routes` and writes `route_tree.gen.rs`, exposing `build_route_tree()` and `register_routes()`. The host calls both during bootstrap. The generated tree carries the same structure the scanner saw on disk — including layout inference and feature-gated routes — so the runtime trie and the filesystem never disagree.
+
+## One navigation, end to end
+
+1. A `Link` click or `Navigator::push` produces a navigation request.
+2. The timeline records `BeforeNavigate`.
+3. Registered blockers are consulted; a held navigation stops here.
+4. `RouterCore` matches the location against the trie and returns effects.
+5. `BeforeLoad` fires; guards may redirect or 404 before loaders run.
+6. `SpawnLoader` resolves loader data through the rs-query cache.
+7. The match resolves (`Resolved`), the UI re-renders (`Rendered`), and scroll restoration reapplies the remembered position.
+## Related
+
+<CardGrid>
+<LinkCard title="Framework Agnosticism" href="/explanation/framework-agnosticism/" description="Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floe" />
+<LinkCard title="Performance Design" href="/explanation/performance/" description="The allocation-free hot paths, bounded memory, and lock-free history behind Navi" />
+<LinkCard title="Route Matching" href="/explanation/route-matching/" description="How the ranked radix trie matches locations in O(log n) and why static segments " />
+</CardGrid>

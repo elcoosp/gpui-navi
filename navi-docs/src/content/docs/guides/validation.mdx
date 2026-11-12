@@ -1,0 +1,55 @@
+---
+title: Validation
+description: Integrate validator, garde, validify, or valico with Navi's ValidateSearch trait — one integration per crate, enforced per feature.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+You validate search params and route data with the validation library your project already uses. Navi integrates four of them through mutually exclusive feature flags.
+
+## Choose one integration
+
+| Feature | Crate |
+| :--- | :--- |
+| `validator` | [validator](https://crates.io/crates/validator) |
+| `garde` | [garde](https://crates.io/crates/garde) |
+| `validify` | [validify](https://crates.io/crates/validify) |
+| `valico` | [valico](https://crates.io/crates/valico) |
+
+Enable exactly one in your `Cargo.toml`:
+
+<Code lang="toml" code={`[dependencies]
+navi-router = { path = "../navi/navi-router", features = ["garde"] }`} />
+
+<Aside type="caution">
+  The four integrations are mutually exclusive blanket impls. Enabling more
+  than one on the same crate is not a supported configuration. This is also
+  why the workspace lints and tests each integration **per feature** instead
+  of under `--all-features`.
+</Aside>
+
+## The validation surface
+
+All four integrations feed the same trait surface, re-exported from `navi_router`:
+
+| Item | Role |
+| :--- | :--- |
+| `ValidateSearch` | Trait a search type implements to validate itself. |
+| `ValidationResult` | Outcome of a validation pass. |
+| `ValidationError` | A single validation failure. |
+
+Implement `ValidateSearch` for your typed search struct (see [Search Params](/guides/search-params/)), and the router consults it when matching navigations carry query data.
+
+## Verify
+
+Run the workspace tests for the feature you enabled:
+
+<Code lang="bash" code={`cargo test -p navi-router --features garde`} />
+
+The repository's `example-app` ships a `validation-test` route directory with one page per integration (`validator.rs`, `garde.rs`, `validify.rs`, `valico.rs`) that you can open side by side.
+
+## Next steps
+
+<LinkCard title="Search Params" href="/guides/search-params/" description="Declare the typed search structs you validate here." />
+<LinkCard title="Core Types reference" href="/reference/core-types/" description="ValidateSearch, ValidationResult, and ValidationError." />

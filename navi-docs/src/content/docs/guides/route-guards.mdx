@@ -1,0 +1,68 @@
+---
+title: Route Guards
+description: Protect routes with before_load hooks that redirect, 404, or allow navigation — plus on_enter and on_leave lifecycle callbacks.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+You guard a route with a `before_load` hook. Navi runs it before the route loads, and the hook decides whether navigation proceeds, redirects elsewhere, or resolves as not-found.
+
+## Return one of three outcomes
+
+The hook receives a `BeforeLoadContext` and returns a `BeforeLoadResult`:
+
+| Result | Effect |
+| :--- | :--- |
+| `BeforeLoadResult::Ok` | Navigation continues. |
+| `BeforeLoadResult::Redirect(Redirect)` | Navi follows the redirect target instead. |
+| `BeforeLoadResult::NotFound(NotFound)` | Navi resolves the navigation as not-found. |
+
+The `redirect()` and `not_found()` helper functions construct the non-Ok variants, re-exported from `navi_router`:
+
+<Code lang="rust" code={`use navi_router::{BeforeLoadResult, redirect, not_found};
+
+define_route!(
+    AdminDashboardRoute,
+    path: "/admin/dashboard",
+    before_load: |ctx| async move {
+                    if !is_signed_in(&ctx) {
+                                    return BeforeLoadResult::Redirect(redirect("/login"));
+                    }
+                    BeforeLoadResult::Ok
+    },
+    node: admin_node,
+);`} />
+
+<Aside type="note">
+  `before_load` is async: you can perform session checks, permission lookups,
+  or any other awaitable work inside it. The event timeline records the
+  `BeforeLoad` stage, and the devtools timeline shows where a navigation
+  changed course (see [Devtools](/guides/devtools/)).
+</Aside>
+
+## React to route lifecycle changes
+
+Routes also accept two synchronous lifecycle callbacks, each receiving the `Location`:
+
+| Argument | Fires |
+| :--- | :--- |
+| `on_enter` | When someone enters the route. |
+| `on_leave` | When someone leaves the route. |
+
+<Code lang="rust" code={`define_route!(
+    ProfileRoute,
+    path: "/profile",
+    on_enter: |loc| log::info!("entered {}", loc.pathname),
+    on_leave: |loc| log::info!("left {}", loc.pathname),
+    node: profile_node,
+);`} />
+
+## Order of operations
+
+A navigation flows through `BeforeNavigate → BeforeLoad → Resolved` events. The `before_load` hook sits between the navigation decision and data resolution, which is why a guard can redirect before any loader runs.
+
+## Next steps
+
+<LinkCard title="Loaders & Suspense" href="/guides/loaders-and-suspense/" description="What runs after the guard allows the navigation." />
+<LinkCard title="Core Types reference" href="/reference/core-types/" description="BeforeLoadContext, BeforeLoadResult, Redirect, and NotFound." />

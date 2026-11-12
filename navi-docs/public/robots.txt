@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://navi.vercel.app/sitemap-index.xml

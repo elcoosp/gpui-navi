@@ -1,0 +1,14 @@
+{
+	// Starlight/MDX authoring: JSX components are valid content, headings come
+	// after the opening summary paragraph, and line length is not enforced.
+	"config": {
+		"default": true,
+		"MD013": false,
+		"MD033": false,
+		"MD041": false,
+		"MD024": { "siblings_only": true },
+		"MD025": false,
+		"MD045": false,
+		"table_pipe_style": "leading_and_trailing"
+	}
+}

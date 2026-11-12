@@ -1,0 +1,49 @@
+---
+title: Route Matching
+description: How the ranked radix trie matches locations in O(log n) and why static segments always beat dynamic ones.
+type: explanation
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+When someone navigates to `/users/42/settings`, the router must decide — deterministically — which route that is. Navi answers with a ranked radix trie in `navi-router-core`, and the design choices there explain both the correctness guarantees and the benchmark numbers.
+
+## The data structure
+
+The `RouteTree` is a ranked radix trie over pattern segments. Each `Segment` is one of:
+
+- **static** — a literal path segment (`users`),
+- **dynamic** — a parameter (`$id`),
+- **optional** — a segment that may be absent,
+- **splat** — a catch-all tail (`$`).
+
+Radix compression means shared prefixes are stored once; the trie shape mirrors your filesystem layout because that is what code generation feeds it. Structural route-tree validation runs against the tree, so contradictory or unreachable structures surface at build time instead of producing surprising matches.
+
+## Determinism: static beats dynamic
+
+Ranking guarantees that static segments always win over dynamic ones. With `users/new.rs` and `users/$id.rs` both defined, `/users/new` always matches the static route — the outcome never depends on definition order or hash iteration. This is the property the `static_beats_dynamic` benchmark exists to protect.
+
+## The hot path allocates nothing
+
+Matching is designed to be allocation-free per navigation:
+
+- Parameter bindings collect on the stack; the `HashMap` materializes **once, on success** — failed matches never allocate.
+- Static-child lookup uses an FxHash map.
+- Segment names are interned `Arc<str>` values, so comparisons are cheap pointer-or-byte operations.
+
+The measured result across the repository's benchmark suite is a 14–38% speedup over the pre-optimization baseline, with the deepest nested path (`deep_nested`) dropping from 242.1 ns to 151.3 ns. The full table lives in the repository's `docs/BENCHMARKS.md`.
+
+## Where the rest of the time goes
+
+- **Location parsing** — `Location::new` splits path, query, and hash; the query path is optimized to avoid re-allocation (−27% on `query_hash`).
+- **History** — a lock-free, single-owner stack: no `Mutex` on the navigation path, which is why `back_forward` improved by 67%.
+- **Transactions** — batched `NavOp`s apply atomically; `transact/two_replaces` measures the single re-render guarantee.
+
+The consequence for your app is simple to state: the router work per navigation is measured in nanoseconds, so your loaders — not your routing — decide perceived speed.
+## Related
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="How the Navi crates layer from the pure routing engine up to framework adapters," />
+<LinkCard title="Framework Agnosticism" href="/explanation/framework-agnosticism/" description="Why Navi compiles the same route table for GPUI, Dioxus, Leptos, Xilem, and Floe" />
+<LinkCard title="Performance Design" href="/explanation/performance/" description="The allocation-free hot paths, bounded memory, and lock-free history behind Navi" />
+</CardGrid>

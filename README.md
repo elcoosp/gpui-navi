@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/logo.png" alt="Navi Logo" width="300"/>
+  <img src="https://cdn.jsdelivr.net/gh/elcoosp/gpui-navi@main/docs/logo.png" alt="Navi Logo" width="300"/>
   <p>
     <strong>A powerful file‑based router for Rust UI frameworks</strong><br/>
     Framework‑agnostic by design — one route table, every frontend, powered by <a href="https://github.com/elcoosp/quoin">quoin</a>.<br/>
@@ -213,7 +213,7 @@ route_tree::register_routes(cx);
 
 ## Examples
 
-[`examples/`](examples/) ships one shared demo (`demo-core`: routes, loaders,
+[`examples/`](https://github.com/elcoosp/gpui-navi/tree/main/examples) ships one shared demo (`demo-core`: routes, loaders,
 suspense, guards, search params, 404, devtools) with five thin hosts:
 
 | Example | Framework | Command |
@@ -328,8 +328,8 @@ cargo bench --bench core --bench adapter   # criterion benchmarks
 ## Performance
 
 The router is engineered for allocation‑free hot paths — see
-[docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the design and
-[docs/BENCHMARKS.md](docs/BENCHMARKS.md) for full before/after numbers:
+[docs/PERFORMANCE.md](https://github.com/elcoosp/gpui-navi/blob/main/docs/PERFORMANCE.md) for the design and
+[docs/BENCHMARKS.md](https://github.com/elcoosp/gpui-navi/blob/main/docs/BENCHMARKS.md) for full before/after numbers:
 
 - **Zero‑copy route matching**: stack‑collected parameter bindings, interned
   `Arc<str>` segment names, FxHash static‑child lookup, `HashMap`
@@ -360,6 +360,6 @@ reactive core, many frameworks) and the data stack is
 stale‑time/GC); GPUI is supplied by the matching `gpui-pre` snapshot when
 the `gpui` feature is selected.
 
-See [docs/BRAINSTORM.md](docs/BRAINSTORM.md) for the full improvement
+See [docs/BRAINSTORM.md](https://github.com/elcoosp/gpui-navi/blob/main/docs/BRAINSTORM.md) for the full improvement
 brainstorm (performance, DRY/KISS, features) and the remaining follow‑ups
 (deep‑links re‑introduction, coverage gate).

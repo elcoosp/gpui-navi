@@ -37,42 +37,42 @@ export default await defineDocsConfig({
                         sidebar: [
                                 {
                                         label: "Tutorials", translations: { fr: 'Tutoriels' },
-                                        items: [{ label: "Getting Started", slug: "tutorials/getting-started" }]
+                                        items: [{ label: "Getting Started", slug: "tutorials/getting-started" }], translations: { fr: "Commencer" }
                                 },
                                 {
                                         label: "Guides", translations: { fr: 'Guides' },
                                         items: [
-                                                { label: "Installation", slug: "guides/installation" },
-                                                { label: "File-Based Routing", slug: "guides/file-based-routing" },
-                                                { label: "Loaders & Suspense", slug: "guides/loaders-and-suspense" },
-                                                { label: "Route Guards", slug: "guides/route-guards" },
-                                                { label: "Navigation Blockers", slug: "guides/navigation-blockers" },
-                                                { label: "Search Params", slug: "guides/search-params" },
-                                                { label: "Validation", slug: "guides/validation" },
-                                                { label: "Link Preloading", slug: "guides/preloading" },
-                                                { label: "Scroll Restoration", slug: "guides/scroll-restoration" },
-                                                { label: "Devtools", slug: "guides/devtools" },
+                                                { label: "Installation", translations: { fr: "Installation" }, slug: "guides/installation" },
+                                                { label: "File-Based Routing", translations: { fr: "Routage basé sur les fichiers" }, slug: "guides/file-based-routing" },
+                                                { label: "Loaders & Suspense", translations: { fr: "Chargeurs et Suspense" }, slug: "guides/loaders-and-suspense" },
+                                                { label: "Route Guards", translations: { fr: "Gardes de route" }, slug: "guides/route-guards" },
+                                                { label: "Navigation Blockers", translations: { fr: "Bloqueurs de navigation" }, slug: "guides/navigation-blockers" },
+                                                { label: "Search Params", translations: { fr: "Paramètres de recherche" }, slug: "guides/search-params" },
+                                                { label: "Validation", translations: { fr: "Validation" }, slug: "guides/validation" },
+                                                { label: "Link Preloading", translations: { fr: "Préchargement des liens" }, slug: "guides/preloading" },
+                                                { label: "Scroll Restoration", translations: { fr: "Restauration du défilement" }, slug: "guides/scroll-restoration" },
+                                                { label: "Devtools", translations: { fr: "Outils de développement" }, slug: "guides/devtools" },
                                         ]
                                 },
                                 {
                                         label: "Reference", translations: { fr: 'Référence' },
                                         items: [
-                                                { label: "Workspace Crates", slug: "reference/crates" },
-                                                { label: "navi.config.json", slug: "reference/navi-config" },
-                                                { label: "define_route!", slug: "reference/define-route" },
-                                                { label: "Macros", slug: "reference/macros" },
-                                                { label: "Components", slug: "reference/components" },
-                                                { label: "Runtime & Router Options", slug: "reference/runtime" },
-                                                { label: "Core Types", slug: "reference/core-types" },
+                                                { label: "Workspace Crates", translations: { fr: "Crates de l'espace de travail" }, slug: "reference/crates" },
+                                                { label: "navi.config.json", translations: { fr: "navi.config.json" }, slug: "reference/navi-config" },
+                                                { label: "define_route!", translations: { fr: "define_route!" }, slug: "reference/define-route" },
+                                                { label: "Macros", translations: { fr: "Macros" }, slug: "reference/macros" },
+                                                { label: "Components", translations: { fr: "Composants" }, slug: "reference/components" },
+                                                { label: "Runtime & Router Options", translations: { fr: "Options d'exécution et de routeur" }, slug: "reference/runtime" },
+                                                { label: "Core Types", translations: { fr: "Types de base" }, slug: "reference/core-types" },
                                         ]
                                 },
                                 {
                                         label: "Explanation", translations: { fr: 'Explication' },
                                         items: [
-                                                { label: "Architecture", slug: "explanation/architecture" },
-                                                { label: "Framework Agnosticism", slug: "explanation/framework-agnosticism" },
-                                                { label: "Route Matching", slug: "explanation/route-matching" },
-                                                { label: "Performance Design", slug: "explanation/performance" },
+                                                { label: "Architecture", translations: { fr: "Architecture" }, slug: "explanation/architecture" },
+                                                { label: "Framework Agnosticism", translations: { fr: "Agnosticisme de framework" }, slug: "explanation/framework-agnosticism" },
+                                                { label: "Route Matching", translations: { fr: "Correspondance des routes" }, slug: "explanation/route-matching" },
+                                                { label: "Performance Design", translations: { fr: "Conception des performances" }, slug: "explanation/performance" },
                                         ]
                                 },
                         ],

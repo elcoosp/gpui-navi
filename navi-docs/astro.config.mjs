@@ -34,13 +34,13 @@ export default await defineDocsConfig({
                                 
                         sidebar: [
                                 {
-                                        label: "Tutorials", translations: { fr: 'Tutoriels' },
+                                        label: "Tutorials",
                                         items: [{ label: "Getting Started", slug: "tutorials/getting-started" }], translations: { fr: "Commencer" }
                                 },
                                 {
-                                        label: "Guides", translations: { fr: 'Guides' },
+                                        label: "Guides",
                                         items: [
-                                                { label: "Installation", translations: { fr: "Installation" }, slug: "guides/installation" },
+                                                { label: "Installation", slug: "guides/installation" },
                                                 { label: "File-Based Routing", translations: { fr: "Routage basé sur les fichiers" }, slug: "guides/file-based-routing" },
                                                 { label: "Loaders & Suspense", translations: { fr: "Chargeurs et Suspense" }, slug: "guides/loaders-and-suspense" },
                                                 { label: "Route Guards", translations: { fr: "Gardes de route" }, slug: "guides/route-guards" },
@@ -53,21 +53,21 @@ export default await defineDocsConfig({
                                         ]
                                 },
                                 {
-                                        label: "Reference", translations: { fr: 'Référence' },
+                                        label: "Reference",
                                         items: [
                                                 { label: "Workspace Crates", translations: { fr: "Crates de l'espace de travail" }, slug: "reference/crates" },
                                                 { label: "navi.config.json", translations: { fr: "navi.config.json" }, slug: "reference/navi-config" },
                                                 { label: "define_route!", translations: { fr: "define_route!" }, slug: "reference/define-route" },
-                                                { label: "Macros", translations: { fr: "Macros" }, slug: "reference/macros" },
+                                                { label: "Macros", slug: "reference/macros" },
                                                 { label: "Components", translations: { fr: "Composants" }, slug: "reference/components" },
                                                 { label: "Runtime & Router Options", translations: { fr: "Options d'exécution et de routeur" }, slug: "reference/runtime" },
                                                 { label: "Core Types", translations: { fr: "Types de base" }, slug: "reference/core-types" },
                                         ]
                                 },
                                 {
-                                        label: "Explanation", translations: { fr: 'Explication' },
+                                        label: "Explanation",
                                         items: [
-                                                { label: "Architecture", translations: { fr: "Architecture" }, slug: "explanation/architecture" },
+                                                { label: "Architecture", slug: "explanation/architecture" },
                                                 { label: "Framework Agnosticism", translations: { fr: "Agnosticisme de framework" }, slug: "explanation/framework-agnosticism" },
                                                 { label: "Route Matching", translations: { fr: "Correspondance des routes" }, slug: "explanation/route-matching" },
                                                 { label: "Performance Design", translations: { fr: "Conception des performances" }, slug: "explanation/performance" },

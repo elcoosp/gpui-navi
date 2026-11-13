@@ -1,0 +1,179 @@
+---
+title: Getting Started
+description: Construisez une petite application routée avec Navi sur GPUI — d'un projet Cargo vide à des loaders, des layouts et des liens.
+type: tutorial
+---
+
+import { Code, LinkCard } from '@astrojs/starlight/components';
+
+Vous construisez une petite application routée dans ce tutoriel : un layout racine, une page d'index, une page de détail utilisateur avec un loader, et une navigation typée entre elles. La même table de routes que vous créez ici s'exécute sur GPUI, Dioxus, Leptos, Xilem et Floem — seul le bootstrap hôte de trois lignes diffère.
+
+## Prérequis
+
+- [Rust](https://rustup.rs) 1.85 ou plus récent (Navi utilise l'édition 2024).
+- Une chaîne d'outils GPUI fonctionnelle pour votre plateforme si vous suivez l'étape hôte GPUI.
+- Un clone de l'[espace de travail navi](https://github.com/elcoosp/navi) à côté de votre projet, parce que les crates quoin et rs-query sur lesquels il se construit sont consommés comme dépendances de chemin locales (voir [Installation](/guides/installation/)).
+
+## 1. Ajouter les dépendances
+
+Ajoutez les crates Navi plus quoin avec la fonctionnalité de votre framework à `Cargo.toml` :
+
+<Code lang="toml" code={`[dependencies]
+navi-router = { path = "../navi/navi-router" }
+navi-macros = { path = "../navi/navi-macros" }
+quoin      = { path = "../quoin/quoin", features = ["gpui"] }`} />
+
+La valeur `features` sélectionne votre framework UI : `gpui`, `dioxus`, `leptos`, `xilem` ou `floem`. Tout le reste de ce tutoriel reste identique à travers les cinq.
+
+## 2. Créer les fichiers de route
+
+Les routes sont de simples fichiers Rust sous `src/routes`. Créez un layout racine à `src/routes/__root.rs` — les fichiers nommés `__root` ou commençant par `_` deviennent des layouts qui rendent leurs enfants via un `<Outlet>` :
+
+<Code lang="rust" code={`// src/routes/__root.rs
+use navi_macros::define_route;
+use navi_router::components::{Link, Outlet};
+use quoin_ui::{Node, StyleCmd};
+
+fn root_node() -> Node {
+    Node::div()
+                    .styles([StyleCmd::FlexCol])
+                    .child(Link::new("/").child("Home").build())
+                    .child(Outlet::new().build())
+                    .build()
+}
+
+define_route!(RootRoute, path: "/", is_layout: true, node: root_node);`} />
+
+Créez la page d'index à `src/routes/index.rs` :
+
+<Code lang="rust" code={`// src/routes/index.rs
+use navi_macros::define_route;
+use navi_router::components::Link;
+use quoin_ui::{Node, StyleCmd};
+
+fn index_node() -> Node {
+    Node::div()
+                    .styles([StyleCmd::FlexCol, StyleCmd::Gap(6.0), StyleCmd::Padding(12.0)])
+                    .child(Node::text("Welcome!"))
+                    .child(Link::new("/users/42").child("Open /users/42").build())
+                    .build()
+}
+
+define_route!(IndexRoute, path: "/", is_index: true, node: index_node);`} />
+
+Ajoutez la route utilisateur dynamique à `src/routes/users/$id.rs`. Le nom de fichier `$id` déclare un paramètre de chemin, et le `loader` s'exécute quand quelqu'un navigue vers la route :
+
+<Code lang="rust" code={`// src/routes/users/$id.rs
+use std::sync::Arc;
+
+use navi_macros::{define_route, use_loader_data};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct UserParams {
+    pub id: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct UserData {
+    pub id: String,
+    pub name: String,
+    pub email: String,
+}
+
+define_route!(
+    UsersParamIdRoute,
+    path: "/users/$id",
+    params: UserParams,
+    data: UserData,
+    loader: |params: UserParams| async move {
+                    let id = params.id;
+                    navi_router::sleep(std::time::Duration::from_millis(800)).await;
+                    Ok::<_, Box<dyn std::error::Error + Send + Sync>>(Arc::new(UserData {
+                                    id: id.clone(),
+                                    name: format!("User {id}"),
+                                    email: format!("user{id}@example.com"),
+                    }))
+    },
+    node: user_node,
+);
+
+fn user_node() -> Node {
+    // Reads the data the loader returned for this route.
+    let data = use_loader_data!(UsersParamIdRoute);
+    match data.map(|d| (*d).clone()) {
+                    Some(user) => Node::text(format!("{} — {}", user.name, user.email)),
+                    None => Node::text("Loading..."),
+    }
+}`} />
+
+## 3. Configurer la génération de code
+
+Navi génère l'arbre de routes depuis votre répertoire `src/routes` à la compilation. Créez `navi.config.json` à la racine de votre projet :
+
+<Code lang="json" code={`{
+  "routes_directory": "./src/routes",
+  "generated_route_tree": "./src/route_tree.gen.rs",
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}`} />
+
+Puis câblez le générateur dans `build.rs` :
+
+<Code lang="rust" code={`// build.rs
+fn main() {
+    let config = navi_codegen::NaviConfig::from_file("navi.config.json")
+                    .expect("Failed to read config");
+    navi_codegen::generator::write_route_tree(&config).unwrap();
+}`} />
+
+Chaque compilation régénère maintenant `src/route_tree.gen.rs`, qui expose `build_route_tree()` et `register_routes()`.
+
+## 4. Démarrer l'application
+
+Sur GPUI, Xilem et Floem, vous démarrez via la macro hôte `run_app!` de quoin. Initialisez le routeur à l'intérieur de votre hôte avec l'arbre généré :
+
+<Code lang="rust" code={`use navi_router::{Location, NotFoundMode, RouterOptions, RouterProvider};
+
+mod route_tree {
+    include!("route_tree.gen.rs");
+}
+
+let tree = route_tree::build_route_tree();
+let router = RouterProvider::new_with_options(
+    window_id,
+    window_handle,
+    Location::new("/"),
+    tree,
+    RouterOptions {
+                    not_found_mode: NotFoundMode::Fuzzy,
+                    ..Default::default()
+    },
+    cx,
+);
+route_tree::register_routes(cx);`} />
+
+Pour les autres frameworks, seul le bootstrap change — la table de routes, les loaders, les gardes et les devtools ne changent pas :
+
+<Code lang="rust" code={`// Dioxus desktop
+fn app() -> Element { rsx! { NaviDemo {} } }
+fn main() { dioxus::LaunchBuilder::desktop().launch(app); }`} />
+
+<Code lang="rust" code={`// Leptos CSR (wasm32)
+#[wasm_bindgen(start)]
+pub fn main() {
+    leptos::mount::mount_to_body(|| view! { <NaviDemo /> });
+}`} />
+
+## 5. L'exécuter
+
+<Code lang="bash" code={`cargo run`} />
+
+Vous démarrez sur `/`, suivez le lien vers `/users/42`, et regardez le loader se résoudre en données utilisateur rendues. Les segments statiques gagnent toujours sur les dynamiques lors de l'appariement, donc ajouter `src/routes/users/new.rs` plus tard masquera `$id` pour ce chemin exact de manière déterministe.
+
+## Étapes suivantes
+
+<LinkCard title="Routage basé sur les fichiers" href="/guides/file-based-routing/" description="Chaque convention de nommage de fichier de route : segments dynamiques, splats, groupes et layouts sans chemin." />
+<LinkCard title="Loaders et Suspense" href="/guides/loaders-and-suspense/" description="Mettez en cache les données avec stale-time et GC, et rendez des replis granulaires avec Awaited." />
+<LinkCard title="Devtools" href="/guides/devtools/" description="Ouvrez le panneau intégré et inspectez les routes, le cache, la timeline et l'état." />

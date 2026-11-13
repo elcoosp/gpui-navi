@@ -1,0 +1,68 @@
+---
+title: Gardes de route
+description: Protégez les routes avec des hooks before_load qui redirigent, font un 404 ou autorisent la navigation — plus les callbacks de cycle de vie on_enter et on_leave.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Vous gardez une route avec un hook `before_load`. Navi l'exécute avant que la route ne se charge, et le hook décide si la navigation se poursuit, redirige ailleurs, ou se résout comme non trouvée.
+
+## Retourner l'un des trois résultats
+
+Le hook reçoit un `BeforeLoadContext` et retourne un `BeforeLoadResult` :
+
+| Résultat | Effet |
+| :--- | :--- |
+| `BeforeLoadResult::Ok` | La navigation continue. |
+| `BeforeLoadResult::Redirect(Redirect)` | Navi suit la cible de la redirection à la place. |
+| `BeforeLoadResult::NotFound(NotFound)` | Navi résout la navigation comme non trouvée. |
+
+Les fonctions helper `redirect()` et `not_found()` construisent les variantes non-Ok, ré-exportées depuis `navi_router` :
+
+<Code lang="rust" code={`use navi_router::{BeforeLoadResult, redirect, not_found};
+
+define_route!(
+    AdminDashboardRoute,
+    path: "/admin/dashboard",
+    before_load: |ctx| async move {
+                    if !is_signed_in(&ctx) {
+                                    return BeforeLoadResult::Redirect(redirect("/login"));
+                    }
+                    BeforeLoadResult::Ok
+    },
+    node: admin_node,
+);`} />
+
+<Aside type="note">
+  `before_load` est asynchrone : vous pouvez y effectuer des vérifications de session,
+  des recherches de permissions, ou tout autre travail awaitable. La timeline
+  d'événements enregistre l'étape `BeforeLoad`, et la timeline des devtools montre où une
+  navigation a changé de cap (voir [Devtools](/guides/devtools/)).
+</Aside>
+
+## Réagir aux changements de cycle de vie de route
+
+Les routes acceptent aussi deux callbacks de cycle de vie synchrones, chacun recevant la `Location` :
+
+| Argument | Se déclenche |
+| :--- | :--- |
+| `on_enter` | Quand quelqu'un entre dans la route. |
+| `on_leave` | Quand quelqu'un quitte la route. |
+
+<Code lang="rust" code={`define_route!(
+    ProfileRoute,
+    path: "/profile",
+    on_enter: |loc| log::info!("entered {}", loc.pathname),
+    on_leave: |loc| log::info!("left {}", loc.pathname),
+    node: profile_node,
+);`} />
+
+## Ordre des opérations
+
+Une navigation traverse les événements `BeforeNavigate → BeforeLoad → Resolved`. Le hook `before_load` se situe entre la décision de navigation et la résolution des données, c'est pourquoi une garde peut rediriger avant que le moindre loader ne s'exécute.
+
+## Étapes suivantes
+
+<LinkCard title="Loaders et Suspense" href="/guides/loaders-and-suspense/" description="Ce qui s'exécute après que la garde a autorisé la navigation." />
+<LinkCard title="Référence des types centraux" href="/reference/core-types/" description="BeforeLoadContext, BeforeLoadResult, Redirect et NotFound." />

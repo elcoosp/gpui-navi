@@ -1,0 +1,45 @@
+---
+title: Crates de l'espace de travail
+description: Les sept crates de l'espace de travail navi et ce que chacun possède.
+type: reference
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Le routeur Navi est livré comme un espace de travail Cargo de sept crates. L'empilement est strict : les couches inférieures ne dépendent jamais des supérieures, et aucun crate de bibliothèque sous `navi-router` ne touche à un framework UI.
+
+| Crate | Objectif |
+| :--- | :--- |
+| `navi-core` | Primitives partagées — clés de fenêtre, identifiants, types de configuration. |
+| `navi-router-core` | Pur moteur de routage : motifs, appariement par trie radix classé, validation de l'arbre de routes. Pas d'UI, pas de runtime asynchrone. |
+| `navi-router` | Runtime du routeur : `Navigator`, `RouterProvider`, composants (`Link`, `Outlet`, `Awaited`, …), bloqueurs, restauration du défilement. |
+| `navi-macros` | Macros procédurales : `define_route!`, `use_params!`, `use_search!`, `use_loader_data!` et compagnie. |
+| `navi-codegen` | Génération de l'arbre de routes à la compilation depuis `src/routes`, pilotée par `navi.config.json`. |
+| `navi-devtools` | Modèle devtools indépendant du framework : routes, cache, timeline, état. |
+| `navi-test` | Utilitaires de test pour les applications basées sur le routeur. |
+
+## Ce que `navi-router` ré-exporte
+
+`navi-router` est la dépendance unique que le code applicatif touche le plus. Il ré-exporte toute la surface du moteur depuis `navi-router-core` — `Blocker`, `BlockerId`, `History`, `Location`, `MatchResult`, `NavOp`, `NavigateOptions`, `NavigationEffect`, `NotFound`, `Redirect`, `RouteNode`, `RoutePattern`, `RouteTree`, `RouterCore`, `ScrollIntoViewOptions`, `Segment`, `ValidateSearch`, `ValidationError`, `ValidationResult`, `ViewTransitionOptions`, `not_found`, `redirect` — plus ses propres modules :
+
+| Module ou élément | Contenu |
+| :--- | :--- |
+| `components` | `Awaited`, `Link`, `Outlet`, `PreloadType`, `RouterProvider`, `ScrollRestoration`, `SuspenseBoundary`, `register_route_component` |
+| `navigator` | `Navigator` |
+| `state` | `AnyData`, `LoaderOutcome`, `LoaderState`, `NotFoundMode`, `RouteDef`, `RouterEvent`, `RouterHandle`, `RouterHost`, `RouterOptions`, `RouterState` |
+| `event_bus` | Plomberie des événements du routeur alimentant la timeline des devtools. |
+| `route_tree` | `BeforeLoadContext`, `BeforeLoadResult`, `RouteContextArgs` et les types d'arbre apparentés. |
+| root | `sleep` (ré-exporté depuis `quoin_core`) pour des délais asynchrones portables. |
+
+Avec la fonctionnalité `nested-search` activée, `parse_query_nested` et `query_to_string` sont également ré-exportés.
+
+## Couture de rendu
+
+Tout le rendu passe par [quoin](https://github.com/elcoosp/quoin) : l'UI des routes est exprimée en arbres `quoin_ui::Node` (ou en coquilles `component!`), et les émetteurs de macros de quoin les abaissent vers le framework sélectionné. La pile de données est [rs-query](https://github.com/elcoosp/rs-query), le cache de requêtes avec stale-time et GC derrière les loaders de route.
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Composants" href="/reference/components/" description="Les composants UI du routeur — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Types centraux" href="/reference/core-types/" description="Les types du moteur ré-exportés depuis navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="define_route!" href="/reference/define-route/" description="Chaque argument accepté par la macro define_route!, ses types et valeurs par défaut." />
+</CardGrid>

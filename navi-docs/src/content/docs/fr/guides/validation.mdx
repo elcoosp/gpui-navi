@@ -1,0 +1,55 @@
+---
+title: Validation
+description: Intégrez validator, garde, validify ou valico avec le trait ValidateSearch de Navi — une intégration par crate, imposée par fonctionnalité.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Vous validez les paramètres de recherche et les données de route avec la bibliothèque de validation que votre projet utilise déjà. Navi en intègre quatre via des drapeaux de fonctionnalité mutuellement exclusifs.
+
+## Choisir une intégration
+
+| Fonctionnalité | Crate |
+| :--- | :--- |
+| `validator` | [validator](https://crates.io/crates/validator) |
+| `garde` | [garde](https://crates.io/crates/garde) |
+| `validify` | [validify](https://crates.io/crates/validify) |
+| `valico` | [valico](https://crates.io/crates/valico) |
+
+Activez-en exactement une dans votre `Cargo.toml` :
+
+<Code lang="toml" code={`[dependencies]
+navi-router = { path = "../navi/navi-router", features = ["garde"] }`} />
+
+<Aside type="caution">
+  Les quatre intégrations sont des implémentations globales mutuellement exclusives. Activer
+  plus d'une sur le même crate n'est pas une configuration prise en charge. C'est aussi
+  pourquoi l'espace de travail linte et teste chaque intégration **par fonctionnalité** au lieu
+  de sous `--all-features`.
+</Aside>
+
+## La surface de validation
+
+Les quatre intégrations alimentent la même surface de trait, ré-exportée depuis `navi_router` :
+
+| Élément | Rôle |
+| :--- | :--- |
+| `ValidateSearch` | Trait qu'un type de recherche implémente pour se valider lui-même. |
+| `ValidationResult` | Résultat d'une passe de validation. |
+| `ValidationError` | Un échec de validation unique. |
+
+Implémentez `ValidateSearch` pour votre structure de recherche typée (voir [Paramètres de recherche](/guides/search-params/)), et le routeur le consulte lorsque les navigations appariées portent des données de requête.
+
+## Vérifier
+
+Exécutez les tests de l'espace de travail pour la fonctionnalité que vous avez activée :
+
+<Code lang="bash" code={`cargo test -p navi-router --features garde`} />
+
+Le propre `example-app` du dépôt livre un répertoire de routes `validation-test` avec une page par intégration (`validator.rs`, `garde.rs`, `validify.rs`, `valico.rs`) que vous pouvez ouvrir côte à côte.
+
+## Étapes suivantes
+
+<LinkCard title="Paramètres de recherche" href="/guides/search-params/" description="Déclarez les structures de recherche typées que vous validez ici." />
+<LinkCard title="Référence des types centraux" href="/reference/core-types/" description="ValidateSearch, ValidationResult et ValidationError." />

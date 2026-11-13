@@ -1,0 +1,66 @@
+---
+title: Paramètres de recherche
+description: Typez vos chaînes de requête avec des structures de recherche typées, naviguez avec des valeurs de recherche, et optez pour la syntaxe de crochets imbriqués avec la fonctionnalité nested-search.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Vous déclarez un type `search` sur une route pour travailler avec les chaînes de requête via des structures typées plutôt que des chaînes brutes.
+
+## Déclarer des paramètres de recherche typés
+
+Donnez à la route un type `search` et lisez-le avec `use_search!` :
+
+<Code lang="rust" code={`use navi_macros::{define_route, use_search};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct UserSearch {
+    pub sort: Option<String>,
+    pub page: Option<u32>,
+}
+
+define_route!(
+    UsersRoute,
+    path: "/users",
+    search: UserSearch,
+    node: users_node,
+);`} />
+
+À l'intérieur de l'UI de la route, `use_search!(UsersRoute)` retourne la structure de recherche analysée pour la navigation courante.
+
+## Naviguer avec des valeurs de recherche
+
+`Link` accepte une valeur `search`, plus `hash` et `state`, donc la navigation transporte des données de requête sans construire les URLs à la main :
+
+<Code lang="rust" code={`use navi_router::components::Link;
+
+Link::new("/users")
+    .search(serde_json::json!({ "sort": "desc", "page": 2 }))
+    .child("Users, descending")
+    .build()`} />
+
+## Valider les paramètres de recherche
+
+Navi expose un trait `ValidateSearch` avec `ValidationResult` / `ValidationError`. Avec les [intégrations de validation](/guides/validation/) vous le connectez à `validator`, `garde`, `validify` ou `valico`.
+
+## Paramètres de recherche imbriqués
+
+Activez la fonctionnalité `nested-search` pour des chaînes de requête typées et imbriquées par crochets de la forme `filter[status]=open&tags[0]=rust`, analysées via `serde_qs`. La fonctionnalité ré-exporte deux helpers depuis `navi_router` :
+
+| Helper | Objectif |
+| :--- | :--- |
+| `parse_query_nested` | Analyse une chaîne de requête imbriquée par crochets en une valeur imbriquée. |
+| `query_to_string` | Sérialise une valeur imbriquée en chaîne de requête. |
+
+<Aside type="note">
+  La restauration du défilement indexe les positions par chemin **plus requête normalisée**,
+  donc trier ou filtrer la même page restaure sa propre position de défilement — voir
+  [Restauration du défilement](/guides/scroll-restoration/).
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Validation" href="/guides/validation/" description="Câblez validator, garde, validify ou valico dans les paramètres de recherche." />
+<LinkCard title="Référence des composants" href="/reference/components/" description="L'API complète du builder Link, y compris search, hash et state." />

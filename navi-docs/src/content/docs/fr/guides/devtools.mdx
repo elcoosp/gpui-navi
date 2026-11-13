@@ -1,0 +1,49 @@
+---
+title: Devtools
+description: Ouvrez le panneau de devtools intégré de Navi et utilisez ses onglets Routes, Cache, Timeline et State pour déboguer la navigation, les loaders et les bloqueurs.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Vous inspectez votre routeur à l'exécution avec le panneau de devtools intégré. Il s'exécute dans l'application sur chaque framework pris en charge — le panneau lui-même rend via quoin, donc GPUI, Dioxus, Leptos, Xilem et Floem obtiennent tous la même interface.
+
+## Ouvrir le panneau
+
+Appuyez sur le raccourci devtools :
+
+| Plateforme | Raccourci |
+| :--- | :--- |
+| macOS | `Cmd+Shift+D` |
+| Windows / Linux | `Ctrl+Shift+D` |
+
+Le raccourci est exposé via `DevtoolsModel::keybindings()`, donc un hôte peut aussi le connecter à son propre keymap.
+
+## Les quatre onglets
+
+| Onglet | Ce que vous y faites |
+| :--- | :--- |
+| **Routes** | Voyez l'arbre de routes visuellement et déclenchez une navigation de test. |
+| **Cache** | Inspectez et invalidez le cache de loaders rs-query. |
+| **Timeline** | Lisez le journal d'événements avec recherche, filtre et capacités d'export. |
+| **State** | Examinez l'état du routeur, les bloqueurs de navigation actifs et les métadonnées. |
+
+## Lire la timeline
+
+La timeline enregistre le cycle de vie de la navigation sous forme d'événements. Chaque `DevtoolsEvent` porte un badge et une couleur de badge (`badge()`, `badge_color()`) plus une description, et `LoggedEvent` formate le temps pour l'affichage. Le `RouterEventType` côté routeur énumère les six étapes du cycle de vie sur lesquelles le panneau filtre :
+
+`BeforeNavigate`, `BeforeLoad`, `Load`, `BeforeRouteMount`, `Resolved`, `Rendered`
+
+Utilisez la timeline pour répondre à des questions comme « ma garde `before_load` a-t-elle redirigé ? » ou « combien de temps le loader a-t-il pris ? » — la séquence `BeforeNavigate → BeforeLoad → Resolved` raconte toute l'histoire d'une navigation.
+
+<Aside type="note">
+  Le modèle devtools est indépendant du framework (`navi-devtools`), construit sur
+  la structure `DevtoolsModel` avec une couture `render` que le framework hôte
+  matérialise. La recherche dans la timeline est aussi paramétrable programmatiquement
+  via `tour_set_timeline_search` — pratique pour les tests.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Architecture" href="/explanation/architecture/" description="Où se situe le modèle devtools par rapport au cœur du routeur." />
+<LinkCard title="Crates de l'espace de travail" href="/reference/crates/" description="navi-devtools et les crates avec lesquels il communique." />

@@ -1,0 +1,51 @@
+---
+title: Restauration du défilement
+description: Restaurez les positions de défilement par chemin et requête, bornez le cache, et désactivez par route ou par navigation.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Vous obtenez automatiquement la restauration du défilement avec Navi : le routeur mémorise les positions de défilement au fur et à mesure que l'utilisateur navigue dans l'application et les restaure lors des visites de retour.
+
+## Comment les clés fonctionnent
+
+Les positions sont indexées par **chemin plus requête normalisée**. `/users?sort=asc` et `/users?sort=desc` mémorisent des positions distinctes, donc deux vues triées de la même liste ne se disputent pas un décalage. Le cache est borné en capacité avec une éviction en O(1), donc les sessions longues ne font pas croître la mémoire sans limite.
+
+## Désactiver
+
+Deux niveaux de désactivation existent :
+
+| Niveau | Mécanisme |
+| :--- | :--- |
+| Navigation complète | Passez `reset_scroll: true` sur un `Link` pour commencer la position cible depuis le haut. |
+| Par appel de navigation | `NavigateOptions.reset_scroll` fait la même chose pour la navigation programmatique. |
+
+<Code lang="rust" code={`use navi_router::components::Link;
+
+Link::new("/dashboard")
+    .reset_scroll(true)
+    .child("Dashboard (from the top)")
+    .build()`} />
+
+## Monter le composant
+
+Le composant `ScrollRestoration` attache un nœud de suivi du défilement à votre UI. Donnez-lui un identifiant de handle :
+
+<Code lang="rust" code={`use navi_router::components::ScrollRestoration;
+
+ScrollRestoration::node("main-scroll").build()`} />
+
+`ScrollRestoration::set_capacity(capacity)` borne combien de positions mémorisées sont conservées à la fois.
+
+<Aside type="note">
+  L'historique de commits du dépôt suit un exemple qui illustre la restauration du défilement
+  (« Try to showcase scroll restoration does not work yet »), donc traitez le comportement comme en cours
+  de réparation active dans l'état actuel de l'espace de travail et vérifiez contre les exemples
+  lorsque vous l'adoptez.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Runtime et options du routeur" href="/reference/runtime/" description="NavigateOptions et l'état du routeur derrière la restauration." />
+<LinkCard title="Référence des composants" href="/reference/components/" description="L'API du composant ScrollRestoration." />

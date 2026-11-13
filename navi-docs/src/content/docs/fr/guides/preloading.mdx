@@ -1,0 +1,48 @@
+---
+title: Préchargement de liens
+description: Réchauffez le cache des loaders avant la navigation avec les stratégies de préchargement Render, Intent et Viewport et la déduplication par href.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Vous préchargez les données d'un lien avant que l'utilisateur ne s'engage à naviguer, afin que la route cible se rende sans attendre son loader. Le préchargement est par `<Link>` et dédupliqué par href — de nombreux liens vers la même cible déclenchent un seul préchargement.
+
+## Choisir une stratégie
+
+Définissez la méthode de construction `preload` sur un `Link` avec un `PreloadType` :
+
+| Stratégie | Comportement |
+| :--- | :--- |
+| `PreloadType::Render` | Précharge dès que le lien se rend. **C'est le défaut.** |
+| `PreloadType::Intent` | Précharge au premier déplacement de souris sur le lien, après un délai. |
+| `PreloadType::Viewport` | Précharge lorsque le lien entre dans le viewport. |
+
+<Code lang="rust" code={`use navi_router::components::{Link, PreloadType};
+use std::time::Duration;
+
+Link::new("/users/42")
+    .preload(PreloadType::Intent)
+    .preload_delay(Duration::from_millis(120))
+    .child("Open user 42")
+    .build()`} />
+
+Réglez combien de temps le pointeur doit survoler avant qu'un préchargement `Intent` ne se déclenche avec `preload_delay`.
+
+<Aside type="caution">
+  Les adaptateurs n'ont pas encore d'intersection observer, donc `Viewport` se comporte
+  actuellement comme `Render`. La stratégie est dans l'API aujourd'hui pour que votre
+  code soit pérenne lorsque la vraie observation du viewport atterrira.
+</Aside>
+
+## Précharger programmatiquement
+
+Le `Navigator` expose une méthode `preload` pour le même objectif en dehors des liens :
+
+<Code lang="rust" code={`let navigator = Navigator::new();
+navigator.preload("/users/42");`} />
+
+## Étapes suivantes
+
+<LinkCard title="Loaders et Suspense" href="/guides/loaders-and-suspense/" description="Ce qu'un préchargement réchauffe réellement — le cache de loader de la route." />
+<LinkCard title="Référence des composants" href="/reference/components/" description="La surface complète du builder Link." />

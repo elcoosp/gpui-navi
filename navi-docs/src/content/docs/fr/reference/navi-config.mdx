@@ -1,0 +1,42 @@
+---
+title: navi.config.json
+description: Chaque clé du fichier de configuration navi-codegen — types, valeurs par défaut et un exemple.
+type: reference
+---
+
+import { Code } from '@astrojs/starlight/components';
+
+`navi.config.json` contrôle comment `navi-codegen` transforme votre répertoire de routes en un arbre de routes généré. `NaviConfig::from_file` le lit à la compilation depuis votre `build.rs`.
+
+## Clés
+
+| Clé | Type | Défaut dans les exemples | Description |
+| :--- | :--- | :--- | :--- |
+| `routes_directory` | chaîne | `"./src/routes"` | Répertoire que le scanner parcourt pour les fichiers de route. |
+| `generated_route_tree` | chaîne | `"./src/route_tree.gen.rs"` | Fichier de sortie pour le module d'arbre de routes généré. |
+| `route_token` | chaîne | `"route"` | Token utilisé pour les segments dynamiques et les splats dans les noms de fichiers. |
+| `index_token` | chaîne | `"index"` | Nom de fichier qui marque une route d'index. |
+| `route_file_ignore_prefix` | chaîne | `"-"` | Les fichiers et dossiers commençant par ce préfixe sont sautés par le scanner. |
+
+## Exemple
+
+C'est la configuration exacte du propre `example-app` du dépôt :
+
+<Code lang="json" code={`{
+  "routes_directory": "./src/routes",
+  "generated_route_tree": "./src/route_tree.gen.rs",
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}`} />
+
+## Détails de comportement
+
+- Lorsque `routes_directory` n'existe pas, le scan produit un ensemble de routes vide plutôt qu'une erreur.
+- Le module généré expose `build_route_tree()` et `register_routes()`, que vous appelez pendant le bootstrap hôte.
+- Le scanner dérive les layouts de la structure de dossiers automatiquement — un `users.rs` à côté d'un répertoire `users/` devient le layout de ce répertoire — et honore les déclarations explicites `is_layout: true`.
+- Les fichiers de route peuvent porter un attribut `#[cfg(feature = "...")]` ; le scanner extrait la fonctionnalité afin que le code généré conserve le même garde-fou.
+
+## Étapes suivantes
+
+Voir [Routage basé sur les fichiers](/guides/file-based-routing/) pour comment les noms de fichiers deviennent des motifs d'URL.

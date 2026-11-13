@@ -1,0 +1,67 @@
+---
+title: Conception de performance
+description: Les chemins chauds sans allocation, la mémoire bornée et l'historique sans verrou derrière les chiffres de benchmark de Navi.
+type: explanation
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Le routeur de Navi est conçu pour des chemins chauds sans allocation. Cette page explique d'où viennent les garanties et ce qu'elles ont apporté, avec les chiffres des propres benchmarks du dépôt (`docs/BENCHMARKS.md`, médianes criterion, arbre de 130 routes).
+
+## Les garanties
+
+| Garantie | Où vous la voyez |
+| :--- | :--- |
+| **Appariement de routes sans copie** | Liaisons de paramètres collectées sur la pile, noms de segments `Arc<str>` internés, recherche d'enfants statiques par FxHash, `HashMap` matérialisée une seule fois en cas de succès. L'appariement est 14 à 38 % plus rapide dans l'ensemble. |
+| **Les chemins par frame n'allouent rien** | `use_params!`, `use_search!` et `use_loader_data!` lisent des caches du moment de la navigation ; les vérifications d'état actif de `Link` sont des comparaisons branche-et-octet (−94 %) ; les `QueryKey` de loaders sont mémoïsées par navigation. |
+| **Mémoire bornée partout** | Journal d'événements en tampon circulaire, registre de préchargement plafonné, éviction de défilement en O(1), `Arc<RouteTree>` partagé entre cœur et adaptateur (pas de clone profond de l'arbre au démarrage). |
+| **Historique sans verrou à propriétaire unique** | Aucun `Mutex` dans le chemin de navigation ; le retour/avance est −67 %. |
+
+## Médianes de benchmark sélectionnées
+
+Appariement (par navigation, arbre de 130 routes) :
+
+| Benchmark | Avant | Après | Δ |
+| :--- | ---: | ---: | ---: |
+| match_path/static | 64,8 ns | 41,8 ns | −35 % |
+| match_path/dynamic | 163,2 ns | 131,0 ns | −19 % |
+| match_path/static_beats_dynamic | 60,7 ns | 46,5 ns | −23 % |
+| match_path/deep_nested | 242,1 ns | 151,3 ns | −38 % |
+| match_path/splat | 204,6 ns | 139,4 ns | −32 % |
+
+Navigation et historique (par navigation) :
+
+| Benchmark | Avant | Après | Δ |
+| :--- | ---: | ---: | ---: |
+| navigate/replace_static | 128,1 ns | 108,6 ns | −15 % |
+| navigate/replace_dynamic | 292,1 ns | 190,1 ns | −35 % |
+| history/back_forward | 212,8 ns | 70,3 ns | −67 % |
+| transact/two_replaces | 499,2 ns | 373,1 ns | −25 % |
+
+Analyse de location (par navigation) :
+
+| Benchmark | Avant | Après | Δ |
+| :--- | ---: | ---: | ---: |
+| location_new/query | 323,4 ns | 302,4 ns | −7 % |
+| location_new/query_hash | 446,0 ns | 325,2 ns | −27 % |
+| location_new/coerce (7 values) | 760,5 ns | 632,7 ns | −17 % |
+
+Vous pouvez reproduire les chiffres avec les commandes documentées dans `docs/BENCHMARKS.md` (`cargo bench --bench core --bench adapter` contre les baselines enregistrées).
+
+## Portes qualité qui gardent l'honnêteté
+
+L'espace de travail impose la même discipline en CI :
+
+- `cargo clippy --workspace --all-targets -- -W clippy::pedantic -D warnings` — zéro avertissement, sans attribut `#[allow]` dans la base de code (les suppressions utilisent `#[expect]` ciblé, qui échoue lorsqu'il est obsolète).
+- Les quatre intégrations de validation (`validator`, `garde`, `validify`, `valico`) sont des implémentations globales mutuellement exclusives, donc elles sont lintées et testées **par fonctionnalité** au lieu de sous `--all-features`.
+- `clippy.toml` calibre quelques seuils de forme pour les grandes méthodes de rendu du module UI des devtools plutôt que de disperser des attributs allow.
+- Les benchmarks Criterion (`benches/core.rs` pour le moteur, `benches/adapter.rs` pour le runtime) protègent les chemins chauds contre les régressions.
+
+La pile de rendu est quoin et la pile de données est rs-query — les deux choisis pour que le routeur lui-même ne bloque jamais sur un framework ou un runtime asynchrone ambiant.
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="Comment les crates Navi s'empilent du pur moteur de routage jusqu'aux adaptateurs de framework," />
+<LinkCard title="Indépendance de framework" href="/explanation/framework-agnosticism/" description="Pourquoi Navi compile la même table de routes pour GPUI, Dioxus, Leptos, Xilem et Floe" />
+<LinkCard title="Appariement de routes" href="/explanation/route-matching/" description="Comment le trie radix classé apparie les locations en O(log n) et pourquoi les segments statiques " />
+</CardGrid>

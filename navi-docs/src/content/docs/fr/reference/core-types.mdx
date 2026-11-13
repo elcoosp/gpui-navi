@@ -1,0 +1,86 @@
+---
+title: Types centraux
+description: Les types du moteur ré-exportés depuis navi-router-core — Location, RouteTree, RouterCore, NavigationEffect, et le reste.
+type: reference
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+`navi-router-core` est le pur moteur de routage : pas de framework UI, pas de runtime asynchrone. Voici les types que le code applicatif et d'adaptation rencontre, tous ré-exportés depuis `navi-router`.
+
+## Navigation et location
+
+| Type | Rôle |
+| :--- | :--- |
+| `Location` | Une URL analysée : pathname plus requête et hash. `Location::new("/")` en construit une. |
+| `NavOp` | Une opération dans une transaction : `Push(Location)`, `Replace(Location)`, `Back`, `Forward`, `Go(isize)`. |
+| `NavigateOptions` | Options par navigation — voir la [référence runtime](/reference/runtime/). |
+| `NavigationEffect` | Ce que le moteur demande à l'adaptateur après une navigation (ci-dessous). |
+| `MatchResult` | Le résultat de l'appariement d'une location contre l'arbre. |
+| `ScrollIntoViewOptions` | Comportement de défilement pour la navigation par hash. |
+| `ViewTransitionOptions` | Préférences de transition de vue. |
+
+## NavigationEffect
+
+Le moteur est une machine à états : `RouterCore::navigate` retourne des effets que l'adaptateur interprète.
+
+| Variante | Champs | Signification |
+| :--- | :--- | :--- |
+| `SpawnLoader` | `route_id`, `params` | Exécuter le loader de la route appariée sur votre runtime asynchrone. |
+| `Redirect` | `to`, `replace` | Suivre une redirection à la place. |
+| `NotFound` | `data: Option<serde_json::Value>` | Résoudre comme non trouvée, optionnellement avec des données. |
+| `NotifyListeners` | — | Rafraîchir l'UI. |
+
+## Arbre de routes et appariement
+
+| Type | Rôle |
+| :--- | :--- |
+| `RouteTree` | Le trie radix classé des routes ; appariement en O(log n). Partagé en `Arc<RouteTree>` entre cœur et adaptateur. |
+| `RoutePattern` | Un motif de route compilé. |
+| `Segment` | Un segment de motif — statique, dynamique, optionnel, ou splat. |
+| `RouteNode` | Un nœud dans l'arbre de routes. |
+
+L'appariement est déterministe : les segments statiques battent toujours les dynamiques, soutenus par une recherche d'enfants statiques FxHash et des noms de segments `Arc<str>` internés. Voir [Appariement de routes](/explanation/route-matching/) pour la conception.
+
+## Historique et bloqueurs
+
+| Type | Rôle |
+| :--- | :--- |
+| `History` | Pile d'historique de style navigateur. Sans verrou, à propriétaire unique — aucun `Mutex` dans le chemin de navigation. |
+| `Blocker` | Une garde de navigation ; `Blocker::new(should_block)` en construit une, `BlockerId` l'identifie. |
+
+## Gardes et validation
+
+| Type | Rôle |
+| :--- | :--- |
+| `BeforeLoadContext` | Passé aux hooks `before_load`. |
+| `BeforeLoadResult` | Résultat de garde : `Ok`, `Redirect(Redirect)` ou `NotFound(NotFound)`. |
+| `Redirect` / `redirect()` | Valeur de redirection et son helper de construction. |
+| `NotFound` / `not_found()` | Valeur non trouvée et son helper de construction. |
+| `ValidateSearch` | Trait pour valider les paramètres de recherche typés. |
+| `ValidationResult` / `ValidationError` | Résultats de validation et échecs. |
+| `RouteContextArgs` | Arguments assemblés pour le contexte de route. |
+
+## Types d'état runtime
+
+Ré-exportés depuis `navi-router::state` :
+
+| Type | Rôle |
+| :--- | :--- |
+| `RouterState` | L'état du routeur vivant que le `RouterHandle` partage. |
+| `RouterEvent` | Un événement sur le bus alimentant la timeline des devtools. |
+| `LoaderState` / `LoaderOutcome` | Statut et résultat de loader par route. |
+| `AnyData` | Stockage de charge utile de loader effacé du type. |
+| `RouteDef` | Une définition de route enregistrée. |
+| `RouterHost` | La couture hôte que l'adaptateur implémente. |
+
+## Étapes d'événements des devtools
+
+La timeline des devtools filtre sur six étapes `RouterEventType` : `BeforeNavigate`, `BeforeLoad`, `Load`, `BeforeRouteMount`, `Resolved`, `Rendered`.
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Composants" href="/reference/components/" description="Les composants UI du routeur — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Crates de l'espace de travail" href="/reference/crates/" description="Les sept crates de l'espace de travail navi et ce que chacun possède." />
+<LinkCard title="define_route!" href="/reference/define-route/" description="Chaque argument accepté par la macro define_route!, ses types et valeurs par défaut." />
+</CardGrid>

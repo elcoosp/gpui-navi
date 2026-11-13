@@ -1,0 +1,61 @@
+---
+title: Indépendance de framework
+description: Pourquoi Navi compile la même table de routes pour GPUI, Dioxus, Leptos, Xilem et Floem — et ce que coûte le changement de framework.
+type: explanation
+---
+
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
+La plupart des routeurs Rust grandissent à l'intérieur d'un framework et y restent. Navi inverse la conception : le moteur de routage, les loaders, les gardes, le cache et les devtools vivent dans des crates indépendants du framework, et **chaque** couture de rendu est déléguée à [quoin](https://github.com/elcoosp/quoin), un cœur réactif avec plusieurs backends frontend.
+
+## Une table de routes, cinq moteurs de rendu
+
+| Framework | Backend | Statut |
+| :--- | :--- | :--- |
+| **GPUI** | fonctionnalité quoin `gpui` | ✅ première classe — panneau devtools, raccourcis, hôte `run_app!` |
+| **Dioxus** | fonctionnalité quoin `dioxus` | ✅ première classe — Dioxus desktop (fenêtre wry/tao) |
+| **Leptos** | fonctionnalité quoin `leptos` | ✅ première classe — CSR, `wasm32-unknown-unknown` |
+| **Xilem** | fonctionnalité quoin `xilem` | ✅ première classe — Xilem main, rafraîchissement par pompe de reconstruction |
+| **Floem** | fonctionnalité quoin `floem` | ✅ première classe — Floem main, pont réactif |
+
+Il n'y a rien de spécifique à GPUI à l'intérieur du routeur lui-même. La configuration de l'espace de travail du dépôt est explicite à ce sujet : GPUI est une dépendance de **liaison** — seule l'application hôte et l'adaptateur GPUI de quoin y font référence, tandis que chaque crate de bibliothèque navi se construit sur quoin à la place.
+
+## Ce que vous écrivez une fois
+
+Pour chaque route, vous écrivez :
+
+- une déclaration `define_route!` avec son chemin, ses types, ses hooks et son UI,
+- un constructeur `quoin_ui::Node` (`node:`) ou une coquille `component!`,
+- des loaders, gardes et validateurs optionnels.
+
+Rien de tout cela ne change entre les frameworks. Changer de framework signifie deux éditions : échanger le drapeau de fonctionnalité quoin, et échanger le bootstrap hôte de trois lignes :
+
+<Code lang="rust" code={`// GPUI / Xilem / Floem — quoin's run_app! host
+use navi_demo_core::NaviDemo;
+use quoin::run_app;
+run_app!(NaviDemo);`} />
+
+<Code lang="rust" code={`// Dioxus desktop
+fn app() -> Element { rsx! { NaviDemo {} } }
+fn main() { dioxus::LaunchBuilder::desktop().launch(app); }`} />
+
+<Code lang="rust" code={`// Leptos CSR (wasm32)
+#[wasm_bindgen(start)]
+pub fn main() {
+    leptos::mount::mount_to_body(|| view! { <NaviDemo /> });
+}`} />
+
+## La preuve dans le dépôt
+
+Le répertoire `examples/` livre une démo partagée — `demo-core`, avec routes, loaders, suspense, gardes, paramètres de recherche, une page 404 et des devtools — plus cinq hôtes fins : `demo-gpui`, `demo-dioxus`, `demo-floem`, `demo-xilem` et `demo-leptos`. Chaque hôte est un bootstrap de 1 à 3 lignes autour de la même coquille `NaviDemo`. Les ouvrir côte à côte montre à quel point le code spécifique à un framework est minime.
+
+## Échappatoire
+
+Vous n'êtes pas privé des widgets natifs de votre framework. Les sous-arbres GPUI restent accessibles via l'échappatoire `rsx!` de quoin — `gpui-rsx-classes` est activé automatiquement avec la fonctionnalité `gpui` — et les exemples GPUI enveloppent des arbres `Node` dans `NodeElement` au sein de composants GPUI ordinaires.
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="Comment les crates Navi s'empilent du pur moteur de routage jusqu'aux adaptateurs de framework," />
+<LinkCard title="Conception de performance" href="/explanation/performance/" description="Les chemins chauds sans allocation, la mémoire bornée et l'historique sans verrou derrière Navi" />
+<LinkCard title="Appariement de routes" href="/explanation/route-matching/" description="Comment le trie radix classé apparie les locations en O(log n) et pourquoi les segments statiques " />
+</CardGrid>

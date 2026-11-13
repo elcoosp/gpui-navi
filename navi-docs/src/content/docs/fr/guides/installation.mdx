@@ -1,0 +1,87 @@
+---
+title: Installation
+description: Ajoutez les crates Navi à votre projet Rust, sélectionnez votre framework UI avec un drapeau de fonctionnalité quoin, et câblez la génération de l'arbre de routes.
+type: how-to
+---
+
+import { Aside, Code, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Vous ajoutez Navi à une application UI Rust en trois étapes : déclarez les crates, sélectionnez votre framework via une fonctionnalité quoin, et câblez la génération de l'arbre de routes dans `build.rs`.
+
+## Prérequis
+
+- Rust 1.85+ (édition 2024).
+- Un framework UI pris en charge par quoin : GPUI, Dioxus, Leptos, Xilem ou Floem.
+
+## 1. Ajouter les crates
+
+<Tabs>
+  <TabItem label="Cargo.toml">
+<Code lang="toml" code={`  [dependencies]
+  navi-router = { path = "../navi/navi-router" }
+  navi-macros = { path = "../navi/navi-macros" }
+  quoin      = { path = "../quoin/quoin", features = ["gpui"] }`} />
+  </TabItem>
+  <TabItem label="cargo add">
+<Code lang="bash" code={` cargo add navi-router --path ../navi/navi-router
+ cargo add navi-macros --path ../navi/navi-macros
+ cargo add quoin --path ../quoin/quoin --features gpui`} />
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+  Les crates quoin et rs-query sur lesquels Navi se construit sont consommés
+  comme dépendances de chemin locales aujourd'hui : l'espace de travail attend que les clones
+  `quoin` et `rs-query` siègent côte à côte avec le clone `navi` (un répertoire `workspaces/`
+  contenant les trois). Une fois que quoin et rs-query publient des versions portant les
+  changements requis, ils deviennent de simples dépendances de version. Les exemples du
+  dépôt utilisent déjà cette disposition.
+</Aside>
+
+## 2. Sélectionner votre framework
+
+Le framework est un drapeau de fonctionnalité sur quoin. La table de routes, les composants, les loaders et les devtools ne changent pas lorsque vous en changez.
+
+| Framework | fonctionnalité quoin | Style de bootstrap |
+| :--- | :--- | :--- |
+| GPUI | `gpui` | `run_app!(App)` |
+| Dioxus | `dioxus` | `LaunchBuilder::desktop().launch(app)` |
+| Leptos | `leptos` | `mount_to_body` sur `wasm32-unknown-unknown` |
+| Xilem | `xilem` | `run_app!(App)` |
+| Floem | `floem` | `run_app!(App)` |
+
+Activer la fonctionnalité `gpui` active automatiquement `gpui-rsx-classes`, ce qui garde les sous-arbres GPUI accessibles via l'échappatoire `rsx!` de quoin.
+
+## 3. Câbler la génération de code
+
+Créez `navi.config.json` à la racine de votre projet (voir la [référence de configuration](/reference/navi-config/) pour chaque clé) :
+
+<Code lang="json" code={`{
+  "routes_directory": "./src/routes",
+  "generated_route_tree": "./src/route_tree.gen.rs",
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}`} />
+
+Puis appelez le générateur depuis `build.rs` :
+
+<Code lang="rust" code={`fn main() {
+    let config = navi_codegen::NaviConfig::from_file("navi.config.json")
+                    .expect("Failed to read config");
+    navi_codegen::generator::write_route_tree(&config).unwrap();
+}`} />
+
+## 4. Vérifier
+
+Compilez l'espace de travail et confirmez que le fichier généré apparaît :
+
+<Code lang="bash" code={`cargo build
+ls src/route_tree.gen.rs`} />
+
+Le module généré expose `build_route_tree()` et `register_routes()`, que vous utilisez pour démarrer le routeur — voir [Getting Started](/tutorials/getting-started/#4-boot-the-app) pour le bootstrap complet.
+
+## Étapes suivantes
+
+<LinkCard title="Getting Started" href="/tutorials/getting-started/" description="Le parcours doré complet d'un projet vide à une application routée." />
+<LinkCard title="Routage basé sur les fichiers" href="/guides/file-based-routing/" description="Apprenez les conventions de nommage des fichiers de route." />

@@ -1,0 +1,76 @@
+---
+title: Navi
+description: Un routeur puissant basé sur les fichiers pour les frameworks UI Rust — une seule table de routes, tous les frontends, propulsé par quoin.
+type: explanation
+template: splash
+hero:
+  image:
+    file: ../../../assets/logo.png
+    alt: Logo
+  title: "Navi"
+  tagline: Une seule table de routes, tous les frontends.
+  actions:
+    - text: Démarrer en quelques minutes
+      link: /tutorials/getting-started/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/elcoosp/navi
+      icon: right-arrow
+---
+
+Navi est un routeur basé sur les fichiers pour les applications UI Rust. Il **n'est lié à aucun framework UI unique** : le moteur de routage, les loaders, les gardes, le cache et les devtools vivent dans des crates indépendants du framework, et toutes les coutures de rendu sont déléguées à [quoin](https://github.com/elcoosp/quoin) — un seul cœur réactif, plusieurs backends frontend. La même table de routes, les mêmes composants et le même panneau de devtools s'exécutent sans modification sur GPUI, Dioxus, Leptos, Xilem et Floem.
+
+import { Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
+
+## Choisissez votre parcours
+
+<CardGrid stagger>
+  <Card title="Construisez votre première application">
+    Suivez le parcours doré d'un projet Cargo vide à une application routée sur le framework de votre choix.
+  </Card>
+  <Card title="Livrez une fonctionnalité">
+    Guides orientés tâches : loaders, gardes, bloqueurs, paramètres de recherche, validation, préchargement, et plus encore.
+  </Card>
+  <Card title="Cherchez quelque chose">
+    Pages de référence pour chaque crate, macro, composant, clé de configuration et type central.
+  </Card>
+  <Card title="Comprenez la conception">
+    Pourquoi Navi est indépendant du framework, comment l'appariement de routes classe les chemins, et où passent les nanosecondes.
+  </Card>
+</CardGrid>
+
+<LinkButton href="/tutorials/getting-started/" icon="right-arrow">Commencer le tutoriel</LinkButton>
+
+<LinkCard title="Commencez par le tutoriel Getting Started" href="/tutorials/getting-started/" description="Dépendances, vos premières routes, génération de code et démarrage de l'application." />
+
+## Ce que vous obtenez
+
+- **Routage basé sur les fichiers** — définissez les routes intuitivement via le système de fichiers ; `navi-codegen` génère un arbre de routes vérifié à la compilation.
+- **Layouts imbriqués** — layouts hiérarchiques propulsés par `<Outlet>`.
+- **Loaders** — récupération de données avec cache, stale-time et garbage collection, propulsés par [rs-query](https://github.com/elcoosp/rs-query).
+- **Frontières de suspense** — états de chargement granulaires avec `Awaited` et `SuspenseBoundary`.
+- **Gardes `beforeLoad`** — protection de routes robuste avec résultats de redirection et de not-found.
+- **Bloqueurs de navigation** — gardes synchrones et asynchrones qui préviennent la perte de données dues à des modifications non enregistrées.
+- **Restauration du défilement** — mémorisation et restauration automatiques des positions de défilement, indexées par chemin plus requête normalisée.
+- **Transactions de navigation** — regroupez les opérations `Push`, `Replace`, `Back`, `Forward` et `Go` appliquées atomiquement avec un seul re-rendu.
+- **Devtools** — inspectez les routes, le cache, la timeline et l'état directement dans votre application, sur chaque framework pris en charge.
+- **Préchargement de liens** — stratégies `Render`, `Intent` (survol plus délai) et `Viewport` avec déduplication par href.
+
+## Frameworks
+
+Sélectionner un framework est un drapeau de fonctionnalité sur votre crate. Il n'y a rien de spécifique à GPUI à l'intérieur du routeur lui-même.
+
+| Framework | Fonctionnalité quoin | Statut |
+| :--- | :--- | :--- |
+| **GPUI** | `gpui` | ✅ première classe — panneau devtools, raccourcis, hôte `run_app!` |
+| **Dioxus** | `dioxus` | ✅ première classe — Dioxus desktop (fenêtre wry/tao) |
+| **Leptos** | `leptos` | ✅ première classe — CSR, `wasm32-unknown-unknown` |
+| **Xilem** | `xilem` | ✅ première classe — Xilem main, rafraîchissement par pompe de reconstruction |
+| **Floem** | `floem` | ✅ première classe — Floem main, pont réactif |
+
+## Explorez la documentation
+
+- [Crates de l'espace de travail](/reference/crates/) — ce que possède chacun des sept crates.
+- [define_route!](/reference/define-route/) — chaque argument accepté, avec ses valeurs par défaut.
+- [Architecture](/explanation/architecture/) — comment les couches moteur, adaptateur et rendu se relient.
+- [Conception de performance](/explanation/performance/) — les chemins chauds sans allocation, avec les chiffres des benchmarks.

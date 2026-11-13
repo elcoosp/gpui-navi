@@ -1,0 +1,78 @@
+---
+title: Loaders et Suspense
+description: Récupérez des données de route avec des loaders adossés au cache rs-query, contrôlez la péremption et le GC, et rendez des états de chargement granulaires avec Awaited.
+type: how-to
+---
+
+import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
+
+Vous attachez un `loader` à n'importe quelle route et Navi l'exécute lorsqu'on navigue vers cette route, met en cache le résultat via [rs-query](https://github.com/elcoosp/rs-query), et remet les données à votre UI.
+
+## Déclarer un loader
+
+Le loader reçoit les `params` typés de la route et retourne le type déclaré comme `data`. L'exemple ci-dessous vient du propre `example-app` du dépôt :
+
+<Code lang="rust" code={`define_route!(
+    UsersParamIdRoute,
+    path: "/users/$id",
+    params: UserParams,
+    data: UserData,
+    loader: |params: UserParams| async move {
+                    let id = params.id;
+                    navi_router::sleep(std::time::Duration::from_millis(800)).await;
+                    Ok::<_, Box<dyn std::error::Error + Send + Sync>>(std::sync::Arc::new(UserData {
+                                    id: id.clone(),
+                                    name: format!("User {id}"),
+                                    email: format!("user{id}@example.com"),
+                    }))
+    },
+    component: UserDetailPage,
+);`} />
+
+## Contrôler la mise en cache
+
+Deux arguments de `define_route!` règlent le comportement de cache des données d'une route :
+
+| Argument | Signification |
+| :--- | :--- |
+| `stale_time` | Combien de temps les données chargées restent fraîches, par ex. `Duration::from_secs(60)`. |
+| `gc_time` | Combien de temps les données inutilisées survivent dans le cache, par ex. `Duration::from_secs(300)`. |
+
+Le cache est un vrai cache de requêtes — l'onglet **Cache** des devtools vous permet d'inspecter et d'invalider des entrées à l'exécution (voir [Devtools](/guides/devtools/)).
+
+## Rendre des données avec Awaited
+
+`Awaited` est le composant suspense pour les données de route : il rend un repli pendant que le loader s'exécute et appelle votre closure avec les données une fois résolues. C'est le motif qu'utilise l'exemple `awaited.rs` du dépôt :
+
+<Code lang="rust" code={`use navi_router::components::Awaited;
+
+Awaited::<AwaitedDemoRoute>::new()
+    .fallback(|| quoin_ui::Node::div().child("Loading...").build())
+    .child(|data: String| {
+                    quoin_ui::Node::div().child(format!("Data: {data}")).build()
+    })
+    .build()`} />
+
+La closure `.child` reçoit la valeur de données chargée.
+
+## Envelopper les régions de chargement avec SuspenseBoundary
+
+`SuspenseBoundary` affiche une UI de repli pendant que les routes imbriquées se chargent. Il prend une closure de repli et rend la route enfant appariée à l'intérieur une fois le chargement terminé :
+
+<Code lang="rust" code={`use navi_router::components::SuspenseBoundary;
+
+SuspenseBoundary::new(|| quoin_ui::Node::text("Loading section…").build()).build()`} />
+
+Placez-le dans un layout pour donner à un sous-arbre entier un état de chargement partagé.
+
+<Aside type="note">
+  Les `QueryKey` de loaders sont mémoïsées par navigation, donc les re-rendus pendant une
+  navigation ne re-cléent pas la requête. Lire les données du loader via
+  `use_loader_data!` dans le chemin de rendu n'alloue rien — c'est un cache
+  du moment de la navigation.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Gardes de route" href="/guides/route-guards/" description="Redirigez ou faites un 404 avant qu'une route ne se charge avec before_load." />
+<LinkCard title="Référence des macros" href="/reference/macros/" description="use_loader_data! et les autres hooks typés." />

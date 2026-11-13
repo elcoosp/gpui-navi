@@ -1,0 +1,58 @@
+---
+title: Macros
+description: Les douze macros procédurales de navi-macros — signatures, ce vers quoi elles se développent, et ce qu'elles retournent.
+type: reference
+---
+
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
+`navi-macros` fournit les hooks typés et les macros de définition de route. Tous les hooks lisent depuis le `RouterHandle` courant et sont bon marché — les hooks par frame lisent des caches du moment de la navigation et n'allouent rien.
+
+## Macros de hook
+
+| Macro | Signature | Ce qu'elle fait |
+| :--- | :--- | :--- |
+| `use_params!(RouteType)` | argument de type de route | Extrait les paramètres de chemin typés pour la route. |
+| `use_search!(RouteType)` | argument de type de route | Extrait les paramètres de recherche/requête typés. |
+| `use_loader_data!(RouteType)` | argument de type de route | Accède aux données retournées par le loader de la route. |
+| `use_loader_state!(RouteType)` | argument de type de route | Retourne le `LoaderState` de la route depuis l'état du routeur. |
+| `use_route_context!(RouteType)` | argument de type de route | Retourne le contexte de route typé complet. |
+| `use_matched_route!()` | aucun | Retourne `(params_map, route_node)` pour la route actuellement appariée. Panique si rien n'est apparié. |
+| `use_match!()` | aucun | Retourne `(route_id, params)` pour l'appariement courant, ou le défaut s'il n'y en a pas. |
+| `use_navigate!()` | aucun | Se développe en `Navigator::new()` — le handle de navigation programmatique. |
+| `use_blocker!(expr)` | expression booléenne | Se développe en `Blocker::new(expr)` — un bloqueur de navigation. |
+| `use_can_go_back!()` | aucun | Se développe en `Navigator::can_go_back()`. |
+
+## Macros de définition
+
+| Macro | Objectif |
+| :--- | :--- |
+| `define_route!(Name, ...)` | Déclare une route avec son chemin, ses hooks de données et son UI — voir la [référence define_route!](/reference/define-route/). |
+| `define_router!(...)` | Déclare un routeur à partir d'une liste de types de routes ; se développe en les appels qui ajoutent le nœud de chaque route à l'arbre (`tree.add_route(Route::build_node())`) et enregistrent chaque composant (`Route::register()`). |
+
+## Notes d'utilisation
+
+- Les hooks typés (`use_params!`, `use_search!`, `use_loader_data!`, `use_loader_state!`, `use_route_context!`) prennent le **type de route** comme argument, donc l'extraction est vérifiée contre la route que vous déclarez.
+- `use_matched_route!` attend une route appariée — l'appeler avant qu'une navigation n'ait apparié quoi que ce soit lève une erreur par conception.
+- `use_blocker!` accepte toute expression booléenne ; c'est le chemin ergonomique vers `Blocker::new` (voir [Bloqueurs de navigation](/guides/navigation-blockers/)).
+
+## Exemple
+
+Deux hooks coopérant dans la fonction de rendu d'une route :
+
+<Code lang="rust" code={`use navi_macros::{use_loader_data, use_params};
+
+fn user_node() -> Node {
+    let data = use_loader_data!(UsersParamIdRoute);
+    match data.map(|d| (*d).clone()) {
+                    Some(user) => Node::text(format!("{} — {}", user.name, user.email)),
+                    None => Node::text("Loading..."),
+    }
+}`} />
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Composants" href="/reference/components/" description="Les composants UI du routeur — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Types centraux" href="/reference/core-types/" description="Les types du moteur ré-exportés depuis navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Crates de l'espace de travail" href="/reference/crates/" description="Les sept crates de l'espace de travail navi et ce que chacun possède." />
+</CardGrid>

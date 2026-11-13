@@ -1,0 +1,53 @@
+---
+title: Architecture
+description: Comment les crates Navi s'empilent du pur moteur de routage jusqu'aux adaptateurs de framework, et comment une navigation les traverse.
+type: explanation
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Navi sépare la logique de routage du rendu si complètement que le moteur ne peut pas savoir quel framework UI l'affiche. Cette page parcourt les couches de l'intérieur vers l'extérieur.
+
+## Les couches
+
+1. **`navi-core`** — primitives partagées : clés de fenêtre, identifiants, types de configuration. Tout ce qui est au-dessus en dépend ; il ne dépend de rien.
+2. **`navi-router-core`** — le pur moteur : `RouterCore`, `RouteTree`, `History`, `Blocker`, `Location`, `Redirect`, `NotFound` et les traits de validation. Il n'a aucune dépendance UI et aucun runtime asynchrone.
+3. **`navi-router`** — la couche d'adaptation : il enveloppe `RouterCore`, interprète les `NavigationEffect`s, et héberge les composants, bloqueurs et restauration du défilement que votre application rend.
+4. **`navi-macros` et `navi-codegen`** — la surface d'écriture : macros pour les hooks et les définitions de routes, et génération à la compilation de l'arbre de routes depuis le système de fichiers.
+5. **`navi-devtools` et `navi-test`** — outillage qui observe ou exerce le routeur, indépendant du framework comme tout ce qui se situe sous l'adaptateur.
+
+## Le moteur est une machine à états
+
+`RouterCore` n'exécute jamais d'effets de bord. Étant donné une `Location`, `core.navigate(loc)` retourne un `NavigationEffect` :
+
+- `SpawnLoader` — l'adaptateur exécute le loader de la route appariée sur son runtime asynchrone.
+- `Redirect` — l'adaptateur navigue vers la cible de la redirection.
+- `NotFound` — l'adaptateur résout l'interface non trouvée.
+- `NotifyListeners` — l'adaptateur rafraîchit son UI.
+
+Parce que les effets sont de simples données, n'importe quel framework peut les interpréter. La note d'architecture amont décrit la recette d'un nouvel adaptateur : instanciez `RouterCore` avec un `RouteTree`, appelez `core.navigate(loc)` à la navigation, exécutez les loaders sur le runtime asynchrone de votre framework pour `SpawnLoader`, et rafraîchissez votre UI pour `NotifyListeners`.
+
+## Le rendu est délégué à quoin
+
+L'UI des routes est exprimée en arbres `quoin_ui::Node` — des données simples que tout backend comprend — ou en coquilles `component!` pour des écrans plus riches. Les émetteurs de macros de Quoin abaissent ces arbres vers le framework sélectionné, c'est pourquoi la même table de routes s'exécute sur GPUI, Dioxus, Leptos, Xilem et Floem sans modification. Le côté données délègue symétriquement : les loaders mettent en cache via le `QueryClient` de rs-query, dont la couture runtime est adossée au pool de workers et au timer portable de quoin, donc il n'a besoin ni de framework UI ni de runtime asynchrone ambiant.
+
+## Ce qu'apporte la génération de code
+
+À la compilation, `navi-codegen` parcourt `src/routes` et écrit `route_tree.gen.rs`, exposant `build_route_tree()` et `register_routes()`. L'hôte appelle les deux pendant le bootstrap. L'arbre généré porte la même structure que le scanner a vue sur le disque — y compris l'inférence de layout et les routes protégées par fonctionnalité — donc le trie runtime et le système de fichiers ne se désynchronisent jamais.
+
+## Une navigation, de bout en bout
+
+1. Un clic sur `Link` ou `Navigator::push` produit une requête de navigation.
+2. La timeline enregistre `BeforeNavigate`.
+3. Les bloqueurs enregistrés sont consultés ; une navigation bloquée s'arrête ici.
+4. `RouterCore` apparie la location contre le trie et retourne des effets.
+5. `BeforeLoad` se déclenche ; les gardes peuvent rediriger ou faire un 404 avant que les loaders ne s'exécutent.
+6. `SpawnLoader` résout les données du loader via le cache rs-query.
+7. L'appariement se résout (`Resolved`), l'UI re-rend (`Rendered`), et la restauration du défilement réapplique la position mémorisée.
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Indépendance de framework" href="/explanation/framework-agnosticism/" description="Pourquoi Navi compile la même table de routes pour GPUI, Dioxus, Leptos, Xilem et Floe" />
+<LinkCard title="Conception de performance" href="/explanation/performance/" description="Les chemins chauds sans allocation, la mémoire bornée et l'historique sans verrou derrière Navi" />
+<LinkCard title="Appariement de routes" href="/explanation/route-matching/" description="Comment le trie radix classé apparie les locations en O(log n) et pourquoi les segments statiques " />
+</CardGrid>

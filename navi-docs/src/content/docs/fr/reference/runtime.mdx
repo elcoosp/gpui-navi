@@ -1,0 +1,86 @@
+---
+title: Runtime et options du routeur
+description: RouterProvider, RouterOptions, NotFoundMode, Navigator et NavigateOptions — la surface runtime qui démarre et pilote le routeur.
+type: reference
+---
+
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
+Le module runtime démarre le routeur et pilote la navigation depuis votre application hôte.
+
+## RouterProvider
+
+`RouterProvider` installe le routeur dans votre application. Le bootstrap du README montre la construction canonique :
+
+<Code lang="rust" code={`use navi_router::{Location, NotFoundMode, RouterOptions, RouterProvider};
+
+let tree = route_tree::build_route_tree();
+let router = RouterProvider::new_with_options(
+    window_id,
+    window_handle,
+    Location::new("/"),
+    tree,
+    RouterOptions {
+                    not_found_mode: NotFoundMode::Fuzzy,
+                    ..Default::default()
+    },
+    cx,
+);
+route_tree::register_routes(cx);`} />
+
+Un `RouterHandle` est le handle partagé vers l'état du routeur en cours ; les hooks et `Navigator` le lisent et le pilotent.
+
+## RouterOptions
+
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `default_pending_ms` | `u64` | Timeout par défaut de navigation en attente, en millisecondes. |
+| `default_pending_min_ms` | `u64` | Durée minimale d'affichage d'un état en attente, évitant le clignotement. |
+| `not_found_mode` | `NotFoundMode` | Comment les URLs non appariées se résolvent vers l'UI non trouvée. |
+
+## NotFoundMode
+
+| Variante | Comportement |
+| :--- | :--- |
+| `Root` | Les navigations non appariées se résolvent contre la route racine non trouvée. |
+| `Fuzzy` | Les navigations non appariées se replient de manière floue sur l'appariement le plus proche. |
+
+## Navigator
+
+`Navigator` est l'API de navigation programmatique. `use_navigate!()` en retourne un frais ; `from_route(base)`, `from_handle(handle)` et `from_handle_route(handle, base)` le construisent en le limitant à un chemin de base.
+
+| Méthode | Description |
+| :--- | :--- |
+| `push(path)` / `push_location(loc)` | Navigue, en ajoutant une entrée d'historique. |
+| `push_location_with(loc, options)` | Navigue avec `NavigateOptions`. |
+| `replace(path)` / `replace_location(loc)` | Navigue, en écrasant l'entrée courante. |
+| `replace_location_with(loc, options)` | Remplace avec `NavigateOptions`. |
+| `transact(ops)` | Applique un lot de `NavOp`s atomiquement avec un seul re-rendu. |
+| `back()` / `forward()` | Avance ou recule d'une entrée. |
+| `go(delta)` | Traversée relative, bornée à la plage valide. |
+| `can_go_back()` / `can_go_forward()` | Fonctions associées — interrogent les bornes de l'historique. |
+| `preload(path)` | Réchauffe le cache de loader pour un chemin. |
+| `handle()` | Accède au `RouterHandle` sous-jacent. |
+
+## NavigateOptions
+
+| Champ | Type | Description |
+| :--- | :--- | :--- |
+| `replace` | `bool` | Remplacer au lieu de pousser. |
+| `reset_scroll` | `Option<bool>` | Forcer le défilement cible en haut. |
+| `hash_scroll_into_view` | `Option<ScrollIntoViewOptions>` | Comportement de défilement pour les navigations par hash. |
+| `view_transition` | `Option<ViewTransitionOptions>` | Préférences de transition de vue. |
+| `ignore_blocker` | `bool` | Contourner les bloqueurs de navigation enregistrés. |
+| `reload_document` | `bool` | Forcer une sémantique de rechargement de document. |
+| `href` | `Option<String>` | Surcharge explicite du href. |
+
+## Transactions
+
+`Navigator::transact` prend n'importe quel itérateur de `NavOp` — `Push(Location)`, `Replace(Location)`, `Back`, `Forward`, `Go(isize)` — et les applique comme une navigation atomique avec un seul re-rendu.
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Composants" href="/reference/components/" description="Les composants UI du routeur — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Types centraux" href="/reference/core-types/" description="Les types du moteur ré-exportés depuis navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Crates de l'espace de travail" href="/reference/crates/" description="Les sept crates de l'espace de travail navi et ce que chacun possède." />
+</CardGrid>

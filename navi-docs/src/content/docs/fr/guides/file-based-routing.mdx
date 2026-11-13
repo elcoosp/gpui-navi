@@ -1,0 +1,91 @@
+---
+title: Routage basé sur les fichiers
+description: Chaque convention de nommage de fichier de route dans Navi — segments dynamiques, splats, routes d'index, layouts, groupes et fichiers ignorés.
+type: how-to
+---
+
+import { Aside, Code, FileTree, LinkCard } from '@astrojs/starlight/components';
+
+Vous définissez toute la structure URL de votre application via les noms de fichiers et de dossiers dans votre répertoire de routes configuré (par défaut `src/routes`). Le scanner `navi-codegen` transforme ces noms en motifs de routes à la compilation.
+
+## Conventions de nommage
+
+| Fichier ou dossier | Motif produit | Rôle |
+| :--- | :--- | :--- |
+| `index.rs` | `/` (ou le chemin parent) | Route d'index pour son répertoire |
+| `$id.rs` | `/$id` | Segment dynamique — un paramètre d'URL |
+| `$.rs` | splat / not-found | Attrape-tout ; marque la route comme non trouvée |
+| `__root.rs` | `/` | Layout racine enveloppant chaque route |
+| `_auth.rs` ou `_auth/` | — | Layout sans chemin — rend les enfants sans ajouter de segment d'URL |
+| `(marketing)/` | — | Dossier de groupe — organise les fichiers sans affecter l'URL |
+| `-draft.rs` | — | Ignoré — les fichiers avec le préfixe d'ignore sont sautés |
+| `users.rs` à côté de `users/` | `/users` | Layout pour le répertoire `users/` |
+
+Toutes les conventions viennent du scanner, donc elles répondent aux clés `route_token`, `index_token` et `route_file_ignore_prefix` dans `navi.config.json` (voir la [référence de configuration](/reference/navi-config/)).
+
+<Aside type="tip">
+  Un fichier de route peut aussi choisir explicitement d'être un layout avec
+  `is_layout: true` dans `define_route!`. Le scanner honore ce drapeau afin que la
+  structure parente générée corresponde à l'arbre runtime.
+</Aside>
+
+## Exemple travaillé
+
+Cet arbre est la disposition du propre `example-app` du dépôt :
+
+<FileTree>
+  - src/routes/
+    - __root.rs
+    - index.rs
+    - $.rs
+    - login.rs
+    - about.rs
+    - _auth/
+      - profile.rs
+    - (marketing)/
+      - about.rs
+    - users/
+      - index.rs
+      - $id.rs
+      - $.rs
+    - dashboard/
+      - index.rs
+      - settings.rs
+      - analytics.rs
+    - admin/
+      - dashboard.rs
+    - docs/
+      - $.rs
+</FileTree>
+
+À partir de cet arbre, le scanner produit, entre autres :
+
+- `/` — le layout racine plus la page d'index.
+- `/users` — l'index des utilisateurs.
+- `/users/$id` — une page utilisateur dynamique.
+- `/dashboard/settings` — une page imbriquée sous le répertoire dashboard.
+- Les fichiers `$.rs` marquent les attrape-tout non trouvés à leur niveau, et `_auth/profile.rs` rend sous un layout sans chemin : l'URL est `/profile`, mais `profile` rend à l'intérieur du layout `_auth`.
+
+<Aside type="caution">
+  Le scanner dérive une route uniquement des fichiers qui en déclarent une via
+  `define_route!`. Un fichier `.rs` errant sans appel `define_route!` est
+  sauté, et un fichier qui contient `define_route!` sans nom de type de route
+  analysable fait échouer le scan avec une erreur.
+</Aside>
+
+## Renommer les conventions
+
+Vous n'êtes pas enfermé dans `$` et `index`. Les tokens sont de la configuration :
+
+<Code lang="json" code={`{
+  "route_token": "route",
+  "index_token": "index",
+  "route_file_ignore_prefix": "-"
+}`} />
+
+Si vous changez `route_token`, les segments dynamiques et les splats utilisent votre token au lieu de `$` dans les noms de fichiers.
+
+## Étapes suivantes
+
+<LinkCard title="Référence define_route!" href="/reference/define-route/" description="Tous les arguments acceptés, y compris is_layout et is_index." />
+<LinkCard title="Référence navi.config.json" href="/reference/navi-config/" description="Chaque clé de génération de code avec types et valeurs par défaut." />

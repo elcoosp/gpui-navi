@@ -1,0 +1,49 @@
+---
+title: Appariement de routes
+description: Comment le trie radix classé apparie les locations en O(log n) et pourquoi les segments statiques battent toujours les dynamiques.
+type: explanation
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Lorsque quelqu'un navigue vers `/users/42/settings`, le routeur doit décider — de manière déterministe — de quelle route il s'agit. Navi répond avec un trie radix classé dans `navi-router-core`, et les choix de conception expliquent à la fois les garanties de correction et les chiffres de benchmark.
+
+## La structure de données
+
+Le `RouteTree` est un trie radix classé sur des segments de motif. Chaque `Segment` est l'un des suivants :
+
+- **static** — un segment de chemin littéral (`users`),
+- **dynamic** — un paramètre (`$id`),
+- **optional** — un segment qui peut être absent,
+- **splat** — une queue attrape-tout (`$`).
+
+La compression radix signifie que les préfixes partagés sont stockés une seule fois ; la forme du trie reflète la disposition de votre système de fichiers parce que c'est ce que la génération de code lui fournit. La validation structurelle de l'arbre de routes s'exécute contre l'arbre, donc les structures contradictoires ou inaccessibles font surface à la compilation au lieu de produire des appariements surprenants.
+
+## Déterminisme : statique bat dynamique
+
+Le classement garantit que les segments statiques l'emportent toujours sur les dynamiques. Avec `users/new.rs` et `users/$id.rs` tous deux définis, `/users/new` s'apparie toujours avec la route statique — le résultat ne dépend jamais de l'ordre de définition ni de l'itération de hachage. C'est la propriété que le benchmark `static_beats_dynamic` existe pour protéger.
+
+## Le chemin chaud n'alloue rien
+
+L'appariement est conçu pour être sans allocation par navigation :
+
+- Les liaisons de paramètres se collectent sur la pile ; la `HashMap` se matérialise **une fois, en cas de succès** — les appariements échoués n'allouent jamais.
+- La recherche d'enfants statiques utilise une map FxHash.
+- Les noms de segments sont des valeurs `Arc<str>` internées, donc les comparaisons sont des opérations pointeur-ou-octet bon marché.
+
+Le résultat mesuré sur la suite de benchmarks du dépôt est un gain de 14 à 38 % par rapport à la baseline pré-optimisation, avec le chemin imbriqué le plus profond (`deep_nested`) passant de 242,1 ns à 151,3 ns. Le tableau complet vit dans `docs/BENCHMARKS.md` du dépôt.
+
+## Où va le reste du temps
+
+- **Analyse de location** — `Location::new` sépare chemin, requête et hash ; le chemin de la requête est optimisé pour éviter la ré-allocation (−27 % sur `query_hash`).
+- **Historique** — une pile sans verrou à propriétaire unique : aucun `Mutex` dans le chemin de navigation, c'est pourquoi `back_forward` a amélioré de 67 %.
+- **Transactions** — des `NavOp`s groupés s'appliquent atomiquement ; `transact/two_replaces` mesure la garantie de re-rendu unique.
+
+La conséquence pour votre application est simple à énoncer : le travail du routeur par navigation se mesure en nanosecondes, donc vos loaders — pas votre routage — décident de la vitesse perçue.
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Architecture" href="/explanation/architecture/" description="Comment les crates Navi s'empilent du pur moteur de routage jusqu'aux adaptateurs de framework," />
+<LinkCard title="Indépendance de framework" href="/explanation/framework-agnosticism/" description="Pourquoi Navi compile la même table de routes pour GPUI, Dioxus, Leptos, Xilem et Floe" />
+<LinkCard title="Conception de performance" href="/explanation/performance/" description="Les chemins chauds sans allocation, la mémoire bornée et l'historique sans verrou derrière Navi" />
+</CardGrid>

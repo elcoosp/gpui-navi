@@ -1,0 +1,48 @@
+---
+title: Bloqueurs de navigation
+description: Empêchez la navigation avec des bloqueurs synchrones ou asynchrones qui protègent les modifications non enregistrées et le travail destructif en cours.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Vous bloquez la navigation lorsque l'utilisateur est sur le point de perdre du travail non enregistré. Un bloqueur est une garde que Navi consulte avant qu'une navigation ne soit appliquée ; il peut être synchrone ou asynchrone.
+
+## Créer un bloqueur
+
+La macro `use_blocker!` enveloppe une expression dans un `Blocker` :
+
+<Code lang="rust" code={`use navi_macros::use_blocker;
+
+let blocker = use_blocker!(form.is_dirty());`} />
+
+L'expression décide si la navigation doit être bloquée : tant que `form.is_dirty()` s'évalue à vrai, les navigations hors de la route sont retenues.
+
+<Aside type="note">
+  `Blocker::new(should_block)` est le constructeur sous-jacent — la macro
+  s'y développe directement, donc vous pouvez créer des bloqueurs sans la macro
+  lorsque vous gérez les durées de vie vous-même. Les bloqueurs portent un
+  `BlockerId` et sont enregistrés dans l'état du routeur, où l'onglet **State**
+  des devtools liste les bloqueurs de navigation actuellement actifs.
+</Aside>
+
+## Bloqueurs asynchrones
+
+Parce que les bloqueurs protègent contre la perte de données, ils doivent souvent demander d'abord à l'utilisateur. Un bloqueur asynchrone peut attendre cette confirmation avant de laisser la navigation se poursuivre ou l'annuler — par exemple, ouvrir une modale et résoudre après que l'utilisateur a répondu.
+
+## Contourner un bloqueur
+
+`NavigateOptions` porte un drapeau `ignore_blocker`. Le mettre à `true` pousse une navigation au-delà des bloqueurs enregistrés — approprié pour les flux programmatiques qui ont déjà obtenu le consentement :
+
+<Code lang="rust" code={`use navi_router::{Location, NavigateOptions};
+
+let opts = NavigateOptions {
+    ignore_blocker: true,
+    ..Default::default()
+};
+navigator.push_location_with(Location::new("/goodbye"), &opts);`} />
+
+## Étapes suivantes
+
+<LinkCard title="Runtime et options du routeur" href="/reference/runtime/" description="NavigateOptions et les méthodes Navigator utilisées ci-dessus." />
+<LinkCard title="Devtools" href="/guides/devtools/" description="Inspectez les bloqueurs actifs dans l'onglet State." />

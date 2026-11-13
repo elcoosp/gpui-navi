@@ -1,0 +1,69 @@
+---
+title: define_route!
+description: Chaque argument accepté par la macro define_route!, ses types et valeurs par défaut.
+type: reference
+---
+
+import { CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+
+`define_route!` déclare une route dans un fichier de route. Il prend un nom de type de route suivi de paires `key: value`. La macro analyse les valeurs par clé — `path` et `parent` comme littéraux de chaîne, `is_layout` et `is_index` comme booléens, `params`, `search`, `data` et `component` comme types, et tout le reste comme expressions.
+
+## Signature
+
+<Code lang="rust" code={`define_route!(
+    MyRoute,
+    path: "/users/$id",
+    params: UserParams,
+    search: UserSearch,
+    data: User,
+    loader: |params, executor| async move { /* fetch data */ },
+    before_load: |ctx| async move { BeforeLoadResult::Ok },
+    on_enter: |loc| log::info!("entered"),
+    on_leave: |loc| log::info!("left"),
+    stale_time: Duration::from_secs(60),
+    gc_time: Duration::from_secs(300),
+    meta: { /* custom metadata */ },
+    node: my_node,
+);`} />
+
+## Arguments
+
+| Argument | Type | Requis | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | identifiant | oui | Le type Rust de la route, par ex. `IndexRoute`. Première position, avant la virgule. |
+| `path` | littéral de chaîne | oui | Motif URL, par ex. `"/users/$id"` ou `"/"`. |
+| `parent` | littéral de chaîne | non | Chemin parent explicite lorsque la hiérarchie ne peut pas être inférée depuis le layout. |
+| `params` | type | non | Structure typée pour les paramètres de chemin (utilisée avec `use_params!`). |
+| `search` | type | non | Structure typée pour les paramètres de requête (utilisée avec `use_search!`). |
+| `data` | type | non | Type vers lequel le loader se résout (utilisé avec `use_loader_data!` et `Awaited`). |
+| `loader` | closure asynchrone | non | Loader de données ; reçoit `params` et s'exécute à la navigation vers la route. |
+| `before_load` | closure asynchrone | non | Hook de garde retournant `BeforeLoadResult` — `Ok`, `Redirect` ou `NotFound`. |
+| `on_enter` | closure | non | Se déclenche avec la `Location` quand quelqu'un entre dans la route. |
+| `on_leave` | closure | non | Se déclenche avec la `Location` quand quelqu'un quitte la route. |
+| `stale_time` | expression | non | Combien de temps les données du loader restent fraîches, par ex. `Duration::from_secs(60)`. |
+| `gc_time` | expression | non | Combien de temps les données de loader inutilisées survivent en cache, par ex. `Duration::from_secs(300)`. |
+| `meta` | expression | non | Métadonnées personnalisées attachées à la route. |
+| `node` | expression | non | UI indépendante du framework : une expression construisant un `quoin_ui::Node`. |
+| `component` | type | non | Un type de composant pour les adaptateurs qui rendent des composants (par ex. un type `RenderOnce` GPUI). |
+| `loader_deps` | expression | non | Dépendances sur lesquelles le loader se ré-exécute. |
+| `context_fn` | expression | non | Produit les données de contexte de route. |
+| `is_layout` | booléen | non | Déclare la route comme un layout rendant ses enfants via `<Outlet>`. |
+| `is_index` | booléen | non | Déclare la route comme l'index de son répertoire. |
+
+## UI : node ou component
+
+Exactement une couture UI s'applique par route :
+
+- `node:` — un constructeur `quoin_ui::Node` brut, l'option indépendante du framework (toute fonction retournant un `Node`).
+- `component:` — un type de composant que l'adaptateur rend ; utilisé par les exemples GPUI avec des types `RenderOnce`.
+
+## Interaction avec le scanner
+
+Le scanner lit vos fichiers de route à la compilation et extrait le nom de type de route des appels `define_route!(Name, ...)`. Un fichier qui appelle `define_route!` sans nom de type analysable fait échouer la compilation, et `is_layout: true` participe à l'inférence de layout même quand le nommage de fichier seul ne l'impliquerait pas.
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Composants" href="/reference/components/" description="Les composants UI du routeur — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestor" />
+<LinkCard title="Types centraux" href="/reference/core-types/" description="Les types du moteur ré-exportés depuis navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Crates de l'espace de travail" href="/reference/crates/" description="Les sept crates de l'espace de travail navi et ce que chacun possède." />
+</CardGrid>

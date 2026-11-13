@@ -1,0 +1,88 @@
+---
+title: Composants
+description: Les composants UI du routeur — Link, Outlet, Awaited, SuspenseBoundary, ScrollRestoration — avec leur surface complète de builder.
+type: reference
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+`navi_router::components` contient les composants UI que vos routes et layouts rendent. Les composants sont indépendants du framework : ils construisent des arbres `quoin_ui::Node` que quoin abaisse vers le framework sélectionné.
+
+## Link
+
+Un lien de navigation avec style actif intégré. Construisez avec `Link::new(to)` et terminez avec `.build()`.
+
+| Méthode de builder | Accepte | Description |
+| :--- | :--- | :--- |
+| `new(to)` | tout ce qui se convertit en `String` | Href cible, par ex. `"/users/42"`. |
+| `search(value)` | `serde_json::Value` | Chaîne de requête pour la navigation. |
+| `hash(value)` | tout ce qui se convertit en `String` | Fragment de hash. |
+| `state(value)` | `serde_json::Value` | État de navigation. |
+| `replace(bool)` | booléen | Remplacer l'entrée d'historique courante au lieu de pousser. |
+| `disabled(bool)` | booléen | Désactiver le lien. |
+| `active_options(ActiveOptions)` | `ActiveOptions` | Contrôler le fonctionnement de l'appariement d'état actif. |
+| `reset_scroll(bool)` | booléen | Ramener la position cible en haut. |
+| `active_style(f)` | `Fn(NodeStyle) -> NodeStyle` | Style appliqué tant que le lien est actif. |
+| `inactive_style(f)` | `Fn(NodeStyle) -> NodeStyle` | Style appliqué tant que le lien est inactif. |
+| `preload(PreloadType)` | `PreloadType` | Stratégie de préchargement (voir ci-dessous). |
+| `preload_delay(Duration)` | `Duration` | Délai de survol avant un préchargement `Intent`. |
+| `child(child)` | tout ce qui se convertit en `NodeChild` | Contenu du lien ; appelez à plusieurs reprises. |
+| `to()` / `is_disabled()` | — | Accesseurs pour la cible et le drapeau de désactivation. |
+
+Les hrefs externes — `http(s):`, `mailto:` et `tel:` — sont remis à l'OS au lieu du routeur (`is_external_href` les détecte).
+
+### Appariement d'état actif
+
+`path_is_active(current, href, exact)` implémente la comparaison branche-et-octet derrière le style actif. Les vérifications d'état actif sont de pures comparaisons — elles n'allouent rien.
+
+## PreloadType
+
+| Variante | Comportement |
+| :--- | :--- |
+| `Render` | Précharge quand le lien se rend. Le `#[default]`. |
+| `Intent` | Précharge au premier survol, après `preload_delay`. |
+| `Viewport` | Prévu pour l'entrée dans le viewport ; se comporte actuellement comme `Render` car les adaptateurs n'ont pas d'intersection observer. |
+
+## Outlet
+
+Rend la route enfant appariée au sein d'un layout : `Outlet::new().build()`.
+
+## SuspenseBoundary
+
+Affiche un repli pendant que les routes imbriquées se chargent.
+
+| Élément | Signature |
+| :--- | :--- |
+| `new(fallback)` | `impl Fn() -> Node + 'static` — l'UI de chargement. |
+| `build()` | Produit le `Node`. |
+
+## Awaited
+
+Attend et rend les données produites par le loader d'une route.
+
+| Méthode de builder | Accepte | Description |
+| :--- | :--- | :--- |
+| `new()` | `Awaited::<Route>` typé | Lie le composant à une route avec un type `data`. |
+| `fallback(f)` | `Fn() -> Node` | Rendu pendant que le loader s'exécute. |
+| `child(f)` | `Fn(data) -> Node` | Rendu avec les données chargées. |
+| `build()` | — | Produit le `Node`. |
+
+## ScrollRestoration
+
+Mémorise et restaure les positions de défilement (voir le guide pratique pour les détails de comportement).
+
+| Élément | Signature |
+| :--- | :--- |
+| `node(handle_id)` | Tout ce qui se convertit en `String` ; retourne le `Node` de suivi. Aussi disponible comme fonction libre `scroll_restoration_node`. |
+| `set_capacity(capacity)` | `usize` ; borne combien de positions sont mémorisées. |
+
+## Enregistrement
+
+`register_route_component` enregistre le composant d'une route auprès du routeur — le `register_routes()` généré l'appelle pour vous, donc vous n'interagissez avec lui que lorsque vous câblez les routes manuellement.
+## Voir aussi
+
+<CardGrid>
+<LinkCard title="Types centraux" href="/reference/core-types/" description="Les types du moteur ré-exportés depuis navi-router-core — Location, RouteTree, Router" />
+<LinkCard title="Crates de l'espace de travail" href="/reference/crates/" description="Les sept crates de l'espace de travail navi et ce que chacun possède." />
+<LinkCard title="define_route!" href="/reference/define-route/" description="Chaque argument accepté par la macro define_route!, ses types et valeurs par défaut." />
+</CardGrid>

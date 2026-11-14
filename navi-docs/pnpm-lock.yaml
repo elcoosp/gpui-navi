@@ -54,8 +54,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.8)(astro@7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(astro@7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
       starlight-telescope:
-        specifier: ^1.0.0
-        version: 1.0.0(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.8)(astro@7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))
+        specifier: ^2.0.0
+        version: 2.0.0(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.8)(astro@7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))
       starlight-view-modes:
         specifier: ^0.15.4
         version: 0.15.4(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.8)(astro@7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))
@@ -2934,12 +2934,6 @@ packages:
     peerDependencies:
       '@astrojs/starlight': '>=0.33.0'
       astro: '>=5.1.5'
-
-  starlight-telescope@1.0.0:
-    resolution: {integrity: sha512-GFpxfSbOol5yrtxSuOB8bkBtD36JQcpajy2OV8tvpFG+pu7edGsKgD/CrojE/ggvKNgiuI8tpDkigR/ZjiGbGw==}
-    engines: {node: '>=22.12.0'}
-    peerDependencies:
-      '@astrojs/starlight': '>=0.38.0'
 
   starlight-telescope@2.0.0:
     resolution: {integrity: sha512-MicVvJAyhO2D5UPoUvwppNPaY3sPID/LE3jier9KUE1d5dfAYNwzyLZcKMjSFpou8Y7sR3f7Xx0Ta69OJHPlsA==}
@@ -6846,12 +6840,6 @@ snapshots:
     dependencies:
       '@astrojs/starlight': 0.42.11(@astrojs/markdown-remark@7.3.8)(astro@7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)
       astro: 7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
-
-  starlight-telescope@1.0.0(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.8)(astro@7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)):
-    dependencies:
-      '@astrojs/starlight': 0.42.11(@astrojs/markdown-remark@7.3.8)(astro@7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)
-      fuse.js: 7.5.0
-      zod: 4.6.7
 
   starlight-telescope@2.0.0(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.8)(astro@7.4.11(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)):
     dependencies:
